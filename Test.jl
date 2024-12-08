@@ -11,11 +11,11 @@ Base.@kwdef mutable struct Physics
     Thermal         ::Bool = false
 end
 
-@views function SparsiTyPatternPoisson(nc, Num, Pattern)
+@views function SparsiTyPatternPoisson(nc, Num, Pattern::SMatrix{N, N}) where N
     ndof   = maximum(Num)
     K      = ExtendableSparseMatrix(ndof, ndof)
     shift  = (x=1, y=1)
-    for j=1+shift.y:nc.y+shift.y, i=1+shift.x:nc.x+shift.x
+    for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
         # Local = @SMatrix (Num[i-1:i+1,j-1:j+1]) #@SMatrix( Num[i-1:i+1,j-1:j+1]  )
         Local = Num[i-1:i+1,j-1:j+1] .* Pattern
         for jj in axes(Local,2), ii in axes(Local,1)
@@ -25,6 +25,38 @@ end
         end
     end
     return K
+end
+
+function SparsiTyPatternPoisson_SA(nc, Num, Pattern::SMatrix{N, N, T}) where {N,T}
+    ndof   = maximum(Num)
+    K      = ExtendableSparseMatrix(ndof, ndof)
+    shift  = (x=1, y=1)
+    star_shift = (N >>> 1) + 1
+    Local  = @MMatrix zeros(T, N, N)
+    for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
+        gen_local_numbering!(Local, Num, Pattern, star_shift, i, j)    
+
+        for jj in axes(Local,2), ii in axes(Local,1)
+            idx = Local[ii,jj]
+            if idx > 0 
+                K[Num[i,j], idx] = 1 
+            end
+        end
+    end
+    return K
+end
+
+@inline @generated function gen_local_numbering!(Local::MMatrix{N,N}, Num, Pattern::SMatrix{N, N}, star_shift, i, j) where N
+    quote
+        Base.@nexprs $N jj -> begin
+            Base.@nexprs $N ii -> begin
+                @inline 
+                Local[ii, jj] = Num[ii - star_shift + i, jj - star_shift + j]
+            end
+        end
+        Local .*=  Pattern
+        return nothing
+    end
 end
 
 function NumberingPoisson(nc, Type)
@@ -74,8 +106,10 @@ let
     if physics.Poisson
         # 5-point stencil
         Pattern = @SMatrix([0 1 0; 1 1 1; 0 1 0]) 
-        Num = NumberingPoisson(nc, Type)
-        K = SparsiTyPatternPoisson(nc, Num, Pattern)
+        Num  = NumberingPoisson(nc, Type)
+        K    = SparsiTyPatternPoisson(nc, Num, Pattern)
+        K_SA = SparsiTyPatternPoisson_SA(nc, Num, Pattern)
+        @assert K == K_SA
         @info "5-point stencil"
         display(K)
         display(K-K')
@@ -84,6 +118,8 @@ let
         Pattern = @SMatrix([1 1 1; 1 1 1; 1 1 1]) 
         Num = NumberingPoisson(nc, Type)
         K = SparsiTyPatternPoisson(nc, Num, Pattern)
+        K_SA = SparsiTyPatternPoisson_SA(nc, Num, Pattern)
+        @assert K == K_SA
         @info "9-point stencil"
         display(K)
         display(K-K')               
