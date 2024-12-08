@@ -1,0 +1,8 @@
+name = "StagFDTools"
+uuid = "45ef369e-9784-4e2a-b222-05725d5e9544"
+authors = ["tduretz <duretz@uni-frankfurt.de>"]
+version = "0.1.0"
+
+[deps]
+ExtendableSparse = "95c220a8-a1cf-11e9-0c77-dbfce5f500b3"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
