@@ -1,6 +1,6 @@
 using ExtendableSparse, StaticArrays
 
-Print_xy(x) = @show (x[:,end:-1:1])'
+Print_xy(x) = @show rotr90(x[:,end:-1:1])
 
 Base.@kwdef mutable struct Physics
     Poisson         ::Bool = false
@@ -66,20 +66,20 @@ function NumberingPoisson(nc, Type)
 
     # Make periodic in x
     for j in axes(Type,2)
-        if Type[1,j]==-2
+        if Type[1,j]==:periodic
             Num[1,j] = Num[end-1,j]
         end
-        if Type[end,j]==-2
+        if Type[end,j]==:periodic
             Num[end,j] = Num[2,j]
         end
     end
 
     # Make periodic in y
     for i in axes(Type,1)
-        if Type[i,1]==-2
+        if Type[i,1]==:periodic
             Num[i,1] = Num[i,end-1]
         end
-        if Type[i,end]==-2
+        if Type[i,end]==:periodic
             Num[i,end] = Num[i,2]
         end
     end
@@ -95,11 +95,12 @@ let
     nc = (x = 5, y= 5)
     
     # 5-point stencil
-    Type = zeros(Int64, nc.x+2, nc.y+2)
-    Type[1,:]     .= -2 # make periodic
-    Type[end,:]   .= -2 
-    Type[:,1]     .= 1
-    Type[:,end]   .= 2
+    Type = fill(:out, (nc.x+2, nc.y+2))
+    Type[2:end-1,2:end-1] .= :in
+    Type[1,:]     .= :periodic # make periodic
+    Type[end,:]   .= :periodic 
+    Type[:,1]     .= :Dirichlet
+    Type[:,end]   .= :Neumann
     @info "Node types"
     Print_xy(Type) 
 
