@@ -3,20 +3,22 @@ using StagFDTools, ExtendableSparse, StaticArrays
 let
 
     physics = Physics()
-    physics.Poisson = true
+    physics.Stokes = true
     
     # Resolution
     nc = (x = 10, y = 9)
+
+    Numbering = NumberingStokes()
     
     # 5-point stencil
-    Type = fill(:out, (nc.x+2, nc.y+2))
-    Type[2:end-1,2:end-1] .= :in
-    Type[1,:]     .= :periodic # make periodic
-    Type[end,:]   .= :periodic 
-    Type[:,1]     .= :Dirichlet
-    Type[:,end]   .= :Neumann
-    @info "Node types"
-    Print_xy(Type) 
+    # Type = fill(:out, (nc.x+2, nc.y+2))
+    # Type[2:end-1,2:end-1] .= :in
+    # Type[1,:]     .= :periodic # make periodic
+    # Type[end,:]   .= :periodic 
+    # Type[:,1]     .= :Dirichlet
+    # Type[:,end]   .= :Neumann
+    # @info "Node types"
+    # Print_xy(Type) 
 
     # if physics.Poisson
     #     # 5-point stencil

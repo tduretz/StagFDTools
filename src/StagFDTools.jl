@@ -3,10 +3,10 @@ module StagFDTools
 using StaticArrays, ExtendableSparse
 
 include("Structures.jl")
-export Physics, NumberingPoisson!
+export Physics, NumberingPoisson, NumberingStokes
 
 include("Poisson.jl")
-export NumberingPoisson, SparsityPatternPoisson, SparsityPatternPoisson_SA
+export NumberingPoisson!, SparsityPatternPoisson, SparsityPatternPoisson_SA
 
 include("Utils.jl")
 export Print_xy
