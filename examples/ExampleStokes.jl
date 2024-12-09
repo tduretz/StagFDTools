@@ -10,9 +10,10 @@ let
 
     Numbering = NumberingStokes()
     
-    # 5-point stencil
-    # Type = fill(:out, (nc.x+2, nc.y+2))
-    # Type[2:end-1,2:end-1] .= :in
+    # Define node types and set BC flags
+    Numbering.Vx      = NumberingPoisson()
+    Numbering.Vx.Type = fill(:out, (nc.x+3, nc.y+4))
+    Type[2:end-1,2:end-2] .= :in
     # Type[1,:]     .= :periodic # make periodic
     # Type[end,:]   .= :periodic 
     # Type[:,1]     .= :Dirichlet

@@ -11,8 +11,6 @@ Base.@kwdef mutable struct NumberingPoisson
     Type    ::Union{Matrix{Symbol}, Missing} = missing
     Pattern ::Union{SMatrix,        Missing} = missing
 end
-
-
 Base.@kwdef mutable struct NumberingStokes
     Vx ::Union{NumberingPoisson, Missing} = missing
     Vy ::Union{NumberingPoisson, Missing} = missing

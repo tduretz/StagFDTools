@@ -10,7 +10,7 @@ let
     # Resolution
     nc = (x = 10, y = 9)
     
-    # 5-point stencil
+    # Define node types and set BC flags
     Numbering.Type = fill(:out, (nc.x+2, nc.y+2))
     Numbering.Type[2:end-1,2:end-1] .= :in
     Numbering.Type[1,:]     .= :periodic # make periodic
