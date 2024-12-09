@@ -8,7 +8,7 @@ let
     # Resolution
     nc = (x = 10, y = 9)
 
-    numbering = numberingStokes()
+    numbering = NumberingStokes()
     
     # Define node types and set BC flags
     numbering.Vx      = NumberingPoisson{3}()
@@ -18,8 +18,28 @@ let
     numbering.Vx.type[end,:]   .= :periodic 
     numbering.Vx.type[:,1]     .= :Dirichlet
     numbering.Vx.type[:,end]   .= :Neumann
-    @info "Node types"
+    @info "Vx Node types"
     Print_xy(numbering.Vx.type) 
+
+    numbering.Vy      = NumberingPoisson{3}()
+    numbering.Vy.type = fill(:out, (nc.x+4, nc.y+3))
+    numbering.Vy.type[2:end-1,2:end-2] .= :in
+    numbering.Vy.type[1,:]     .= :periodic # make periodic
+    numbering.Vy.type[end,:]   .= :periodic 
+    numbering.Vy.type[:,1]     .= :Dirichlet
+    numbering.Vy.type[:,end]   .= :Neumann
+    @info "Vy Node types"
+    Print_xy(numbering.Vy.type) 
+
+    numbering.Pt      = NumberingPoisson{3}()
+    numbering.Pt.type = fill(:out, (nc.x+2, nc.y+2))
+    numbering.Pt.type[2:end-1,2:end-2] .= :in
+    numbering.Pt.type[1,:]     .= :periodic # make periodic
+    numbering.Pt.type[end,:]   .= :periodic 
+    numbering.Pt.type[:,1]     .= :Dirichlet
+    numbering.Pt.type[:,end]   .= :Neumann
+    @info "Pt Node types"
+    Print_xy(numbering.Pt.type) 
 
     # if physics.Poisson
     #     # 5-point stencil
