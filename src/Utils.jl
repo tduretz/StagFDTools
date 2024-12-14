@@ -1,1 +1,1 @@
-Print_xy(x) = @show rotr90(x[:,end:-1:1])
+Print_xy(x) = display( rotr90(x[end:-1:1,end:-1:1]) )

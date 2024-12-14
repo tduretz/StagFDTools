@@ -8,7 +8,7 @@ let
     numbering = NumberingPoisson{3}()
     
     # Resolution
-    nc = (x = 10, y = 9)
+    nc = (x = 3, y = 4)
     
     # Define node types and set BC flags
     numbering.type = fill(:out, (nc.x+2, nc.y+2))
@@ -17,6 +17,7 @@ let
     numbering.type[end,:]   .= :periodic 
     numbering.type[:,1]     .= :Dirichlet
     numbering.type[:,end]   .= :Neumann
+    
     @info "Node types"
     Print_xy(numbering.type) 
 
