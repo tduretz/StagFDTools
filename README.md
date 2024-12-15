@@ -1,3 +1,11 @@
+# StagFDTools
+
+This package aims at generating flexible FD stencils that can interoperate with AD tools for Jacobian generation. In particular, the aims are:
+- generic treatment of BCs
+- generation of equation numbering
+- generation of sparsity patterns
+- flexible treatment of multi-physics
+
 # Poisson sparsity examples
 
 ##  Flag boundary nodes and constant nodes (e.g. inner BC or free surface)
