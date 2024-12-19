@@ -12,7 +12,7 @@ This package aims at generating flexible FD stencils that can interoperate with 
 ```julia
 [ Info: Node types
 6×5 Matrix{Symbol}:
- :Neumann    :Neumann    :Neumann    :Neumann    :Neumann
+ :Neumannn    :Neumannn    :Neumannn    :Neumannn    :Neumannn
  :periodic   :in         :in         :in         :periodic
  :periodic   :in         :in         :in         :periodic
  :periodic   :in         :in         :in         :periodic

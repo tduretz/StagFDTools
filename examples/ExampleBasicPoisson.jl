@@ -1,13 +1,6 @@
 using StagFDTools, ExtendableSparse, StaticArrays, LinearAlgebra, UnPack, Plots
 
-@views function ResidualPoisson!(R, num, nc) 
-    shift  = (x=1, y=1)
-    for j in 1+shift.y:nc.y+shift.y
-
-    end
-end
-
-@views function AssemblyPoisson(num, nc, Δ) 
+@views function AssemblyBasicPoisson(num, nc, Δ) 
     Kloc   = zeros(3,3)
     ndof   = maximum(num.num)
     K      = ExtendableSparseMatrix(ndof, ndof)
@@ -78,14 +71,14 @@ let
     Δ   = (x=L/nc.x, y=L/nc.y)
     xc  = LinRange(-L/2-Δ.x/2, L/2+Δ.x/2, nc.x+2)
     yc  = LinRange(-L/2-Δ.y/2, L/2+Δ.y/2, nc.y+2)
-    s  .= exp.(-(xc.^2 .+ (yc').^2)./0.4^2)
+    s  .= 50*exp.(-(xc.^2 .+ (yc').^2)./0.4^2)
     # Residual check
     u[[1,end],iny] .= 2*u_dir .- u[[2,end-1],iny]
     u[inx,[1,end]] .= 2*u_dir .- u[inx,[2,end-1]]
-    r[inx,iny]     .= (u[1:end-2,iny] .+ u[3:end-0,iny] - 2*u[inx,iny])/Δ.x^2 + (u[inx,1:end-2] .+ u[inx,3:end-0] - 2*u[inx,iny])/Δ.y^2 .- s[inx,iny]
+    r[inx,iny]     .= (u[1:end-2,iny] .+ u[3:end-0,iny] - 2*u[inx,iny])/Δ.x^2 + (u[inx,1:end-2] .+ u[inx,3:end-0] - 2*u[inx,iny])/Δ.y^2 .+ s[inx,iny]
     @info norm(r)/sqrt(length(r))
     # Assembly
-    K  = AssemblyPoisson(numbering, nc, Δ)
+    K  = AssemblyBasicPoisson(numbering, nc, Δ)
     @show norm(K-K')
     b  = r[inx,iny][:]
     # Solve
@@ -94,8 +87,8 @@ let
     # Residual check
     u[[1,end],iny] .= 2*u_dir .- u[[2,end-1],iny]
     u[inx,[1,end]] .= 2*u_dir .- u[inx,[2,end-1]]
-    r[inx,iny]     .= (u[1:end-2,iny] .+ u[3:end-0,iny] - 2*u[inx,iny])/Δ.x^2 + (u[inx,1:end-2] .+ u[inx,3:end-0] - 2*u[2:end-1,2:end-1])/Δ.y^2 .- s[2:end-1,2:end-1]
+    r[inx,iny]     .= (u[1:end-2,iny] .+ u[3:end-0,iny] - 2*u[inx,iny])/Δ.x^2 + (u[inx,1:end-2] .+ u[inx,3:end-0] - 2*u[inx,iny])/Δ.y^2 .+ s[inx,iny]
     @info norm(r)/sqrt(length(r))
     # Visualization
-    heatmap(xc, yc, s')
+    heatmap(xc[inx], yc[iny], u[inx,iny]')
 end

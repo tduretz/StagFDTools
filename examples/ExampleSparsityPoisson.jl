@@ -13,7 +13,7 @@ let
     numbering.type[1,:]             .= :periodic 
     numbering.type[end,:]           .= :periodic 
     numbering.type[:,1]             .= :Dirichlet
-    numbering.type[:,end]           .= :Neumann
+    numbering.type[:,end]           .= :Neumannn
     
     @info "Node types"
     Print_xy(numbering.type) 
