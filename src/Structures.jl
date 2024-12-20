@@ -18,3 +18,38 @@ Base.@kwdef mutable struct NumberingPoisson{N}
     bc_val  ::Union{Matrix{Float64}, Missing} = missing
     pattern ::Union{SMatrix{N, N, Int64},  Missing} = missing
 end
+
+
+struct NumberingPoisson2{T1,T2,T3,T4}
+    num     ::Matrix{T1}
+    type    ::Matrix{T2}
+    bc_val  ::Matrix{T3}
+    pattern ::T4
+
+    function NumberingPoisson2(ni::NTuple, ::Val{N}) where N
+        num    = zeros(Int64, (ni.+2)...)
+        bc_val = zeros(Float64, (ni.+2)...)
+        type   = Matrix{Symbol}(undef, (ni.+2)...)
+        pattern = @MMatrix zeros(Int64, N, N)
+        new{
+            eltype(num),
+            eltype(type),
+            eltype(bc_val),
+            typeof(pattern),
+        }(num, type, bc_val, pattern)
+    end
+
+    function NumberingPoisson2{N}(ni::NTuple) where N
+        num    = zeros(Int64, (ni.+2)...)
+        bc_val = zeros(Float64, (ni.+2)...)
+        type   = Matrix{Symbol}(undef, (ni.+2)...)
+        pattern = @MMatrix zeros(Int64, 3, 3)
+        new{
+            eltype(num),
+            eltype(type),
+            eltype(bc_val),
+            typeof(pattern),
+        }(num, type, bc_val, pattern)    
+    end
+end
+  

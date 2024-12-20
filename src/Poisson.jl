@@ -1,3 +1,7 @@
+function RangesPoisson(nc)
+    return (inx = 2:nc.x+1, iny = 2:nc.y+1)
+end
+
 function NumberingPoisson!(N, nc)
     neq                     = nc.x * nc.y
     N.num                   = zeros(Int64, nc.x+2, nc.y+2)
@@ -19,6 +23,31 @@ function NumberingPoisson!(N, nc)
             N.num[i,1] = N.num[i,end-1]
         end
         if N.type[i,end]==:periodic
+            N.num[i,end] = N.num[i,2]
+        end
+    end
+end
+
+function NumberingPoisson!(N::NumberingPoisson2, nc)
+    neq                     = nc.x * nc.y
+    N.num[2:end-1,2:end-1] .= reshape(1:neq, nc.x, nc.y)
+
+    # Make periodic in x
+    for j in axes(N.type,2)
+        if N.type[1,j] === :periodic
+            N.num[1,j] = N.num[end-1,j]
+        end
+        if N.type[end,j] === :periodic
+            N.num[end,j] = N.num[2,j]
+        end
+    end
+
+    # Make periodic in y
+    for i in axes(N.type,1)
+        if N.type[i,1] === :periodic
+            N.num[i,1] = N.num[i,end-1]
+        end
+        if N.type[i,end] === :periodic
             N.num[i,end] = N.num[i,2]
         end
     end
