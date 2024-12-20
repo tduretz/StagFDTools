@@ -35,7 +35,8 @@ struct NumberingPoisson2{T1,T2,T3,T4}
         }(num, type, bc_val, pattern)    
     end
 end
-   
+  
+import StagFDTools: NumberingPoisson!
 function NumberingPoisson!(N::NumberingPoisson2, nc)
     neq                     = nc.x * nc.y
     N.num[2:end-1,2:end-1] .= reshape(1:neq, nc.x, nc.y)
@@ -310,7 +311,7 @@ end
 let
     to = TimerOutput()
     # Resolution in FD cells
-    nc = (x = 500, y = 500)
+    nc = (x = 30, y = 40)
 
     # Generates an empty numbering structure
     numbering = NumberingPoisson2{3}(values(nc))
