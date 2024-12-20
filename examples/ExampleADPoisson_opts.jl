@@ -129,6 +129,13 @@ function ResidualPoisson2D_2!(R, u, k, s, num, nc, Δ)  # u_loc, s, type_loc, Δ
     return nothing
 end
 
+function AssemblyPoisson_ForwardDiff(u, k, s, numbering, nc, Δ)
+    ndof     = maximum(numbering.num)
+    K        = ExtendableSparseMatrix(ndof, ndof)
+    AssemblyPoisson_ForwardDiff!(K, u, k, s, numbering, nc, Δ)
+    return K
+end
+
 function AssemblyPoisson_ForwardDiff!(K, u, k, s, numbering, nc, Δ)
 
     (; bc_val, type, pattern, num) = numbering
@@ -161,6 +168,13 @@ function AssemblyPoisson_ForwardDiff!(K, u, k, s, numbering, nc, Δ)
         end
     end
     return nothing
+end
+
+function AssemblyPoisson_Enzyme(u, k, s, numbering, nc, Δ)
+    ndof     = maximum(numbering.num)
+    K        = ExtendableSparseMatrix(ndof, ndof)
+    AssemblyPoisson_Enzyme!(K, u, k, s, numbering, nc, Δ)
+    return K
 end
 
 function AssemblyPoisson_Enzyme!(K, u, k, s, numbering, nc, Δ)
@@ -252,12 +266,11 @@ let
 
     @info norm(r)/sqrt(length(r))
     # Assembly
-    ndof     = maximum(numbering.num)
-    K        = ExtendableSparseMatrix(ndof, ndof)
-    AssemblyPoisson_Enzyme!(K, u, k, s, numbering, nc, Δ) # allocate pattern 
+    K = AssemblyPoisson_Enzyme(u, k, s, numbering, nc, Δ) # allocate pattern 
     @timeit to "Assembly Enzyme" begin
         AssemblyPoisson_Enzyme!(K, u, k, s, numbering, nc, Δ)
     end
+    # K = AssemblyPoisson_ForwardDiff(u, k, s, numbering, nc, Δ) # allocate pattern 
     # @timeit to "Assembly ForwardDiff" begin
     #     AssemblyPoisson_ForwardDiff!(K, u, k, s, numbering, nc, Δ)
     # end
