@@ -36,7 +36,7 @@ struct NumberingPoisson2{T1,T2,T3,T4}
     end
 end
   
-import StagFDTools: NumberingPoisson!
+
 function NumberingPoisson!(N::NumberingPoisson2, nc)
     neq                     = nc.x * nc.y
     N.num[2:end-1,2:end-1] .= reshape(1:neq, nc.x, nc.y)
@@ -200,6 +200,8 @@ end
 
 
 function ResidualPoisson2D_2!(R, u, k, s, num, nc, Δ)  # u_loc, s, type_loc, Δ
+
+    k_loc_shear = @SVector(zeros(2))
                 
     shift    = (x=1, y=1)
     (; type, bc_val) = num
@@ -207,12 +209,8 @@ function ResidualPoisson2D_2!(R, u, k, s, num, nc, Δ)  # u_loc, s, type_loc, Δ
         u_loc     =      SMatrix{3,3}(u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         k_loc_xx  = @SVector [k.x.xx[i-1,j-1], k.x.xx[i,j-1]]
         k_loc_yy  = @SVector [k.y.yy[i-1,j-1], k.y.yy[i-1,j]]
-        k_loc_xx  = @SVector [k.x.xx[i-1,j-1], k.x.xx[i,j-1]]
-        k_loc_yy  = @SVector [k.y.yy[i-1,j-1], k.y.yy[i-1,j]]
-        k_loc_yx  = @SVector [k.y.yx[i-1,j-1], k.y.yx[i-1,j]]
-        k_loc_xy  = @SVector [k.x.xy[i-1,j-1], k.x.xy[i,j-1]]
-        k_loc     = (xx = k_loc_xx, xy = k_loc_xy,
-                     yx = k_loc_yx, yy = k_loc_yy)
+        k_loc     = (xx = k_loc_xx,    xy = k_loc_shear,
+                     yx = k_loc_shear, yy = k_loc_yy)
         bcv_loc   = SMatrix{3,3}(bc_val[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         type_loc  = SMatrix{3,3}(type[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         
@@ -231,17 +229,19 @@ end
 function AssemblyPoisson_ForwardDiff!(K, u, k, s, numbering, nc, Δ)
 
     (; bc_val, type, pattern, num) = numbering
+
     shift    = (x=1, y=1)
+
 
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
         
         num_loc   = SMatrix{3,3}(num[ii,jj] for ii in i-1:i+1, jj in j-1:j+1) .* pattern
         u_loc     = SMatrix{3,3}(u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         k_loc_xx  = @SVector [k.x.xx[i-1,j-1], k.x.xx[i,j-1]]
-        k_loc_yy  = @SVector [k.y.yy[i-1,j-1], k.y.yy[i-1,j]]
-        k_loc_yx  = @SVector [k.y.yx[i-1,j-1], k.y.yx[i-1,j]]
         k_loc_xy  = @SVector [k.x.xy[i-1,j-1], k.x.xy[i,j-1]]
-        k_loc     = (xx = k_loc_xx, xy = k_loc_xy,
+        k_loc_yx  = @SVector [k.y.yx[i-1,j-1], k.y.yx[i-1,j]]
+        k_loc_yy  = @SVector [k.y.yy[i-1,j-1], k.y.yy[i-1,j]]
+        k_loc     = (xx = k_loc_xx,    xy = k_loc_xy,
                      yx = k_loc_yx, yy = k_loc_yy)
         bcv_loc   = SMatrix{3,3}(bc_val[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         type_loc  = SMatrix{3,3}(type[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
@@ -275,16 +275,18 @@ function AssemblyPoisson_Enzyme!(K, u, k, s, numbering, nc, Δ)
     ∂R∂u     = @MMatrix zeros(3,3) 
     shift    = (x=1, y=1)
 
+    k_loc_shear = @SVector(zeros(2))
+
     # to = TimerOutput()
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
         
         num_loc   = SMatrix{3,3}(num[ii,jj] for ii in i-1:i+1, jj in j-1:j+1) .* pattern
         u_loc     = MMatrix{3,3}(u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         k_loc_xx  = @SVector [k.x.xx[i-1,j-1], k.x.xx[i,j-1]]
-        k_loc_yy  = @SVector [k.y.yy[i-1,j-1], k.y.yy[i-1,j]]
-        k_loc_yx  = @SVector [k.y.yx[i-1,j-1], k.y.yx[i-1,j]]
         k_loc_xy  = @SVector [k.x.xy[i-1,j-1], k.x.xy[i,j-1]]
-        k_loc     = (xx = k_loc_xx, xy = k_loc_xy,
+        k_loc_yx  = @SVector [k.y.yx[i-1,j-1], k.y.yx[i-1,j]]
+        k_loc_yy  = @SVector [k.y.yy[i-1,j-1], k.y.yy[i-1,j]]
+        k_loc     = (xx = k_loc_xx,    xy = k_loc_xy,
                      yx = k_loc_yx, yy = k_loc_yy)
         bcv_loc   = SMatrix{3,3}(bc_val[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         type_loc  = SMatrix{3,3}(type[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
@@ -312,7 +314,7 @@ end
 let
     to = TimerOutput()
     # Resolution in FD cells
-    nc = (x = 30, y = 40)
+    nc = (x = 500, y = 500)
 
     # Generates an empty numbering structure
     numbering = NumberingPoisson2{3}(values(nc))
@@ -383,7 +385,7 @@ let
     ResidualPoisson2D_2!(r, u, k, s, numbering, nc, Δ) 
     @info norm(r)/sqrt(length(r))
     # Visualization
-    p1 = heatmap(xc[inx], yc[iny], u[inx,iny]')
+    p1 = heatmap(xc[inx], yc[iny], u[inx,iny]', aspect_ratio=1, xlim=extrema(xc))
     # qx = -diff(u[inx,iny],dims=1)/Δ.x
     # qy = -diff(u[inx,iny],dims=2)/Δ.y
     # @show     mean(qx[1,:])
