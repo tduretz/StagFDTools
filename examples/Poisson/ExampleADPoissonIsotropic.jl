@@ -94,10 +94,6 @@ end
     return K
 end
 
-function RangesPoisson(nc)
-    return (inx = 2:nc.x+1, iny = 2:nc.y+1)
-end
-
 let
     # Generates an empty numbering structure
     numbering = NumberingPoisson{3}()
