@@ -2,143 +2,143 @@ using StagFDTools, ExtendableSparse, StaticArrays, LinearAlgebra, Statistics, Un
 using TimerOutputs
 # using Enzyme
 using ForwardDiff, Enzyme  # AD backends you want to use 
-
+using MuladdMacro
 ######
 
 function Poisson2D(u_loc, k, s, type_loc, bcv_loc, Δ)
     
-    uC       = u_loc[2,2]
-
+    uC  = u_loc[2,2]
+    _Δx = Δ.x
+    _Δy = Δ.y
     # Necessary for 5-point stencil
-    if type_loc[1,2] == :Dirichlet
+    if type_loc[1,2] === :Dirichlet
         uW = 2*bcv_loc[1,2] - u_loc[2,2]
-    elseif type_loc[1,2] == :Neumann
+    elseif type_loc[1,2] === :Neumann
         uW = Δ.x*bcv_loc[1,2] + u_loc[2,2]
-    elseif type_loc[1,2] == :periodic || type_loc[1,2] == :in
+    elseif type_loc[1,2] === :periodic || type_loc[1,2] === :in
         uW = u_loc[1,2] 
     end
 
-    if type_loc[3,2] == :Dirichlet
+    if type_loc[3,2] === :Dirichlet
         uE = 2*bcv_loc[3,2] - u_loc[2,2]
-    elseif type_loc[3,2] == :Neumann
+    elseif type_loc[3,2] === :Neumann
         uE = -Δ.x*bcv_loc[3,2] + u_loc[2,2]
-    elseif type_loc[3,2] == :periodic || type_loc[3,2] == :in
+    elseif type_loc[3,2] === :periodic || type_loc[3,2] === :in
         uE = u_loc[3,2] 
     end
 
-    if type_loc[2,1] == :Dirichlet
+    if type_loc[2,1] === :Dirichlet
         uS = 2*bcv_loc[2,1] - u_loc[2,2]
-    elseif type_loc[2,1] == :Neumann
+    elseif type_loc[2,1] === :Neumann
         uS = Δ.y*bcv_loc[2,1] + u_loc[2,2]
-    elseif type_loc[2,1] == :periodic || type_loc[2,1] == :in
+    elseif type_loc[2,1] === :periodic || type_loc[2,1] === :in
         uS = u_loc[2,1] 
     end
 
-    if type_loc[2,3] == :Dirichlet
+    if type_loc[2,3] === :Dirichlet
         uN = 2*bcv_loc[2,3] - u_loc[2,2]
-    elseif type_loc[2,3] == :Neumann
+    elseif type_loc[2,3] === :Neumann
         uN = -Δ.y*bcv_loc[2,3] + u_loc[2,2]
-    elseif type_loc[2,3] == :periodic || type_loc[2,3] == :in
+    elseif type_loc[2,3] === :periodic || type_loc[2,3] === :in
         uN = u_loc[2,3] 
     end
 
     # 5-point stencil
-    ExW = (uC - uW)/Δ.x
-    ExE = (uE - uC)/Δ.x
-    EyS = (uC - uS)/Δ.y
-    EyN = (uN - uC)/Δ.y
+    ExW = (uC - uW) * _Δx
+    ExE = (uE - uC) * _Δx
+    EyS = (uC - uS) * _Δy
+    EyN = (uN - uC) * _Δy
 
     # Necessary for 9-point stencil (Newton or anisotropic)
-    if type_loc[1,1] == :Dirichlet
+    if type_loc[1,1] === :Dirichlet
         uSW = 2*bcv_loc[1,1] - u_loc[2,1]
-    elseif type_loc[1,1] == :Neumann
+    elseif type_loc[1,1] === :Neumann
         uSW = Δ.x*bcv_loc[1,1] + u_loc[2,1]
-    elseif type_loc[1,1] == :periodic || type_loc[1,1] == :in
+    elseif type_loc[1,1] === :periodic || type_loc[1,1] === :in
         uSW = u_loc[1,1] 
     end
 
-    if type_loc[3,1] == :Dirichlet
+    if type_loc[3,1] === :Dirichlet
         uSE = 2*bcv_loc[3,1] - u_loc[2,1]
-    elseif type_loc[3,1] == :Neumann
+    elseif type_loc[3,1] === :Neumann
         uSE = -Δ.x*bcv_loc[3,1] + u_loc[2,1]
-    elseif type_loc[3,1] == :periodic || type_loc[3,1] == :in
+    elseif type_loc[3,1] === :periodic || type_loc[3,1] === :in
         uSE = u_loc[3,1] 
     end
 
-    if type_loc[1,3] == :Dirichlet
+    if type_loc[1,3] === :Dirichlet
         uNW = 2*bcv_loc[1,3] - u_loc[2,3]
-    elseif type_loc[1,3] == :Neumann
+    elseif type_loc[1,3] === :Neumann
         uNW = Δ.y*bcv_loc[1,3] + u_loc[2,3]
-    elseif type_loc[1,3] == :periodic || type_loc[1,3] == :in
+    elseif type_loc[1,3] === :periodic || type_loc[1,3] === :in
         uNW = u_loc[1,3] 
     end
 
-    if type_loc[3,3] == :Dirichlet
+    if type_loc[3,3] === :Dirichlet
         uNE = 2*bcv_loc[3,3] - u_loc[2,3]
-    elseif type_loc[3,3] == :Neumann
+    elseif type_loc[3,3] === :Neumann
         uNE = -Δ.y*bcv_loc[3,3] + u_loc[2,3]
-    elseif type_loc[3,3] == :periodic || type_loc[3,3] == :in
+    elseif type_loc[3,3] === :periodic || type_loc[3,3] === :in
         uNE = u_loc[3,3] 
     end
 
-    ExSW = (uS - uSW)/Δ.x
-    ExSE = (uSE - uS)/Δ.x
-    ExNW = (uN - uNW)/Δ.x
-    ExNE = (uNE - uN)/Δ.x
+    ExSW = (uS - uSW) * _Δx
+    ExSE = (uSE - uS) * _Δx
+    ExNW = (uN - uNW) * _Δx
+    ExNE = (uNE - uN) * _Δx
 
     # Necessary for 9-point stencil (Newton or anisotropic)
-    if type_loc[1,1] == :Dirichlet
+    if type_loc[1,1] === :Dirichlet
         uSW = 2*bcv_loc[1,1] - u_loc[1,2]
-    elseif type_loc[1,1] == :Neumann
+    elseif type_loc[1,1] === :Neumann
         uSW = Δ.x*bcv_loc[1,1] + u_loc[1,2]
-    elseif type_loc[1,1] == :periodic || type_loc[1,1] == :in
+    elseif type_loc[1,1] === :periodic || type_loc[1,1] === :in
         uSW = u_loc[1,1] 
     end
 
-    if type_loc[3,1] == :Dirichlet
+    if type_loc[3,1] === :Dirichlet
         uSE = 2*bcv_loc[3,1] - u_loc[3,2]
-    elseif type_loc[3,1] == :Neumann
+    elseif type_loc[3,1] === :Neumann
         uSE = -Δ.x*bcv_loc[3,1] + u_loc[3,2]
-    elseif type_loc[3,1] == :periodic || type_loc[3,1] == :in
+    elseif type_loc[3,1] === :periodic || type_loc[3,1] === :in
         uSE = u_loc[3,1] 
     end
 
-    if type_loc[1,3] == :Dirichlet
+    if type_loc[1,3] === :Dirichlet
         uNW = 2*bcv_loc[1,3] - u_loc[1,2]
-    elseif type_loc[1,3] == :Neumann
+    elseif type_loc[1,3] === :Neumann
         uNW = Δ.y*bcv_loc[1,3] + u_loc[1,2]
-    elseif type_loc[1,3] == :periodic || type_loc[1,3] == :in
+    elseif type_loc[1,3] === :periodic || type_loc[1,3] === :in
         uNW = u_loc[1,3] 
     end
 
-    if type_loc[3,3] == :Dirichlet
+    if type_loc[3,3] === :Dirichlet
         uNE = 2*bcv_loc[3,3] - u_loc[3,2]
-    elseif type_loc[3,3] == :Neumann
+    elseif type_loc[3,3] === :Neumann
         uNE = -Δ.y*bcv_loc[3,3] + u_loc[3,2]
-    elseif type_loc[3,3] == :periodic || type_loc[3,3] == :in
+    elseif type_loc[3,3] === :periodic || type_loc[3,3] === :in
         uNE = u_loc[3,3] 
     end
 
-    EySW = (uW - uSW)/Δ.y
-    EySE = (uE - uSE)/Δ.y
-    EyNW = (uNW - uW)/Δ.y
-    EyNE = (uNE - uE)/Δ.y
+    EySW = (uW - uSW) * _Δy
+    EySE = (uE - uSE) * _Δy
+    EyNW = (uNW - uW) * _Δy
+    EyNE = (uNE - uE) * _Δy
 
     # Missing ones
-    ĒyW  = 0.25*(EySW + EyNW + EyS + EyN)
-    ĒyE  = 0.25*(EySE + EyNE + EyS + EyN)
-    ĒxS  = 0.25*(ExSW + ExSE + ExW + ExE)
-    ĒxN  = 0.25*(ExNW + ExNE + ExW + ExE)
+    ĒyW  = @muladd 0.25 * (EySW + EyNW + EyS + EyN)
+    ĒyE  = @muladd 0.25 * (EySE + EyNE + EyS + EyN)
+    ĒxS  = @muladd 0.25 * (ExSW + ExSE + ExW + ExE)
+    ĒxN  = @muladd 0.25 * (ExNW + ExNE + ExW + ExE)
 
     # Flux
-    qxW = - ( k.xx[1]*ExW + k.xy[1]*ĒyW ) 
-    qxE = - ( k.xx[2]*ExE + k.xy[2]*ĒyE )
-    qyS = - ( k.yy[1]*EyS + k.yx[1]*ĒxS )
-    qyN = - ( k.yy[2]*EyN + k.yx[2]*ĒxN )
+    qxW = -(@muladd k.xx[1]*ExW + k.xy[1]*ĒyW ) 
+    qxE = -(@muladd k.xx[2]*ExE + k.xy[2]*ĒyE )
+    qyS = -(@muladd k.yy[1]*EyS + k.yx[1]*ĒxS )
+    qyN = -(@muladd k.yy[2]*EyN + k.yx[2]*ĒxN )
 
-    return -(-(qxE - qxW)/Δ.x - (qyN - qyS)/Δ.y + s)
+    return -(@muladd -(qxE - qxW) * _Δx - (qyN - qyS) * _Δy + s)
 end
-
 
 function ResidualPoisson2D_2!(R, u, k, s, num, nc, Δ)  # u_loc, s, type_loc, Δ
 
@@ -146,16 +146,18 @@ function ResidualPoisson2D_2!(R, u, k, s, num, nc, Δ)  # u_loc, s, type_loc, Δ
                 
     shift    = (x=1, y=1)
     (; type, bc_val) = num
-    for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
-        u_loc     =      SMatrix{3,3}(u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        k_loc_xx  = @SVector [k.x.xx[i-1,j-1], k.x.xx[i,j-1]]
-        k_loc_yy  = @SVector [k.y.yy[i-1,j-1], k.y.yy[i-1,j]]
-        k_loc     = (xx = k_loc_xx,    xy = k_loc_shear,
-                     yx = k_loc_shear, yy = k_loc_yy)
-        bcv_loc   = SMatrix{3,3}(bc_val[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        type_loc  = SMatrix{3,3}(type[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        
-        R[i,j]    = Poisson2D(u_loc, k_loc, s[i,j], type_loc, bcv_loc, Δ)
+    Threads.@threads for j in 1+shift.y:nc.y+shift.y
+        for i in 1+shift.x:nc.x+shift.x
+            u_loc     = SMatrix{3,3}(@inbounds u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            k_loc_xx  = @SVector [k.x.xx[i-1,j-1], k.x.xx[i,j-1]]
+            k_loc_yy  = @SVector [k.y.yy[i-1,j-1], k.y.yy[i-1,j]]
+            k_loc     = (xx = k_loc_xx,    xy = k_loc_shear,
+                        yx = k_loc_shear, yy = k_loc_yy)
+            bcv_loc   = SMatrix{3,3}(@inbounds bc_val[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            type_loc  = SMatrix{3,3}(@inbounds type[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            
+            @inbounds R[i,j] = @inline Poisson2D(u_loc, k_loc, s[i,j], type_loc, bcv_loc, Δ)
+        end
     end
     return nothing
 end
@@ -322,7 +324,7 @@ let
     ResidualPoisson2D_2!(r, u, k, s, numbering, nc, Δ) 
     @info norm(r)/sqrt(length(r))
     # Visualization
-    p1 = heatmap(xc[inx], yc[iny], u[inx,iny]', aspect_ratio=1, xlim=extrema(xc))
+    # p1 = heatmap(xc[inx], yc[iny], u[inx,iny]', aspect_ratio=1, xlim=extrema(xc))
     # qx = -diff(u[inx,iny],dims=1)/Δ.x
     # qy = -diff(u[inx,iny],dims=2)/Δ.y
     # @show     mean(qx[1,:])
@@ -331,7 +333,7 @@ let
     # @show     mean(qy[:,end])
     # heatmap(xc[1:end-3], yc[iny], qx')
     # heatmap(xc[inx], yc[1:end-3], qy')
-    display(p1)
+    # display(p1)
     display(to)
 
 end
