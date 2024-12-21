@@ -5,138 +5,76 @@ import ForwardDiff, Enzyme  # AD backends you want to use
 
 ######
 
+
 function Poisson2D(u_loc, k, s, type_loc, bcv_loc, Δ)
     
     uC       = u_loc[2,2]
+    invΔx    = 1 / Δ.x
+    invΔy    = 1 / Δ.y
 
     # Necessary for 5-point stencil
-    if type_loc[1,2] == :Dirichlet
-        uW = 2*bcv_loc[1,2] - u_loc[2,2]
-    elseif type_loc[1,2] == :Neumann
-        uW = Δ.x*bcv_loc[1,2] + u_loc[2,2]
-    elseif type_loc[1,2] == :periodic || type_loc[1,2] == :in
-        uW = u_loc[1,2] 
-    end
+    uW = type_loc[1,2] == :periodic || type_loc[1,2] == :in ? u_loc[1,2] :
+         type_loc[1,2] == :Dirichlet ? fma(2, bcv_loc[1,2], -u_loc[2,2]) :
+         fma(Δ.x, bcv_loc[1,2], u_loc[2,2])
 
-    if type_loc[3,2] == :Dirichlet
-        uE = 2*bcv_loc[3,2] - u_loc[2,2]
-    elseif type_loc[3,2] == :Neumann
-        uE = -Δ.x*bcv_loc[3,2] + u_loc[2,2]
-    elseif type_loc[3,2] == :periodic || type_loc[3,2] == :in
-        uE = u_loc[3,2] 
-    end
+    uE = type_loc[3,2] == :periodic || type_loc[3,2] == :in ? u_loc[3,2] :
+         type_loc[3,2] == :Dirichlet ? fma(2, bcv_loc[3,2], -u_loc[2,2]) :
+         fma(-Δ.x, bcv_loc[3,2], u_loc[2,2])
 
-    if type_loc[2,1] == :Dirichlet
-        uS = 2*bcv_loc[2,1] - u_loc[2,2]
-    elseif type_loc[2,1] == :Neumann
-        uS = Δ.y*bcv_loc[2,1] + u_loc[2,2]
-    elseif type_loc[2,1] == :periodic || type_loc[2,1] == :in
-        uS = u_loc[2,1] 
-    end
+    uS = type_loc[2,1] == :periodic || type_loc[2,1] == :in ? u_loc[2,1] :
+         type_loc[2,1] == :Dirichlet ? fma(2, bcv_loc[2,1], -u_loc[2,2]) :
+         fma(Δ.y, bcv_loc[2,1], u_loc[2,2])
 
-    if type_loc[2,3] == :Dirichlet
-        uN = 2*bcv_loc[2,3] - u_loc[2,2]
-    elseif type_loc[2,3] == :Neumann
-        uN = -Δ.y*bcv_loc[2,3] + u_loc[2,2]
-    elseif type_loc[2,3] == :periodic || type_loc[2,3] == :in
-        uN = u_loc[2,3] 
-    end
+    uN = type_loc[2,3] == :periodic || type_loc[2,3] == :in ? u_loc[2,3] :
+         type_loc[2,3] == :Dirichlet ? fma(2, bcv_loc[2,3], -u_loc[2,2]) :
+         fma(-Δ.y, bcv_loc[2,3], u_loc[2,2])
 
     # 5-point stencil
-    ExW = (uC - uW)/Δ.x
-    ExE = (uE - uC)/Δ.x
-    EyS = (uC - uS)/Δ.y
-    EyN = (uN - uC)/Δ.y
+    ExW = (uC - uW) * invΔx
+    ExE = (uE - uC) * invΔx
+    EyS = (uC - uS) * invΔy
+    EyN = (uN - uC) * invΔy
 
     # Necessary for 9-point stencil (Newton or anisotropic)
-    if type_loc[1,1] == :Dirichlet
-        uSW = 2*bcv_loc[1,1] - u_loc[2,1]
-    elseif type_loc[1,1] == :Neumann
-        uSW = Δ.x*bcv_loc[1,1] + u_loc[2,1]
-    elseif type_loc[1,1] == :periodic || type_loc[1,1] == :in
-        uSW = u_loc[1,1] 
-    end
+    uSW = type_loc[1,1] == :periodic || type_loc[1,1] == :in ? u_loc[1,1] :
+          type_loc[1,1] == :Dirichlet ? fma(2, bcv_loc[1,1], -u_loc[2,1]) :
+          fma(Δ.x, bcv_loc[1,1], u_loc[2,1])
 
-    if type_loc[3,1] == :Dirichlet
-        uSE = 2*bcv_loc[3,1] - u_loc[2,1]
-    elseif type_loc[3,1] == :Neumann
-        uSE = -Δ.x*bcv_loc[3,1] + u_loc[2,1]
-    elseif type_loc[3,1] == :periodic || type_loc[3,1] == :in
-        uSE = u_loc[3,1] 
-    end
+    uSE = type_loc[3,1] == :periodic || type_loc[3,1] == :in ? u_loc[3,1] :
+          type_loc[3,1] == :Dirichlet ? fma(2, bcv_loc[3,1], -u_loc[2,1]) :
+          fma(-Δ.x, bcv_loc[3,1], u_loc[2,1])
 
-    if type_loc[1,3] == :Dirichlet
-        uNW = 2*bcv_loc[1,3] - u_loc[2,3]
-    elseif type_loc[1,3] == :Neumann
-        uNW = Δ.y*bcv_loc[1,3] + u_loc[2,3]
-    elseif type_loc[1,3] == :periodic || type_loc[1,3] == :in
-        uNW = u_loc[1,3] 
-    end
+    uNW = type_loc[1,3] == :periodic || type_loc[1,3] == :in ? u_loc[1,3] :
+          type_loc[1,3] == :Dirichlet ? fma(2, bcv_loc[1,3], -u_loc[2,3]) :
+          fma(Δ.y, bcv_loc[1,3], u_loc[2,3])
 
-    if type_loc[3,3] == :Dirichlet
-        uNE = 2*bcv_loc[3,3] - u_loc[2,3]
-    elseif type_loc[3,3] == :Neumann
-        uNE = -Δ.y*bcv_loc[3,3] + u_loc[2,3]
-    elseif type_loc[3,3] == :periodic || type_loc[3,3] == :in
-        uNE = u_loc[3,3] 
-    end
+    uNE = type_loc[3,3] == :periodic || type_loc[3,3] == :in ? u_loc[3,3] :
+          type_loc[3,3] == :Dirichlet ? fma(2, bcv_loc[3,3], -u_loc[2,3]) :
+          fma(-Δ.y, bcv_loc[3,3], u_loc[2,3])
 
-    ExSW = (uS - uSW)/Δ.x
-    ExSE = (uSE - uS)/Δ.x
-    ExNW = (uN - uNW)/Δ.x
-    ExNE = (uNE - uN)/Δ.x
+    ExSW = (uS - uSW) * invΔx
+    ExSE = (uSE - uS) * invΔx
+    ExNW = (uN - uNW) * invΔx
+    ExNE = (uNE - uN) * invΔx
 
-    # Necessary for 9-point stencil (Newton or anisotropic)
-    if type_loc[1,1] == :Dirichlet
-        uSW = 2*bcv_loc[1,1] - u_loc[1,2]
-    elseif type_loc[1,1] == :Neumann
-        uSW = Δ.x*bcv_loc[1,1] + u_loc[1,2]
-    elseif type_loc[1,1] == :periodic || type_loc[1,1] == :in
-        uSW = u_loc[1,1] 
-    end
-
-    if type_loc[3,1] == :Dirichlet
-        uSE = 2*bcv_loc[3,1] - u_loc[3,2]
-    elseif type_loc[3,1] == :Neumann
-        uSE = -Δ.x*bcv_loc[3,1] + u_loc[3,2]
-    elseif type_loc[3,1] == :periodic || type_loc[3,1] == :in
-        uSE = u_loc[3,1] 
-    end
-
-    if type_loc[1,3] == :Dirichlet
-        uNW = 2*bcv_loc[1,3] - u_loc[1,2]
-    elseif type_loc[1,3] == :Neumann
-        uNW = Δ.y*bcv_loc[1,3] + u_loc[1,2]
-    elseif type_loc[1,3] == :periodic || type_loc[1,3] == :in
-        uNW = u_loc[1,3] 
-    end
-
-    if type_loc[3,3] == :Dirichlet
-        uNE = 2*bcv_loc[3,3] - u_loc[3,2]
-    elseif type_loc[3,3] == :Neumann
-        uNE = -Δ.y*bcv_loc[3,3] + u_loc[3,2]
-    elseif type_loc[3,3] == :periodic || type_loc[3,3] == :in
-        uNE = u_loc[3,3] 
-    end
-
-    EySW = (uW - uSW)/Δ.y
-    EySE = (uE - uSE)/Δ.y
-    EyNW = (uNW - uW)/Δ.y
-    EyNE = (uNE - uE)/Δ.y
+    EySW = (uW - uSW) * invΔy
+    EySE = (uE - uSE) * invΔy
+    EyNW = (uNW - uW) * invΔy
+    EyNE = (uNE - uE) * invΔy
 
     # Missing ones
-    ĒyW  = 0.25*(EySW + EyNW + EyS + EyN)
-    ĒyE  = 0.25*(EySE + EyNE + EyS + EyN)
-    ĒxS  = 0.25*(ExSW + ExSE + ExW + ExE)
-    ĒxN  = 0.25*(ExNW + ExNE + ExW + ExE)
+    ĒyW  = 0.25 * (EySW + EyNW + EyS + EyN)
+    ĒyE  = 0.25 * (EySE + EyNE + EyS + EyN)
+    ĒxS  = 0.25 * (ExSW + ExSE + ExW + ExE)
+    ĒxN  = 0.25 * (ExNW + ExNE + ExW + ExE)
 
     # Flux
-    qxW = - ( k.xx[1]*ExW + k.xy[1]*ĒyW ) 
-    qxE = - ( k.xx[2]*ExE + k.xy[2]*ĒyE )
-    qyS = - ( k.yy[1]*EyS + k.yx[1]*ĒxS )
-    qyN = - ( k.yy[2]*EyN + k.yx[2]*ĒxN )
+    qxW = - ( fma(k.xx[1], ExW, k.xy[1] * ĒyW) )
+    qxE = - ( fma(k.xx[2], ExE, k.xy[2] * ĒyE) )
+    qyS = - ( fma(k.yy[1], EyS, k.yx[1] * ĒxS) )
+    qyN = - ( fma(k.yy[2], EyN, k.yx[2] * ĒxN) )
 
-    return -(-(qxE - qxW)/Δ.x - (qyN - qyS)/Δ.y + s)
+    return -(-(qxE - qxW) * invΔx - (qyN - qyS) * invΔy + s)
 end
 
 function ResidualPoisson2D_2!(R, u, k, s, num, nc, Δ)  # u_loc, s, type_loc, Δ
@@ -404,21 +342,21 @@ let
     u[inx,iny] .-= reshape(du, nc...)
 
 
-    u  .= 0.
-    R = zero(b)
-    U = zero(b)
-    dU = zero(b)
+    # u  .= 0.
+    # R = zero(b)
+    # U = zero(b)
+    # dU = zero(b)
 
-    @timeit to "Cholesky PC Iterative solve" begin
-        PC  = cholesky(1/2 .*(K + K'))
-        for it = 1:10
-            R .= K*U - b
-            println("$(it) r = ", norm(R)/sqrt(length(r)))
-            # ldiv!(dU, PC, R) 
-            U .-= PC\R
-        end
-        # gmres!(du, K, b; Pl=cholesky(1/2 .*(K + K')))
-    end
+    # @timeit to "Cholesky PC Iterative solve" begin
+    #     PC  = cholesky(1/2 .*(K + K'))
+    #     for it = 1:10
+    #         R .= K*U - b
+    #         println("$(it) r = ", norm(R)/sqrt(length(r)))
+    #         # ldiv!(dU, PC, R) 
+    #         U .-= PC\R
+    #     end
+    #     # gmres!(du, K, b; Pl=cholesky(1/2 .*(K + K')))
+    # end
     # Residual check
     ResidualPoisson2D_2!(r, u, k, s, numbering, nc, Δ) 
     @info norm(r)/sqrt(length(r))
@@ -432,7 +370,7 @@ let
     # @show     mean(qy[:,end])
     # heatmap(xc[1:end-3], yc[iny], qx')
     # heatmap(xc[inx], yc[1:end-3], qy')
-    # display(p1)
+    display(p1)
     display(to)
 
 end
