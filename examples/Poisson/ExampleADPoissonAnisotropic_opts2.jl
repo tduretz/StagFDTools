@@ -333,7 +333,7 @@ end
 let
     to = TimerOutput()
     # Resolution in FD cells
-    nc = (x = 500, y = 500)
+    nc = (x = 30, y = 40)
 
     # Generates an empty numbering structure
     numbering = NumberingPoisson2{3}(values(nc))
@@ -414,9 +414,8 @@ let
         for it = 1:10
             R .= K*U - b
             println("$(it) r = ", norm(R)/sqrt(length(r)))
-            ldiv!(dU, PC, R) 
-            U .-= dU
-            
+            # ldiv!(dU, PC, R) 
+            U .-= PC\R
         end
         # gmres!(du, K, b; Pl=cholesky(1/2 .*(K + K')))
     end
