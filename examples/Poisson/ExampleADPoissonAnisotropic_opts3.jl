@@ -321,7 +321,7 @@ let
     # Parameters
     L     = 1.
     k_iso = 1.0
-    δ     = 5.0
+    δ0    = 5.0
     θ     = -45*π/180. 
     # Arrays
     r   = zeros(nc.x+2, nc.y+2)
@@ -332,12 +332,17 @@ let
     Δ   = (x=L/nc.x, y=L/nc.y)
     xc  = LinRange(-L/2-Δ.x/2, L/2+Δ.x/2, nc.x+2)
     yc  = LinRange(-L/2-Δ.y/2, L/2+Δ.y/2, nc.y+2)
+    xv  = LinRange(-L/2, L/2, nc.x+1)
+    yv  = LinRange(-L/2, L/2, nc.y+1)
     # Configuration
     s  .= 50*exp.(-(xc.^2 .+ (yc').^2)./0.4^2)
-    k.x.xx .= k_iso .* cos(θ) .^ 2 + k_iso .* sin(θ) .^ 2 ./ δ
-    k.x.xy .= k_iso .* sin(θ) .* cos(θ) - k_iso .* sin(θ) .* cos(θ) ./ δ
-    k.y.yx .= k_iso .* sin(θ) .* cos(θ) - k_iso .* sin(θ) .* cos(θ) ./ δ
-    k.y.yy .= k_iso .* sin(θ) .^ 2 + k_iso .* cos(θ) .^ 2 ./ δ
+    δ   = (x=δ0*ones(nc.x+1,nc.y), y=δ0*ones(nc.x,nc.y+1))
+    # δ.x[(xv.^2 .+ (yc[iny]').^2).<0.1]  .= 10.0
+    # δ.y[(xc[inx].^2 .+ (yv').^2).<0.1]  .= 10.0
+    k.x.xx .= k_iso .* cos(θ) .^ 2 .+ k_iso .* sin(θ) .^ 2 ./ δ.x
+    k.x.xy .= k_iso .* sin(θ) .* cos(θ) .- k_iso .* sin(θ) .* cos(θ) ./ δ.x
+    k.y.yx .= k_iso .* sin(θ) .* cos(θ) .- k_iso .* sin(θ) .* cos(θ) ./ δ.y
+    k.y.yy .= k_iso .* sin(θ) .^ 2 .+ k_iso .* cos(θ) .^ 2 ./ δ.y
     # Residual check
     # @timeit to "Residual" ResidualPoisson2D_2!(r, u, k, s, numbering, nc, Δ) 
 
