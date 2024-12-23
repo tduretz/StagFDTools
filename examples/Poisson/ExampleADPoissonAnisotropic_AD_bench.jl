@@ -1,10 +1,10 @@
 using StagFDTools, ExtendableSparse, StaticArrays, LinearAlgebra, Statistics
 using TimerOutputs
 using DifferentiationInterface
-import ForwardDiff, Enzyme, ReverseDiff, Zygote, Mooncake, FastDifferentiation  # AD backends you want to use 
+import ForwardDiff, Enzyme, ReverseDiff, Zygote, FastDifferentiation  # AD backends you want to use 
 
+# const fns = AutoEnzyme, AutoForwardDiff,  AutoReverseDiff, AutoZygote, AutoFastDifferentiation
 const fns = AutoForwardDiff,  AutoReverseDiff, AutoZygote, AutoFastDifferentiation
-# AutoEnzyme,
 
 ######
 
@@ -261,9 +261,6 @@ let
     
     ndof     = maximum(numbering.num)
     K        = ExtendableSparseMatrix(ndof, ndof)
-    # @timeit to "Residual+Assembly FD" begin
-    #     Residual_and_AssemblyPoisson_ForwardDiff!(r, K, u, k, s, numbering, nc, Δ)
-    # end
 
     for fn in fns
         println("Running with $fn")
@@ -273,11 +270,11 @@ let
 end
 
 # ───────────────────────────────────────────────────────────────────────
-# AutoForwardDiff         1.20k  136μs  100.0%   113ns     0.00B     - %    0.00B
+# AutoForwardDiff         1.20k   136μs  100.0%   113ns     0.00B     - %    0.00B
 # ───────────────────────────────────────────────────────────────────────
-# AutoReverseDiff         1.20k  1.08s  100.0%   903μs   30.5MiB  100.0%  26.1KiB
+# AutoReverseDiff         1.20k  20.7ms  100.0%  17.3μs   16.0MiB  100.0%  13.6KiB
 # ───────────────────────────────────────────────────────────────────────
-# AutoZygote              1.20k  4.61s  100.0%  3.84ms    128MiB  100.0%   109KiB
+# AutoZygote              1.20k   724ms  100.0%   603μs    100MiB  100.0%  85.3KiB
 # ───────────────────────────────────────────────────────────────────────────────
-# AutoFastDifferentiation 1.20k  5.32s  100.0%  4.43ms   2.52GiB  100.0%  2.15MiB
+# AutoFastDifferentiation 1.20k   2.06s  100.0%  1.72ms   2.20GiB  100.0%  1.88MiB
 # ───────────────────────────────────────────────────────────────────────────────
