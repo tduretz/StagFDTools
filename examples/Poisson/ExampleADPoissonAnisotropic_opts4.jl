@@ -69,14 +69,14 @@ function Poisson2D(u_loc, k, s, type_loc, bcv_loc, Δ)
     # Symmetric scheme Günter et al. (2005) - https://www.pas.rochester.edu/~shuleli/0629/gunter2007.pdf
     
     # Average gradient vector components to vertices
-    ĒxSW = 1/2*(ExW + 1*ExSW)
-    ĒySW = 1/2*(EyS + 1*EySW)
-    ĒxSE = 1/2*(ExE + 1*ExSE)
-    ĒySE = 1/2*(EyS + 1*EySE)
-    ĒxNW = 1/2*(ExW + 1*ExNW)
-    ĒyNW = 1/2*(EyN + 1*EyNW)
-    ĒxNE = 1/2*(ExE + 1*ExNE)
-    ĒyNE = 1/2*(EyN + 1*EyNE)
+    ĒxSW = 1/2*(ExW + ExSW)
+    ĒySW = 1/2*(EyS + EySW)
+    ĒxSE = 1/2*(ExE + ExSE)
+    ĒySE = 1/2*(EyS + EySE)
+    ĒxNW = 1/2*(ExW + ExNW)
+    ĒyNW = 1/2*(EyN + EyNW)
+    ĒxNE = 1/2*(ExE + ExNE)
+    ĒyNE = 1/2*(EyN + EyNE)
 
     # Average flux vector components to cell center
     qxW = -1/2*( k.xx[1,1]*ĒxSW + k.xx[1,2]*ĒxNW + k.xy[1,1]*ĒySW + k.xy[1,2]*ĒyNW )

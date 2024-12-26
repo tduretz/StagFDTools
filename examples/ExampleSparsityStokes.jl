@@ -1,5 +1,29 @@
 using StagFDTools, ExtendableSparse, StaticArrays
 
+using StagFDTools, ExtendableSparse, StaticArrays
+
+struct PatternV <: AbstractPattern
+    xx
+    xy 
+    yx 
+    yy 
+end
+
+ struct Pattern{Txx,Txy}
+    xx::Txx
+    xy::Txy
+    yx::Txy
+    yy::Txx
+end
+
+function Base.getindex(x::Pattern, i::Int64, j::Int64)
+    @assert 0 < i < 3 
+    @assert 0 < j < 3 
+    isone(i) && isone(j) && return x.xx
+    isone(i) && j === 2  && return x.xy
+    i === 2  && isone(j) && return x.xy
+    return x.yy
+end
 Base.@kwdef mutable struct StokesPattern
     num     ::Union{Matrix{Int64},   Missing} = missing
     type    ::Union{Matrix{Symbol},  Missing} = missing
@@ -24,8 +48,6 @@ function NumberingStokes!(N, nc)
     ############ Numbering Vx ############
     periodic_west  = sum(any(i->i==:periodic, N.Vx.type[2,:], dims=2)) > 0
     periodic_south = sum(any(i->i==:periodic, N.Vx.type[:,2], dims=1)) > 0
-
-    # One could also directly eliminate Dirichlet dofs here
 
     shift  = (periodic_west) ? 1 : 0 
     N.Vx.num                   = zeros(Int64, nc.x+3, nc.y+4) 
@@ -168,11 +190,6 @@ end
     ############ Numbering Vy ############
     shift  = (x=1, y=1)
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
-        # if j==3 && i==3 # debug for ncx = 4 and ncy = 3
-        #     display(num.Pt.num[i,j])
-        #     Print_xy(num.Vx.num[i:i+1,j:j+2])
-        #     Print_xy(num.Pt.patternVx)
-        # end
         # Pt --- Vx
         Local = num.Vx.num[i:i+1,j:j+2] .* num.Pt.patternVx
         for jj in axes(Local,2), ii in axes(Local,1)
@@ -231,14 +248,14 @@ let
     @info "Vy Node types"
     Print_xy(numbering.Vy.type) 
 
-    numbering.Pt      = StokesPattern()#NumberingPoisson{3}()
+    numbering.Pt      = StokesPattern()
     numbering.Pt.type = fill(:out, (nc.x+2, nc.y+2))
     numbering.Pt.type[2:end-1,2:end-1] .= :in
     @info "Pt Node types"
     Print_xy(numbering.Pt.type) 
 
     # For Stokes matrices have different sizes
-    # ... if we want more coupling (T-H-Coserat) more fields could be dynamically added.
+    # ... if we want more coupling (T-H-Cosserat) more fields could be dynamically added.
     numbering.Vx.patternVx = @SMatrix([0 1 0; 1 1 1; 0 1 0]) 
     numbering.Vx.patternVy = @SMatrix([0 1 1 0; 0 1 1 0]) 
     numbering.Vx.patternPt = @SMatrix([0 1 0; 0 1 0])
