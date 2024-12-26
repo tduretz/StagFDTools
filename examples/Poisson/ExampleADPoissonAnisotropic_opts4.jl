@@ -27,12 +27,6 @@ function Poisson2D(u_loc, k, s, type_loc, bcv_loc, Δ)
     uN = type_loc[2,3] == :periodic || type_loc[2,3] == :in ? u_loc[2,3] :
          type_loc[2,3] == :Dirichlet ? fma(2, bcv_loc[2,3], -u_loc[2,2]) :
          fma(-Δ.y, bcv_loc[2,3], u_loc[2,2])
-
-    # 5-point stencil
-    ExW = (uC - uW) * invΔx
-    ExE = (uE - uC) * invΔx
-    EyS = (uC - uS) * invΔy
-    EyN = (uN - uC) * invΔy
     
     # Necessary for 9-point stencil (Newton or anisotropic)
     uSW = type_loc[1,1] == :periodic || type_loc[1,1] == :in ? u_loc[1,1] :
@@ -51,6 +45,15 @@ function Poisson2D(u_loc, k, s, type_loc, bcv_loc, Δ)
           type_loc[3,3] == :Dirichlet ? fma(2, bcv_loc[3,3], -u_loc[2,2]) :
           fma(-Δ.y, bcv_loc[3,3], u_loc[2,3])
 
+    ##########################################################
+
+    # 5-point stencil
+    ExW = (uC - uW) * invΔx
+    ExE = (uE - uC) * invΔx
+    EyS = (uC - uS) * invΔy
+    EyN = (uN - uC) * invΔy
+
+    # 9-point stencil 
     ExSW = (uS - uSW) * invΔx
     ExSE = (uSE - uS) * invΔx
     ExNW = (uN - uNW) * invΔx
@@ -63,6 +66,9 @@ function Poisson2D(u_loc, k, s, type_loc, bcv_loc, Δ)
 
     ##########################################################
 
+    # Symmetric scheme Günter et al. (2005) - https://www.pas.rochester.edu/~shuleli/0629/gunter2007.pdf
+    
+    # Average gradient vector components to vertices
     ĒxSW = 1/2*(ExW + 1*ExSW)
     ĒySW = 1/2*(EyS + 1*EySW)
     ĒxSE = 1/2*(ExE + 1*ExSE)
@@ -72,6 +78,7 @@ function Poisson2D(u_loc, k, s, type_loc, bcv_loc, Δ)
     ĒxNE = 1/2*(ExE + 1*ExNE)
     ĒyNE = 1/2*(EyN + 1*EyNE)
 
+    # Average flux vector components to cell center
     qxW = -1/2*( k.xx[1,1]*ĒxSW + k.xx[1,2]*ĒxNW + k.xy[1,1]*ĒySW + k.xy[1,2]*ĒyNW )
     qxE = -1/2*( k.xx[2,1]*ĒxSE + k.xx[2,2]*ĒxNE + k.xy[2,1]*ĒySE + k.xy[2,2]*ĒyNE )
     qyS = -1/2*( k.xy[1,1]*ĒxSW + k.xy[2,1]*ĒxSE + k.yy[1,1]*ĒySW + k.yy[2,1]*ĒySE )
@@ -85,12 +92,12 @@ function ResidualPoisson2D_2!(R, u, k, s, numbering, nc, Δ)
     shift    = (x=1, y=1)
     (; bc_val, type, pattern, num) = numbering
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
-        u_loc     = SMatrix{3,3}(u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+        u_loc     = SMatrix{3,3}(     u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         bcv_loc   = SMatrix{3,3}(bc_val[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         type_loc  = SMatrix{3,3}(  type[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        k_loc_xx  = SMatrix{2,2}(  k.xx[ii,jj] for ii in i-1:i, jj in j-1:j)
-        k_loc_yy  = SMatrix{2,2}(  k.yy[ii,jj] for ii in i-1:i, jj in j-1:j)
-        k_loc_xy  = SMatrix{2,2}(  k.xy[ii,jj] for ii in i-1:i, jj in j-1:j)
+        k_loc_xx  = SMatrix{2,2}(  k.xx[ii,jj] for ii in i-1:i,   jj in j-1:j  )
+        k_loc_yy  = SMatrix{2,2}(  k.yy[ii,jj] for ii in i-1:i,   jj in j-1:j  )
+        k_loc_xy  = SMatrix{2,2}(  k.xy[ii,jj] for ii in i-1:i,   jj in j-1:j  )
         k_loc     = (xx = k_loc_xx, xy = k_loc_xy, yy = k_loc_yy)
         
         R[i,j]     = Poisson2D(u_loc, k_loc, s[i,j], type_loc, bcv_loc, Δ)
@@ -111,16 +118,15 @@ function AssemblyPoisson_ForwardDiff!(K, u, k, s, numbering, nc, Δ)
 
     shift    = (x=1, y=1)
 
-
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
         
         num_loc   = SMatrix{3,3}(num[ii,jj] for ii in i-1:i+1, jj in j-1:j+1) .* pattern
         u_loc     = SMatrix{3,3}(     u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         bcv_loc   = SMatrix{3,3}(bc_val[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         type_loc  = SMatrix{3,3}(  type[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        k_loc_xx  = SMatrix{2,2}(  k.xx[ii,jj] for ii in i-1:i, jj in j-1:j)
-        k_loc_yy  = SMatrix{2,2}(  k.yy[ii,jj] for ii in i-1:i, jj in j-1:j)
-        k_loc_xy  = SMatrix{2,2}(  k.xy[ii,jj] for ii in i-1:i, jj in j-1:j)
+        k_loc_xx  = SMatrix{2,2}(  k.xx[ii,jj] for ii in i-1:i,   jj in j-1:j  )
+        k_loc_yy  = SMatrix{2,2}(  k.yy[ii,jj] for ii in i-1:i,   jj in j-1:j  )
+        k_loc_xy  = SMatrix{2,2}(  k.xy[ii,jj] for ii in i-1:i,   jj in j-1:j  )
         k_loc     = (xx = k_loc_xx, xy = k_loc_xy, yy = k_loc_yy)
  
         ∂R∂u = ForwardDiff.gradient(
@@ -157,9 +163,9 @@ function Residual_and_AssemblyPoisson_ForwardDiff!(R, K, u, k, s, numbering, nc,
         u_loc     = SMatrix{3,3}(     u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         bcv_loc   = SMatrix{3,3}(bc_val[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         type_loc  = SMatrix{3,3}(  type[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        k_loc_xx  = SMatrix{2,2}(  k.xx[ii,jj] for ii in i-1:i, jj in j-1:j)
-        k_loc_yy  = SMatrix{2,2}(  k.yy[ii,jj] for ii in i-1:i, jj in j-1:j)
-        k_loc_xy  = SMatrix{2,2}(  k.xy[ii,jj] for ii in i-1:i, jj in j-1:j)
+        k_loc_xx  = SMatrix{2,2}(  k.xx[ii,jj] for ii in i-1:i,   jj in j-1:j  )
+        k_loc_yy  = SMatrix{2,2}(  k.yy[ii,jj] for ii in i-1:i,   jj in j-1:j  )
+        k_loc_xy  = SMatrix{2,2}(  k.xy[ii,jj] for ii in i-1:i,   jj in j-1:j  )
         k_loc     = (xx = k_loc_xx, xy = k_loc_xy, yy = k_loc_yy)
  
         R[i,j], ∂R∂u = value_and_gradient(
@@ -199,9 +205,9 @@ function AssemblyPoisson_Enzyme!(K, u, k, s, numbering, nc, Δ)
         u_loc     = SMatrix{3,3}(     u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         bcv_loc   = SMatrix{3,3}(bc_val[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         type_loc  = SMatrix{3,3}(  type[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        k_loc_xx  = SMatrix{2,2}(  k.xx[ii,jj] for ii in i-1:i, jj in j-1:j)
-        k_loc_yy  = SMatrix{2,2}(  k.yy[ii,jj] for ii in i-1:i, jj in j-1:j)
-        k_loc_xy  = SMatrix{2,2}(  k.xy[ii,jj] for ii in i-1:i, jj in j-1:j)
+        k_loc_xx  = SMatrix{2,2}(  k.xx[ii,jj] for ii in i-1:i,   jj in j-1:j  )
+        k_loc_yy  = SMatrix{2,2}(  k.yy[ii,jj] for ii in i-1:i,   jj in j-1:j  )
+        k_loc_xy  = SMatrix{2,2}(  k.xy[ii,jj] for ii in i-1:i,   jj in j-1:j  )
         k_loc     = (xx = k_loc_xx, xy = k_loc_xy, yy = k_loc_yy)
 
         ∂R∂u     .= 0e0
@@ -236,15 +242,15 @@ function Residual_and_AssemblyPoisson_Enzyme!(R, K, u, k, s, numbering, nc, Δ)
 
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
         
-        num_loc   = SMatrix{3,3}(num[ii,jj] for ii in i-1:i+1, jj in j-1:j+1) .* pattern
-        u_loc     = SMatrix{3,3}(u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        k_loc_xy  = SMatrix{2,2}(k.xy[ii,jj] for ii in i-1:i, jj in j-1:j)
-        k_loc_xx  = SMatrix{2,2}(k.xx[ii,jj] for ii in i-1:i, jj in j-1:j)
-        k_loc_yy  = SMatrix{2,2}(k.yy[ii,jj] for ii in i-1:i, jj in j-1:j)
-        k_loc     = (xx = k_loc_xx, xy = k_loc_xy, yy = k_loc_yy)
+        num_loc   = SMatrix{3,3}( num[ii,jj] for ii in i-1:i+1, jj in j-1:j+1) .* pattern
+        u_loc     = SMatrix{3,3}(     u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         bcv_loc   = SMatrix{3,3}(bc_val[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        type_loc  = SMatrix{3,3}(type[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
- 
+        type_loc  = SMatrix{3,3}(  type[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+        k_loc_xx  = SMatrix{2,2}(  k.xx[ii,jj] for ii in i-1:i,   jj in j-1:j  )
+        k_loc_yy  = SMatrix{2,2}(  k.yy[ii,jj] for ii in i-1:i,   jj in j-1:j  )
+        k_loc_xy  = SMatrix{2,2}(  k.xy[ii,jj] for ii in i-1:i,   jj in j-1:j  )
+        k_loc     = (xx = k_loc_xx, xy = k_loc_xy, yy = k_loc_yy)
+
         R[i,j], ∂R∂u = value_and_gradient(
             x -> Poisson2D(x, k_loc, s[i,j], type_loc, bcv_loc, Δ),
             AutoEnzyme(), 
@@ -337,7 +343,6 @@ let
     @info "ndof = $(length(b))"
     @timeit to "Solver" begin
         du           = K\b
-        # du           = cholesky(K)\b
     end
     u[inx,iny] .-= reshape(du, nc...)
 
