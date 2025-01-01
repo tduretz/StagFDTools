@@ -1,35 +1,77 @@
 using StagFDTools, ExtendableSparse, StaticArrays
 
-# Base.@kwdef mutable struct StokesPattern
-#     num     ::Union{Matrix{Int64},   Missing} = missing
-#     type    ::Union{Matrix{Symbol},  Missing} = missing
-#     patternVx ::Union{SMatrix,  Missing} = missing  # these could be contained in same object - but they have different sizes
-#     patternVy ::Union{SMatrix,  Missing} = missing  # these could be contained in same object - but they have different sizes
-#     patternPt ::Union{SMatrix,  Missing} = missing  # these could be contained in same object - but they have different sizes
-#     # ideally we would like other fields also part of it (fluid pressure, microrotation)
-# end
-
-# Base.@kwdef mutable struct NumberingStokes
-#     Vx ::Union{StokesPattern, Missing} = missing
-#     Vy ::Union{StokesPattern, Missing} = missing
-#     Pt ::Union{StokesPattern, Missing} = missing
-# end
-
-function  NumberingMultifield(Fields, nc)
-
-    Numbering = (;)
-
-    if any(x->x==:V, Fields)
-        data = ( 
-            Vx= (num=),
-        
-        )
-        @show merge(Numbering, data)
-
-    end
-
-
+struct PatternV <: AbstractPattern
+    xx
+    xy 
+    yx 
+    yy 
 end
+
+ struct Pattern{T1,T2,T3,T4}
+    xx::T1
+    xy::T2
+    yx::T3
+    yy::T4
+end
+
+function Base.getindex(x::Pattern, i::Int64, j::Int64)
+    @assert 0 < i < 3 
+    @assert 0 < j < 3 
+    isone(i) && isone(j) && return x.xx
+    isone(i) && j === 2  && return x.xy
+    i === 2  && isone(j) && return x.xy
+    return x.yy
+end
+
+Base.@kwdef mutable struct V_pattern
+    pattern_xx ::Union{SMatrix,  Missing} = missing  # these could be contained in same object - but they have different sizes
+    pattern_xy ::Union{SMatrix,  Missing} = missing 
+    pattern_yx ::Union{SMatrix,  Missing} = missing  
+    pattern_yy ::Union{SMatrix,  Missing} = missing # these could be contained in same object - but they have different sizes
+    # ideally we would like other fields also part of it (fluid pressure, microrotation)
+end
+
+Base.@kwdef mutable struct VP_pattern
+    pattern ::Union{SMatrix,  Missing} = missing  # these could be contained in same object - but they have different sizes
+    # ideally we would like other fields also part of it (fluid pressure, microrotation)
+end
+
+Base.@kwdef mutable struct PV_pattern
+    pattern ::Union{SMatrix,  Missing} = missing  # these could be contained in same object - but they have different sizes
+    # ideally we would like other fields also part of it (fluid pressure, microrotation)
+end
+
+Base.@kwdef mutable struct P_pattern
+    pattern ::Union{SMatrix,  Missing} = missing  # ideally we would like other fields also part of it (fluid pressure, microrotation)
+end
+
+Base.@kwdef mutable struct V_numbering
+    num_x       ::Union{Matrix{Int64},   Missing} = missing
+    num_y       ::Union{Matrix{Int64},   Missing} = missing
+    typ_x      ::Union{Matrix{Symbol},  Missing} = missing
+    typ_y      ::Union{Matrix{Symbol},  Missing} = missing
+end
+
+Base.@kwdef mutable struct P_numbering
+    numPt       ::Union{Matrix{Int64}, Missing} = missing
+    typePt      ::Union{Matrix{Int64}, Missing} = missing
+end
+
+# function  NumberingMultifield(Fields, nc)
+
+#     # Numbering = (;)
+
+#     # if any(x->x==:V, Fields)
+#     #     data = ( 
+#     #         Vx= (num=),
+        
+#     #     )
+#     #     @show merge(Numbering, data)
+
+#     # end
+
+
+# end
 
 function NumberingStokes!(N, nc)
     
@@ -69,7 +111,7 @@ function NumberingStokes!(N, nc)
         N.Vx.num[:,end]   .= N.Vx.num[:,4]
         N.Vx.num[:,end-1] .= N.Vx.num[:,3]
     end
-    noisy ? Print_xy(N.Vx.num) : nothing
+    noisy ? printxy(N.Vx.num) : nothing
 
     neq = maximum(N.Vx.num)
 
@@ -102,7 +144,7 @@ function NumberingStokes!(N, nc)
         N.Vy.num[end,:]   .= N.Vy.num[4,:]
         N.Vy.num[end-1,:] .= N.Vy.num[3,:]
     end
-    noisy ? Print_xy(N.Vy.num) : nothing
+    noisy ? printxy(N.Vy.num) : nothing
 
     neq = maximum(N.Vy.num)
 
@@ -120,7 +162,7 @@ function NumberingStokes!(N, nc)
         N.Pt.num[:,1]   .= N.Pt.num[:,end-1]
         N.Pt.num[:,end] .= N.Pt.num[:,2]
     end
-    noisy ? Print_xy(N.Pt.num) : nothing
+    noisy ? printxy(N.Pt.num) : nothing
 
     neq = maximum(N.Pt.num)
 
@@ -186,8 +228,8 @@ end
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
         # if j==3 && i==3 # debug for ncx = 4 and ncy = 3
         #     display(num.Pt.num[i,j])
-        #     Print_xy(num.Vx.num[i:i+1,j:j+2])
-        #     Print_xy(num.Pt.patternVx)
+        #     printxy(num.Vx.num[i:i+1,j:j+2])
+        #     printxy(num.Pt.patternVx)
         # end
         # Pt --- Vx
         Local = num.Vx.num[i:i+1,j:j+2] .* num.Pt.patternVx
@@ -218,16 +260,39 @@ end
 
 let
 
-
-    Fields = [:V, :P]
-    
     # Resolution
     nc = (x = 4, y = 3)
 
-    numbering = NumberingMultifield(Fields, nc)
+    fields = [:V,]
+
+    n_fields = length(fields)
+
+    blocks = fill(:O, n_fields, n_fields)
+
+    for j in axes(blocks,1), i in axes(blocks,2)
+        blocks[j,i] = Symbol(string(fields[j],fields[i]))
+    end
+    
+    @show blocks
+
+    # Resolution
+    nc = (x = 4, y = 3)
+
+    p = @SMatrix([0 1 0; 1 1 1; 0 1 0])
+    patternV = Pattern(
+        @SMatrix([0 1 0; 1 1 1; 0 1 0]),
+        @SMatrix([0 1 1 0; 0 1 1 0]),   
+        @SMatrix([0 1 0; 1 1 1; 0 1 0]), 
+        @SMatrix([0 1 0; 1 1 1; 0 1 0]),
+    )
+
+    @show patternV[1,1]
+    @show patternV[1,2]
+
+    # V_num = V_numbering()
     
     # # Define node types and set BC flags
-    # numbering.Vx      = StokesPattern()
+    # # numbering.Vx      = V_pattern()
     # numbering.Vx.type = fill(:out, (nc.x+3, nc.y+4))
     # numbering.Vx.type[2:end-1,3:end-2] .= :in
     # numbering.Vx.type[2,2:end-1]       .= :constant # make periodic
@@ -235,7 +300,7 @@ let
     # numbering.Vx.type[2:end-1,2]       .= :Dirichlet
     # numbering.Vx.type[2:end-1,end-1]   .= :Dirichlet
     # @info "Vx Node types"
-    # Print_xy(numbering.Vx.type) 
+    # printxy(numbering.Vx.type) 
 
     # numbering.Vy      = StokesPattern()
     # numbering.Vy.type = fill(:out, (nc.x+4, nc.y+3))
@@ -245,16 +310,27 @@ let
     # numbering.Vy.type[2:end-1,2]       .= :constant
     # numbering.Vy.type[2:end-1,end-1]   .= :constant
     # @info "Vy Node types"
-    # Print_xy(numbering.Vy.type) 
+    # printxy(numbering.Vy.type) 
+
+
+
+
+
+
+
+
+
+
+
 
     # numbering.Pt      = StokesPattern()#NumberingPoisson{3}()
     # numbering.Pt.type = fill(:out, (nc.x+2, nc.y+2))
     # numbering.Pt.type[2:end-1,2:end-1] .= :in
     # @info "Pt Node types"
-    # Print_xy(numbering.Pt.type) 
+    # printxy(numbering.Pt.type) 
 
     # # For Stokes matrices have different sizes
-    # # ... if we want more coupling (T-H-Coserat) more fields could be dynamically added.
+    # # ... if we want more coupling (T-H-Cosserat) more fields could be dynamically added.
     # numbering.Vx.patternVx = @SMatrix([0 1 0; 1 1 1; 0 1 0]) 
     # numbering.Vx.patternVy = @SMatrix([0 1 1 0; 0 1 1 0]) 
     # numbering.Vx.patternPt = @SMatrix([0 1 0; 0 1 0])

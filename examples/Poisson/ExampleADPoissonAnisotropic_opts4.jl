@@ -84,7 +84,7 @@ function Poisson2D(u_loc, k, s, type_loc, bcv_loc, Δ)
     qyS = -1/2*( k.xy[1,1]*ĒxSW + k.xy[2,1]*ĒxSE + k.yy[1,1]*ĒySW + k.yy[2,1]*ĒySE )
     qyN = -1/2*( k.xy[1,2]*ĒxNW + k.xy[2,2]*ĒxNE + k.yy[1,2]*ĒyNW + k.yy[2,2]*ĒyNE )
 
-    return -(-(qxE - qxW) * invΔx - (qyN - qyS) * invΔy + s)
+    return -(-(qxE - qxW) * invΔx - (qyN - qyS) * invΔy + s)*(Δ.x*Δ.y)
 end
 
 function ResidualPoisson2D_2!(R, u, k, s, numbering, nc, Δ) 
@@ -270,7 +270,7 @@ end
 let
     to = TimerOutput()
     # Resolution in FD cells
-    nc = (x = 1000, y = 1000)
+    nc = (x = 30, y = 40)
 
     # Generates an empty numbering structure
     numbering = NumberingPoisson2{3}(values(nc))
@@ -291,7 +291,7 @@ let
     numbering.bc_val[:,end] .= 1.0
     
     @info "Node types"
-    Print_xy(numbering.type) 
+    printxy(numbering.type) 
 
     # 5-point stencil
     numbering.pattern .= @SMatrix([1 1 1; 1 1 1; 1 1 1]) 

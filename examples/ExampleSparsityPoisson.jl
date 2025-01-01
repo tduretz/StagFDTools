@@ -16,7 +16,7 @@ let
     numbering.type[:,end]           .= :Neumannn
     
     @info "Node types"
-    Print_xy(numbering.type) 
+    printxy(numbering.type) 
 
     # 5-point stencil
     numbering.pattern = @SMatrix([0 1 0; 1 1 1; 0 1 0]) 

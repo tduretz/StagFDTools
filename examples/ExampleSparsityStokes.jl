@@ -75,7 +75,7 @@ function NumberingStokes!(N, nc)
         N.Vx.num[:,end]   .= N.Vx.num[:,4]
         N.Vx.num[:,end-1] .= N.Vx.num[:,3]
     end
-    noisy ? Print_xy(N.Vx.num) : nothing
+    noisy ? printxy(N.Vx.num) : nothing
 
     neq = maximum(N.Vx.num)
 
@@ -108,7 +108,7 @@ function NumberingStokes!(N, nc)
         N.Vy.num[end,:]   .= N.Vy.num[4,:]
         N.Vy.num[end-1,:] .= N.Vy.num[3,:]
     end
-    noisy ? Print_xy(N.Vy.num) : nothing
+    noisy ? printxy(N.Vy.num) : nothing
 
     neq = maximum(N.Vy.num)
 
@@ -126,7 +126,7 @@ function NumberingStokes!(N, nc)
         N.Pt.num[:,1]   .= N.Pt.num[:,end-1]
         N.Pt.num[:,end] .= N.Pt.num[:,2]
     end
-    noisy ? Print_xy(N.Pt.num) : nothing
+    noisy ? printxy(N.Pt.num) : nothing
 
     neq = maximum(N.Pt.num)
 
@@ -236,7 +236,7 @@ let
     numbering.Vx.type[2:end-1,2]       .= :Dirichlet
     numbering.Vx.type[2:end-1,end-1]   .= :Dirichlet
     @info "Vx Node types"
-    Print_xy(numbering.Vx.type) 
+    printxy(numbering.Vx.type) 
 
     numbering.Vy      = StokesPattern()
     numbering.Vy.type = fill(:out, (nc.x+4, nc.y+3))
@@ -246,13 +246,13 @@ let
     numbering.Vy.type[2:end-1,2]       .= :constant
     numbering.Vy.type[2:end-1,end-1]   .= :constant
     @info "Vy Node types"
-    Print_xy(numbering.Vy.type) 
+    printxy(numbering.Vy.type) 
 
     numbering.Pt      = StokesPattern()
     numbering.Pt.type = fill(:out, (nc.x+2, nc.y+2))
     numbering.Pt.type[2:end-1,2:end-1] .= :in
     @info "Pt Node types"
-    Print_xy(numbering.Pt.type) 
+    printxy(numbering.Pt.type) 
 
     # For Stokes matrices have different sizes
     # ... if we want more coupling (T-H-Cosserat) more fields could be dynamically added.

@@ -9,6 +9,6 @@ include("Poisson.jl")
 export RangesPoisson, NumberingPoisson!, SparsityPatternPoisson, SparsityPatternPoisson_SA
 
 include("Utils.jl")
-export Print_xy
+export printxy
 
 end # module StagFDTools
