@@ -4,6 +4,8 @@ using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 import GLMakie
 
+include("BasicIterativeSolvers.jl")
+
 function UpdateStokeSolution!(V, Pt, dx, number, type, nc)
 
     nVx, nVy   = maximum(number.Vx), maximum(number.Vy)
@@ -26,74 +28,6 @@ function UpdateStokeSolution!(V, Pt, dx, number, type, nc)
             Pt[i,j] += dx[ind]
         end
     end
-end
-
-function preconditioned_minres(A, b, ApplyPC, Dinv, tol=1e-8, max_iter=nothing)
-    # A: Symmetric matrix
-    # b: Right-hand side vector
-    # ApplyPC: Function to apply preconditioner (inverse of M)
-    # tol: Convergence tolerance
-    # max_iter: Maximum number of iterations (default to n if not specified)
-    
-    n = length(b)
-    
-    # Initial guess (zero vector)
-    x = zeros(n)
-    
-    # Initial residual and preconditioned residual
-    r0 = b - A * x
-    z0 = ApplyPC(Dinv, r0)
-    p = z0
-    
-    # Initialize residual and preconditioned residual
-    r = r0
-    z = z0
-    norm_r0 = norm(r)
-    
-    if isnothing(max_iter)
-        max_iter = n  # Default to the size of the matrix
-    end
-    
-    # Iteration loop
-    for k in 1:max_iter
-        # Compute A * p
-        Ap = A * p
-        
-        # Compute step size alpha
-        alpha = dot(r, z) / dot(p, Ap)
-        
-        # Update the solution vector x
-        x += alpha * p
-        
-        # Compute new residual
-        r_new = r - alpha * Ap
-        norm_r_new = norm(r_new)
-        
-        # Check for convergence
-        if norm_r_new / norm_r0 < tol
-            println("Converged in $k iterations.")
-            return x
-        end
-        
-        # Apply preconditioner to the new residual
-        z_new = ApplyPC(Dinv, r_new)
-        
-        # Compute the beta value for the direction update
-        beta = dot(r_new, z_new) / dot(r, z)
-        
-        # Update the direction p and residual r
-        p = z_new + beta * p
-        r = r_new
-        z = z_new
-    end
-    
-    println("Maximum iterations reached ($max_iter).")
-    return x
-end
-
-# Preconditioner is the identity matrix (no preconditioning)
-function ApplyPC(Dinv, x)
-    return Dinv*x  # Identity preconditioner (no change)
 end
 
 function RangesStokes(nc)
@@ -794,6 +728,7 @@ let
 
     b  = -copy(r)
     dx = preconditioned_minres(𝑀, b, ApplyPC, D_PC_inv)
+    # dx = preconditioned_bicgstab(𝑀, b, ApplyPC, D_PC_inv)
     UpdateStokeSolution!(V, Pt, dx, number, type, nc)
 
     p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc))

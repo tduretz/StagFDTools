@@ -4,6 +4,8 @@ using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 import GLMakie
 
+include("BasicIterativeSolvers.jl")
+
 function RangesStokes(nc)
     return (inx_Vx = 2:nc.x+2, iny_Vx = 3:nc.y+2, inx_Vy = 3:nc.x+2, iny_Vy = 2:nc.y+2, inx_Pt = 2:nc.x+1, iny_Pt = 2:nc.y+1)
 end
@@ -89,19 +91,9 @@ function Momentum_x(Vx, Vy, Pt, η, type, bcv, Δ)
     Dxy = (Vx[:,2:end] - Vx[:,1:end-1]) * invΔy 
     Dyx = (Vy[2:end,2:end-1] - Vy[1:end-1,2:end-1]) * invΔx 
 
-    ε̇xx = Dxx - 1/3*Dkk
-    ε̇yy = Dyy - 1/3*Dkk
+    ε̇xx = Dxx - 1/2*Dkk
+    ε̇yy = Dyy - 1/2*Dkk
     ε̇xy = 1/2 * ( Dxy + Dyx ) 
-
-    # ηc = 0.25*(η.x[1:end-1,:] .+ η.x[2:end,:] .+ η.y[2:end-1,1:end-1] .+ η.y[2:end-1,2:end])
-    # ηv = 0.25*(η.x[:,1:end-1] .+ η.x[:,2:end] .+ η.y[1:end-1,2:end-1] .+ η.y[2:end,2:end-1])
-
-    # τxx = 2 * ηc .* ε̇xx
-    # τxy = 2 * ηv .* ε̇xy
-
-    # fx  = (τxx[2,2] - τxx[1,2]) * invΔx 
-    # fx += (τxy[2,2] - τxy[2,1]) * invΔy 
-    # fx -= ( Pt[2,2] -  Pt[1,2]) * invΔx
 
     τxx = 2 * 1/2 * ( ε̇xx[:,1:end-1] +  ε̇xx[:,2:end] ) .* η.y[2:end-1,2:end-1]
     τyy = 2 * 1/2 * ( ε̇yy[:,1:end-1] +  ε̇yy[:,2:end] ) .* η.y[2:end-1,2:end-1]
@@ -109,7 +101,6 @@ function Momentum_x(Vx, Vy, Pt, η, type, bcv, Δ)
     
     fx  = 1/2*(τxx[2,1] + τxx[2,2] - τxx[1,1] - τxx[1,2]) * invΔx 
     fx += ( (τxy[1,2] + τxy[2,2])/2 - (τxy[1,1] + τxy[2,1])/2) * invΔy
-    # fx += (τxy[2,2] - τxy[2,1]) * invΔy
     fx -= (Pt[2,2] - Pt[1,2]) * invΔx
 
     return fx
@@ -195,27 +186,15 @@ function Momentum_y(Vx, Vy, Pt, η, type, bcv, Δ)
     Dxy = (Vx[2:end-1,2:end] - Vx[2:end-1,1:end-1]) * invΔy 
     Dyx = (Vy[2:end,:] - Vy[1:end-1,:]) * invΔx 
 
-    ε̇xx = Dxx - 1/3*Dkk
-    ε̇yy = Dyy - 1/3*Dkk
+    ε̇xx = Dxx - 1/2*Dkk
+    ε̇yy = Dyy - 1/2*Dkk
     ε̇xy = 1/2 * ( Dxy + Dyx ) 
-
-    ηc = 0.25*(η.x[1:end-1,2:end-1] .+ η.x[2:end,2:end-1] .+ η.y[:,1:end-1] .+ η.y[:,2:end])
-    ηv = 0.25*(η.x[2:end-1,1:end-1] .+ η.x[2:end-1,2:end] .+ η.y[1:end-1,:] .+ η.y[2:end,:])
-
-    # τyy = 2 * ηc .* ε̇yy
-    # τxy = 2 * ηv .* ε̇xy
-
-    # fy  = (τyy[2,2] - τyy[2,1]) * invΔy 
-    # fy += (τxy[2,2] - τxy[1,2]) * invΔx 
-    # fy -= (Pt[2,2] - Pt[2,1]) * invΔy
-
 
     τxx = 2 * 1/2 * ( ε̇xx[1:end-1,:] +  ε̇xx[2:end,:] ) .* η.x[2:end-1,2:end-1]
     τyy = 2 * 1/2 * ( ε̇yy[1:end-1,:] +  ε̇yy[2:end,:] ) .* η.x[2:end-1,2:end-1]
     τxy = 2 * 1/2 * ( ε̇xy[:,1:end-1] +  ε̇xy[:,2:end] ) .* η.x[2:end-1,2:end-1]
     
     fy  = 1/2*(τyy[1,2] + τyy[2,2] - τyy[1,1] - τyy[2,1]) * invΔy
-    # fy += (τxy[2,2] - τxy[1,2]) * invΔx 
     fy += ((τxy[2,1] + τxy[2,2])/2 - (τxy[1,1] + τxy[1,2])/2) * invΔx
     fy -= (Pt[2,2] - Pt[2,1]) * invΔy
 
@@ -263,19 +242,24 @@ function AssembleMomentum2D_x!(K, V, P, η, num, pattern, type, BC, nc, Δ)
                 
     shift    = (x=1, y=2)
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x+1
-        Vx_loc     = MMatrix{3,3}(      V.x[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        Vy_loc     = MMatrix{4,4}(      V.y[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
-        bcx_loc    = SMatrix{3,3}(    BC.Vx[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        bcy_loc    = SMatrix{4,4}(    BC.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
-        typex_loc  = SMatrix{3,3}(  type.Vx[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        typey_loc  = SMatrix{4,4}(  type.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
-        ηx_loc     = SMatrix{3,3}(      η.x[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        ηy_loc     = SMatrix{4,4}(      η.y[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
-        P_loc      = MMatrix{2,3}(        P[ii,jj] for ii in i-1:i,   jj in j-2:j  )
-        η_loc      = (x=ηx_loc, y=ηy_loc)
-        bcv_loc    = (x=bcx_loc, y=bcy_loc)
-        type_loc   = (x=typex_loc, y=typey_loc)
+        
         if type.Vx[i,j] == :in
+
+
+            bcx_loc    = SMatrix{3,3}(    BC.Vx[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            bcy_loc    = SMatrix{4,4}(    BC.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
+            typex_loc  = SMatrix{3,3}(  type.Vx[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            typey_loc  = SMatrix{4,4}(  type.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
+            ηx_loc     = SMatrix{3,3}(      η.x[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            ηy_loc     = SMatrix{4,4}(      η.y[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
+            η_loc      = (x=ηx_loc, y=ηy_loc)
+            bcv_loc    = (x=bcx_loc, y=bcy_loc)
+            type_loc   = (x=typex_loc, y=typey_loc)
+            
+            Vx_loc     = MMatrix{3,3}(      V.x[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            Vy_loc     = MMatrix{4,4}(      V.y[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
+            P_loc      = MMatrix{2,3}(        P[ii,jj] for ii in i-1:i,   jj in j-2:j  )
+
             ∂R∂Vx .= 0.
             ∂R∂Vy .= 0.
             ∂R∂Pt .= 0.
@@ -474,7 +458,7 @@ function NumberingStokes2!(N, type, nc)
 
     shift  = (periodic_west) ? 1 : 0 
     # Loop through inner nodes of the mesh
-    for j=3:nc.y+4-2, i=2:nc.x+3-1
+    for i=2:nc.x+3-1, j=3:nc.y+4-2
         if type.Vx[i,j] == :constant || (type.Vx[i,j] != :periodic && i==nc.x+3-1)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
@@ -555,7 +539,7 @@ end
 
 let    
     # Resolution
-    nc = (x = 4, y = 4)
+    nc = (x = 7, y = 7)
     # nc = (x = 3, y = 3)
 
     size_x = (nc.x+3, nc.y+4)
@@ -650,8 +634,8 @@ let
     # BC.Vx[inx_Vx,2]         .= ε̇.*-L.y/2
     # BC.Vx[inx_Vx,end-1]     .= ε̇.* L.y/2
 
-    η.x[(xvx.^2 .+ (yvx').^2) .<= 0.1^2] .= .1 
-    η.y[(xvy.^2 .+ (yvy').^2) .<= 0.1^2] .= .1
+    # η.x[(xvx.^2 .+ (yvx').^2) .<= 0.1^2] .= .1 
+    # η.y[(xvy.^2 .+ (yvy').^2) .<= 0.1^2] .= .1
     η.p .= 0.25.*(η.x[1:end-1,2:end-1].+η.x[2:end-0,2:end-1].+η.y[2:end-1,1:end-1].+η.y[2:end-1,2:end-0])
 
     ResidualContinuity2D!(Rp, V, Pt, η, number, type, BC, nc, Δ) 
@@ -694,6 +678,9 @@ let
         end
     end
 
+    @show 1/6/Δ.x/Δ.y
+    @show 1/4/Δ.x/Δ.y
+
     # dx = - 𝑀 \ r
 
     # D_PC    = I(size(𝑀,1))
@@ -719,8 +706,7 @@ let
 
     Kdiff = K - K'
     dropzeros!(Kdiff)
-    # f = GLMakie.spy(reverse(Kdiff, dims=1))
-    f = GLMakie.spy(reverse(K, dims=2))
+    f = GLMakie.spy(rotr90(Kdiff))
     GLMakie.DataInspector(f)
     display(f)
 end
