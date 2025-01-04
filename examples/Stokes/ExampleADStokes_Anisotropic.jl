@@ -6,69 +6,41 @@ import GLMakie
 
 include("BasicIterativeSolvers.jl")
 
-function RangesStokes(nc)
-    return (inx_Vx = 2:nc.x+2, iny_Vx = 3:nc.y+2, inx_Vy = 3:nc.x+2, iny_Vy = 2:nc.y+2, inx_Pt = 2:nc.x+1, iny_Pt = 2:nc.y+1)
+struct NumberingV <: AbstractPattern # ??? where is AbstractPattern defined 
+    Vx
+    Vy
+    Pt
+end
+
+struct Numbering{Tx,Ty,Tp}
+    Vx::Tx
+    Vy::Ty
+    Pt::Tp
+end
+
+function Base.getindex(x::Numbering, i::Int64)
+    @assert 0 < i < 4 
+    i == 1 && return x.Vx
+    i == 2 && return x.Vy
+    i == 3 && return x.Pt
 end
 
 function Momentum_x(Vx, Vy, Pt, η, type, bcv, Δ)
     
     invΔx    = 1 / Δ.x
     invΔy    = 1 / Δ.y
-
-    # # Necessary for 5-point stencil
-    # VxW[2,2] = type.y[2,2] == :periodic || type_loc.x[2,2] == :in || type.x[2,2] == :constant ? u_loc[1,2] :
-    # type.y[2,2] == :Dirichlet ? fma(2, bcv.y[2,2], -u_loc[3,2]) :
-    # fma(Δ.x, bcv_loc[1,2], u_loc[2,2])
     
     for j=1:4
-
-        if type.y[1,j] == :Neumann
-            Vy[1,j] =  Vy[2,j]
+        if type.y[1,j] == :Dirichlet 
+            Vy[1,j] = fma(2, bcv.y[1,j], -Vy[2,j])
+        elseif type.y[1,j] == :Neumann
+            Vy[1,j] = fma(Δ.x, bcv.y[1,j], Vy[2,j])
         end
-        if type.y[4,j] == :Neumann
-            Vy[4,j] =  Vy[3,j]
+        if type.y[4,j] == :Dirichlet 
+            Vy[4,j] = fma(2, bcv.y[4,j], -Vy[3,j])
+        elseif type.y[4,j] == :Neumann
+            Vy[4,j] = fma(Δ.x, bcv.y[4,j], Vy[3,j])
         end
-
-
-        # if type.y[1,j] == :Dirichlet 
-        #     Vy[1,j] = fma(2, bcv.y[1,j], -Vy[2,j])
-        # elseif type.y[1,j] == :Neumann
-        #     Vy[1,j] = fma(Δ.x, bcv.y[1,j], Vy[2,j])
-        # end
-
-        # if type.y[2,j] == :Dirichlet 
-        #     Vy[2,j] = fma(2, bcv.y[2,j], -Vy[3,j])
-        # elseif type.y[2,j] == :Neumann
-        #     Vy[2,j] = fma(Δ.x, bcv.y[2,j], Vy[3,j])
-        # end
-
-        # if type.y[3,j] == :Dirichlet 
-        #     Vy[3,j] = fma(2, bcv.y[3,j], -Vy[2,j])
-        # elseif type.y[3,j] == :Neumann
-        #     Vy[3,j] = fma(Δ.x, bcv.y[3,j], Vy[2,j])
-        # end
-
-      
-        # if type.y[4,j] == :Dirichlet 
-        #     Vy[4,j] = fma(2, bcv.y[4,j], -Vy[3,j])
-        # elseif type.y[4,j] == :Neumann
-        #     Vy[4,j] = fma(Δ.x, bcv.y[4,j], Vy[3,j])
-        # end
-
-        # for i=1:2
-        #     if type.y[i,j] == :Dirichlet 
-        #         Vy[i,j] = fma(2, bcv.y[i,j], -Vy[i+1,j])
-        #     elseif type.y[i,j] == :Neumann
-        #         Vy[i,j] = fma(Δ.x, bcv.y[i,j], Vy[i+1,j])
-        #     end
-        # end
-        # for i=3:4
-        #     if type.y[i,j] == :Dirichlet 
-        #         Vy[i,j] = fma(2, bcv.y[i,j], -Vy[i-1,j])
-        #     elseif type.y[i,j] == :Neumann
-        #         Vy[i,j] = fma(Δ.x, bcv.y[i,j], Vy[i-1,j])
-        #     end
-        # end
     end
 
     for i=1:3
@@ -98,7 +70,8 @@ function Momentum_x(Vx, Vy, Pt, η, type, bcv, Δ)
     τxx = 2 * 1/2 * ( ε̇xx[:,1:end-1] +  ε̇xx[:,2:end] ) .* η.y[2:end-1,2:end-1]
     τyy = 2 * 1/2 * ( ε̇yy[:,1:end-1] +  ε̇yy[:,2:end] ) .* η.y[2:end-1,2:end-1]
     τxy = 2 * 1/2 * ( ε̇xy[1:end-1,:] +  ε̇xy[2:end,:] ) .* η.y[2:end-1,2:end-1]
-    
+    # τxy = 2 * 1/2 * ( 1/2 * (Dxy[1:end-1,:] + Dxy[2:end,:]) .* η.y[2:end-1,2:end-1]  + 1/2*(Dyx[1:end-1,:] +  Dyx[2:end,:]) .* η.y[2:end-1,2:end-1]' )
+
     fx  = 1/2*(τxx[2,1] + τxx[2,2] - τxx[1,1] - τxx[1,2]) * invΔx 
     fx += ( (τxy[1,2] + τxy[2,2])/2 - (τxy[1,1] + τxy[2,1])/2) * invΔy
     fx -= (Pt[2,2] - Pt[1,2]) * invΔx
@@ -111,57 +84,17 @@ function Momentum_y(Vx, Vy, Pt, η, type, bcv, Δ)
     invΔx    = 1 / Δ.x
     invΔy    = 1 / Δ.y
 
-    # printxy(Vx)
-    # printxy(type.x)
-    
     for i=1:4
-
-        
-        if type.x[i,1] == :Neumann
-            Vx[i,1] = Vx[i,2]
+        if type.x[i,1] == :Dirichlet 
+            Vx[i,1] = fma(2, bcv.x[i,1], -Vx[i,2])
+        elseif type.x[i,1] == :Neumann
+            Vx[i,1] = fma(Δ.y, bcv.x[i,1], Vx[i,2])
         end
-        if type.x[i,4] == :Neumann
-            Vx[i,4] = Vx[i,3]
+        if type.x[i,4] == :Dirichlet 
+            Vx[i,4] = fma(2, bcv.x[i,4], -Vx[i,3])
+        elseif type.x[i,4] == :Neumann
+            Vx[i,4] = fma(Δ.y, bcv.x[i,4], Vx[i,3])
         end
-        # if type.x[i,1] == :Dirichlet 
-        #     Vx[i,1] = fma(2, bcv.x[i,1], -Vx[i,2])
-        # elseif type.x[i,1] == :Neumann
-        #     Vx[i,1] = fma(Δ.y, bcv.x[i,1], Vx[i,2])
-        # end
-
-        # if type.x[i,2] == :Dirichlet 
-        #     Vx[i,2] = fma(2, bcv.x[i,2], -Vx[i,3])
-        # elseif type.x[i,2] == :Neumann
-        #     Vx[i,2] = fma(Δ.y, bcv.x[i,2], Vx[i,3])
-        # end
-
-        # if type.x[i,3] == :Dirichlet 
-        #     Vx[i,3] = fma(2, bcv.x[i,3], -Vx[i,2])
-        # elseif type.x[i,3] == :Neumann
-        #     Vx[i,3] = fma(Δ.y, bcv.x[i,3], Vx[i,2])
-        # end
-
-
-        # if type.x[i,4] == :Dirichlet 
-        #     Vx[i,4] = fma(2, bcv.x[i,4], -Vx[i,3])
-        # elseif type.x[i,4] == :Neumann
-        #     Vx[i,4] = fma(Δ.y, bcv.x[i,4], Vx[i,3])
-        # end
-
-        # for j=1:2
-        #     if type.x[i,j] == :Dirichlet 
-        #         Vx[i,j] = fma(2, bcv.x[i,j], -Vx[i,j+1])
-        #     elseif type.x[i,j] == :Neumann
-        #         Vx[i,j] = fma(Δ.y, bcv.x[i,j], Vx[i,j+1])
-        #     end
-        # end
-        # for j=3:4
-        #     if type.x[i,j] == :Dirichlet 
-        #         Vx[i,j] = fma(2, bcv.x[i,j], -Vx[i,j-1])
-        #     elseif type.x[i,j] == :Neumann
-        #         Vx[i,j] = fma(Δ.y, bcv.x[i,j], Vx[i,j-1])
-        #     end
-        # end
     end
 
     for j=1:3
@@ -176,8 +109,6 @@ function Momentum_y(Vx, Vy, Pt, η, type, bcv, Δ)
             Vy[end,j] = fma(Δ.x, bcv.y[end,j], Vy[end-1,j])
         end
     end
-
-    # printxy(Vx)
      
     Dxx = (Vx[2:end,2:end-1] - Vx[1:end-1,2:end-1]) * invΔx             # Static Arrays ???
     Dyy = (Vy[:,2:end] - Vy[:,1:end-1]) * invΔy             
@@ -197,10 +128,6 @@ function Momentum_y(Vx, Vy, Pt, η, type, bcv, Δ)
     fy  = 1/2*(τyy[1,2] + τyy[2,2] - τyy[1,1] - τyy[2,1]) * invΔy
     fy += ((τxy[2,1] + τxy[2,2])/2 - (τxy[1,1] + τxy[1,2])/2) * invΔx
     fy -= (Pt[2,2] - Pt[2,1]) * invΔy
-
-    # printxy(τxy)
-
-    # @show invΔy*invΔx*1/2*1/2
     
     return fy
 end
@@ -245,21 +172,21 @@ function AssembleMomentum2D_x!(K, V, P, η, num, pattern, type, BC, nc, Δ)
         
         if type.Vx[i,j] == :in
 
-
             bcx_loc    = SMatrix{3,3}(    BC.Vx[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             bcy_loc    = SMatrix{4,4}(    BC.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
             typex_loc  = SMatrix{3,3}(  type.Vx[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             typey_loc  = SMatrix{4,4}(  type.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
             ηx_loc     = SMatrix{3,3}(      η.x[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             ηy_loc     = SMatrix{4,4}(      η.y[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
-            η_loc      = (x=ηx_loc, y=ηy_loc)
-            bcv_loc    = (x=bcx_loc, y=bcy_loc)
-            type_loc   = (x=typex_loc, y=typey_loc)
-            
+ 
             Vx_loc     = MMatrix{3,3}(      V.x[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             Vy_loc     = MMatrix{4,4}(      V.y[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
             P_loc      = MMatrix{2,3}(        P[ii,jj] for ii in i-1:i,   jj in j-2:j  )
 
+            η_loc      = (x=ηx_loc, y=ηy_loc)
+            bcv_loc    = (x=bcx_loc, y=bcy_loc)
+            type_loc   = (x=typex_loc, y=typey_loc)
+            
             ∂R∂Vx .= 0.
             ∂R∂Vy .= 0.
             ∂R∂Pt .= 0.
@@ -272,6 +199,8 @@ function AssembleMomentum2D_x!(K, V, P, η, num, pattern, type, BC, nc, Δ)
                 end
             end
             # Vx --- Vy
+            # Attempt to make it symmetric
+            # Local = num.Vy[i-1:i+2,j-2:j+1]' .* pattern[1][2]
             Local = num.Vy[i-1:i+2,j-2:j+1] .* pattern[1][2]
             for jj in axes(Local,2), ii in axes(Local,1)
                 if (Local[ii,jj]>0) && num.Vx[i,j]>0
@@ -427,125 +356,17 @@ function AssembleContinuity2D!(K, V, P, η, num, pattern, type, BC, nc, Δ)
     return nothing
 end
 
-struct NumberingV <: AbstractPattern # ??? where is AbstractPattern defined 
-    Vx
-    Vy
-    Pt
-end
-
-struct Numbering{Tx,Ty,Tp}
-    Vx::Tx
-    Vy::Ty
-    Pt::Tp
-end
-
-function Base.getindex(x::Numbering, i::Int64)
-    @assert 0 < i < 4 
-    i == 1 && return x.Vx
-    i == 2 && return x.Vy
-    i == 3 && return x.Pt
-end
-
-function NumberingStokes2!(N, type, nc)
-    
-    ndof  = 0
-    neq   = 0
-    noisy = false
-
-    ############ Numbering Vx ############
-    periodic_west  = sum(any(i->i==:periodic, type.Vx[2,:], dims=2)) > 0
-    periodic_south = sum(any(i->i==:periodic, type.Vx[:,2], dims=1)) > 0
-
-    shift  = (periodic_west) ? 1 : 0 
-    # Loop through inner nodes of the mesh
-    for i=2:nc.x+3-1, j=3:nc.y+4-2
-        if type.Vx[i,j] == :constant || (type.Vx[i,j] != :periodic && i==nc.x+3-1)
-            # Avoid nodes with constant velocity or redundant periodic nodes
-        else
-            ndof+=1
-            N.Vx[i,j] = ndof  
-        end
-    end
-
-    # Copy equation indices for periodic cases
-    if periodic_west
-        N.Vx[1,:] .= N.Vx[end-2,:]
-    end
-
-    # Copy equation indices for periodic cases
-    if periodic_south
-        # South
-        N.Vx[:,1] .= N.Vx[:,end-3]
-        N.Vx[:,2] .= N.Vx[:,end-2]
-        # North
-        N.Vx[:,end]   .= N.Vx[:,4]
-        N.Vx[:,end-1] .= N.Vx[:,3]
-    end
-    noisy ? printxy(N.Vx) : nothing
-
-    neq = maximum(N.Vx)
-
-    ############ Numbering Vy ############
-    ndof  = 0
-    periodic_west  = sum(any(i->i==:periodic, type.Vy[2,:], dims=2)) > 0
-    periodic_south = sum(any(i->i==:periodic, type.Vy[:,2], dims=1)) > 0
-    shift = periodic_south ? 1 : 0
-    # Loop through inner nodes of the mesh
-    for j=2:nc.y+3-1, i=3:nc.x+4-2
-        if type.Vy[i,j] == :constant || (type.Vy[i,j] != :periodic && j==nc.y+3-1)
-            # Avoid nodes with constant velocity or redundant periodic nodes
-        else
-            ndof+=1
-            N.Vy[i,j] = ndof  
-        end
-    end
-
-    # Copy equation indices for periodic cases
-    if periodic_south
-        N.Vy[:,1] .= N.Vy[:,end-2]
-    end
-
-    # Copy equation indices for periodic cases
-    if periodic_west
-        # West
-        N.Vy[1,:] .= N.Vy[end-3,:]
-        N.Vy[2,:] .= N.Vy[end-2,:]
-        # East
-        N.Vy[end,:]   .= N.Vy[4,:]
-        N.Vy[end-1,:] .= N.Vy[3,:]
-    end
-    noisy ? printxy(N.Vy) : nothing
-
-    neq = maximum(N.Vy)
-
-    ############ Numbering Pt ############
-    neq_Pt                     = nc.x * nc.y
-    N.Pt[2:end-1,2:end-1] .= reshape((1:neq_Pt) .+ 0*neq, nc.x, nc.y)
-
-    if periodic_west
-        N.Pt[1,:]   .= N.Pt[end-1,:]
-        N.Pt[end,:] .= N.Pt[2,:]
-    end
-
-    if periodic_south
-        N.Pt[:,1]   .= N.Pt[:,end-1]
-        N.Pt[:,end] .= N.Pt[:,2]
-    end
-    noisy ? printxy(N.Pt) : nothing
-
-    neq = maximum(N.Pt)
-
-end
-
-let    
+let  
+    #--------------------------------------------#
     # Resolution
     nc = (x = 7, y = 7)
     # nc = (x = 3, y = 3)
 
-    size_x = (nc.x+3, nc.y+4)
-    size_y = (nc.x+4, nc.y+3)
-    size_p = (nc.x+2, nc.y+2)
-    
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_p = RangesStokes(nc)
+
+    #--------------------------------------------#
+    # Boundary conditions
+
     # Define node types and set BC flags
     type = Numbering(
         fill(:out, (nc.x+3, nc.y+4)),
@@ -557,7 +378,6 @@ let
         fill(0., (nc.x+4, nc.y+3)),
         fill(0., (nc.x+2, nc.y+2)),
     )
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt = RangesStokes(nc)
     # -------- Vx -------- #
     type.Vx[inx_Vx,iny_Vx] .= :in       
     type.Vx[2,iny_Vx]       .= :constant 
@@ -580,21 +400,23 @@ let
     BC.Vy[inx_Vy,end-1]     .= 0.0
     # -------- Pt -------- #
     type.Pt[2:end-1,2:end-1] .= :in
-    
-    # Stencil extent for each block matrix
-    pattern = Numbering(
-        Numbering(@SMatrix([1 1 1; 1 1 1; 1 1 1]),                 @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([0 1 0; 0 1 0])), 
-        Numbering(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]),  @SMatrix([1 1 1; 1 1 1; 1 1 1]),                @SMatrix([0 0; 1 1; 0 0])), 
-        Numbering(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]))
-    )
 
+    #--------------------------------------------#
     # Equation numbering
     number = Numbering(
         fill(0, size_x),
         fill(0, size_y),
         fill(0, size_p),
     )
-    NumberingStokes2!(number, type, nc)
+    NumberingStokes!(number, type, nc)
+
+    #--------------------------------------------#
+    # Stencil extent for each block matrix
+    pattern = Numbering(
+        Numbering(@SMatrix([1 1 1; 1 1 1; 1 1 1]),                 @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([0 1 0; 0 1 0])), 
+        Numbering(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]),  @SMatrix([1 1 1; 1 1 1; 1 1 1]),                @SMatrix([0 0; 1 1; 0 0])), 
+        Numbering(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]))
+    )
 
     # Sparse matrix assembly
     nVx   = maximum(number.Vx)
@@ -606,6 +428,7 @@ let
         Numbering(ExtendableSparseMatrix(nPt, nVx), ExtendableSparseMatrix(nPt, nVy), ExtendableSparseMatrix(nPt, nPt))
     )
 
+    #--------------------------------------------#
     # Intialise field
     L  = (x=1.0, y=1.0)
     Δ  = (x=L.x/nc.x, y=L.y/nc.y)
@@ -623,6 +446,7 @@ let
     yvy = LinRange(-L.y/2-Δ.y, L.y/2+Δ.y, nc.y+3)
     yvx = LinRange(-L.y/2-3Δ.y/2, L.y/2+3Δ.y/2, nc.y+4)
 
+    # Initial configuration
     ε̇  = -1.0
     V.x[inx_Vx,iny_Vx] .=  ε̇*xv .+ 0*yc' 
     V.y[inx_Vy,iny_Vy] .= 0*xc .-  ε̇*yv'
@@ -634,14 +458,22 @@ let
     # BC.Vx[inx_Vx,2]         .= ε̇.*-L.y/2
     # BC.Vx[inx_Vx,end-1]     .= ε̇.* L.y/2
 
-    # η.x[(xvx.^2 .+ (yvx').^2) .<= 0.1^2] .= .1 
-    # η.y[(xvy.^2 .+ (yvy').^2) .<= 0.1^2] .= .1
+    η.x[(xvx.^2 .+ (yvx').^2) .<= 0.1^2] .= .1 
+    η.y[(xvy.^2 .+ (yvy').^2) .<= 0.1^2] .= .1
     η.p .= 0.25.*(η.x[1:end-1,2:end-1].+η.x[2:end-0,2:end-1].+η.y[2:end-1,1:end-1].+η.y[2:end-1,2:end-0])
 
+    #--------------------------------------------#
+    # Residual check
     ResidualContinuity2D!(Rp, V, Pt, η, number, type, BC, nc, Δ) 
     ResidualMomentum2D_x!(R,  V, Pt, η, number, type, BC, nc, Δ)
     ResidualMomentum2D_y!(R,  V, Pt, η, number, type, BC, nc, Δ)
 
+    # Set global residual vector
+    r = zeros(nVx + nVy + nPt)
+    SetRHS!(r, R, number, type, nc)
+
+    #--------------------------------------------#
+    # Assembly
     @info "Assembly, ndof  = $(nVx + nVy + nPt)"
     AssembleContinuity2D!(M, V, Pt, η, number, pattern, type, BC, nc, Δ)
     AssembleMomentum2D_x!(M, V, Pt, η, number, pattern, type, BC, nc, Δ)
@@ -656,34 +488,16 @@ let
     @info "Velocity block symmetry"
     display(K)
     @show norm(K-K')
+    
+    #--------------------------------------------#
+    # Direct solver
 
-    r = zeros(nVx + nVy + nPt)
-    @show nVx + nVy + nPt
-    for j=2:nc.y+3-1, i=3:nc.x+4-2
-        if type.Vx[i,j] == :in
-            ind = number.Vx[i,j]
-            r[ind] = R.x[i,j]
-        end
-    end
-    for j=3:nc.y+4-2, i=2:nc.x+3-1
-        if type.Vy[i,j] == :in
-            ind = number.Vy[i,j] + nVx
-            r[ind] = R.y[i,j]
-        end
-    end
-    for j=2:nc.y+1, i=2:nc.x+1
-        if type.Pt[i,j] == :in
-            ind = number.Pt[i,j] + nVx + nVy
-            r[ind] = R.p[i,j]
-        end
-    end
+    dx = - 𝑀 \ r
 
-    @show 1/6/Δ.x/Δ.y
-    @show 1/4/Δ.x/Δ.y
-
-    # dx = - 𝑀 \ r
-
+    #--------------------------------------------#
+    # # Iterative solver 
     # D_PC    = I(size(𝑀,1))
+
     # D_PC    = spdiagm(diag(𝑀))
     # diag_Pt = max(nc...) ./ η.p[inx_Pt, iny_Pt]
     # D_PC[(nVx+nVy+1):end, (nVx+nVy+1):end] .+= spdiagm(diag_Pt[:])
@@ -691,19 +505,26 @@ let
     # b  = -copy(r)
     # dx = preconditioned_minres(𝑀, b, ApplyPC, D_PC_inv)
     
-    # UpdateStokeSolution!(V, Pt, dx, number, type, nc)
+    UpdateStokeSolution!(V, Pt, dx, number, type, nc)
 
-    # ResidualContinuity2D!(Rp, V, Pt, η, number, type, BC, nc, Δ) 
-    # ResidualMomentum2D_x!(R,  V, Pt, η, number, type, BC, nc, Δ)
-    # ResidualMomentum2D_y!(R,  V, Pt, η, number, type, BC, nc, Δ)
+    #--------------------------------------------#
+    # Residual check
+    ResidualContinuity2D!(Rp, V, Pt, η, number, type, BC, nc, Δ) 
+    ResidualMomentum2D_x!(R,  V, Pt, η, number, type, BC, nc, Δ)
+    ResidualMomentum2D_y!(R,  V, Pt, η, number, type, BC, nc, Δ)
 
-    # p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc))
-    # p2 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc))
-    # p3 = heatmap(xc, yc,  Pt[inx_Pt,iny_Pt]' .- mean(Pt[inx_Pt,iny_Pt]), aspect_ratio=1, xlim=extrema(xc))
-    # display(plot(p1, p2, p3))
+    @info "Residuals"
+    @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
+    @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
+    @show norm(Rp[inx_Pt,iny_Pt])/sqrt(nPt)
 
+    #--------------------------------------------#
+    p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc))
+    p2 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc))
+    p3 = heatmap(xc, yc,  Pt[inx_Pt,iny_Pt]' .- mean(Pt[inx_Pt,iny_Pt]), aspect_ratio=1, xlim=extrema(xc))
+    display(plot(p1, p2, p3))
     
-
+    #--------------------------------------------#
     Kdiff = K - K'
     dropzeros!(Kdiff)
     f = GLMakie.spy(rotr90(Kdiff))

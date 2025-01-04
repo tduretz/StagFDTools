@@ -8,6 +8,9 @@ export Physics, NumberingPoisson, NumberingPoisson2 #, NumberingStokes, StokesPa
 include("Poisson.jl")
 export RangesPoisson, NumberingPoisson!, SparsityPatternPoisson, SparsityPatternPoisson_SA
 
+include("Stokes.jl")
+export RangesStokes, NumberingStokes!, SetRHS!, UpdateStokeSolution!
+
 include("Utils.jl")
 export printxy
 

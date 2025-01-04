@@ -481,20 +481,97 @@ let
 
     #--------------------------------------------#
     # Direct solver 
-    dx = - 𝑀 \ r
+    # dx = - 𝑀 \ r
 
     #--------------------------------------------#
-    # # Iterative solver 
-    # D_PC    = I(size(𝑀,1)) # no preconditioner
+    # Iterative solver 
+    D_PC    = I(size(𝑀,1)) # no preconditioner
 
-    # # Diagonal preconditioner
-    # D_PC    = spdiagm(diag(𝑀))
-    # diag_Pt = max(nc...) ./ η.p[inx_Pt, iny_Pt]
-    # D_PC[(nVx+nVy+1):end, (nVx+nVy+1):end] .+= spdiagm(diag_Pt[:])
-    # D_PC_inv =  spdiagm(1 ./ diag(D_PC))
+    # Diagonal preconditioner
+    D_PC    = spdiagm(diag(𝑀))
+    diag_Pt = max(nc...) ./ η.p[inx_Pt, iny_Pt]
+    D_PC[(nVx+nVy+1):end, (nVx+nVy+1):end] .+= spdiagm(diag_Pt[:])
+    D_PC_inv =  spdiagm(1 ./ diag(D_PC))
 
-    # dx = preconditioned_minres(𝑀, -r, ApplyPC, D_PC_inv)
-    # # dx = preconditioned_bicgstab(𝑀, b, ApplyPC, D_PC_inv)
+    dx = preconditioned_minres(𝑀, -r, ApplyPC, D_PC_inv)
+    # dx = preconditioned_bicgstab(𝑀, b, ApplyPC, D_PC_inv)
+    
+    #--------------------------------------------#
+
+    Dinv   = (x=zeros(size_x...), y=zeros(size_y...))
+    Dinv_p = zeros(size_p...)
+    UpdateStokeSolution!(Dinv, Dinv_p, diag(D_PC_inv), number, type, nc)
+
+    # #--------------------------------------------#
+    n = nVx + nVy + nPt
+
+    dV   = (x=zeros(size_x...), y=zeros(size_y...))
+    dPt  = zeros(size_p...)
+
+    Ap   = (x=zeros(size_x...), y=zeros(size_y...))
+    Ap_p = zeros(size_p...)
+    z    = (x=zeros(size_x...), y=zeros(size_y...))
+    z_p  = zeros(size_p...)
+    p    = (x=zeros(size_x...), y=zeros(size_y...))
+    p_p  = zeros(size_p...)
+
+    # Initial guess (zero vector)
+    dV.x .= 0.; dV.y .= 0.; dPt  .= 0.
+    
+    # Initial residual and preconditioned residual
+    z.x  .= Dinv.x.*R.x; z.y  .= Dinv.y.*R.y; z_p   .= Dinv_p.*Rp
+    p.x  .= z.x;          p.y .= z.y;         p_p   .= z_p
+    
+    # Initialize residual and preconditioned residual
+    norm_r0 = sqrt(sum(R.x.*R.x) + sum(R.y.*R.y) + sum(Rp.*Rp)) 
+
+    max_iter = n
+    tol      = 1e-8
+    
+    # Iteration loop
+    for k in 1:max_iter
+
+        # Compute A * p
+        ResidualContinuity2D!(Ap_p, p, p_p, η, number, type, BC, nc, Δ) 
+        ResidualMomentum2D_x!(Ap,   p, p_p, η, number, type, BC, nc, Δ)
+        ResidualMomentum2D_y!(Ap,   p, p_p, η, number, type, BC, nc, Δ)
+        
+        # Compute step size alpha
+        r_dot_z = (dot(R.x, z.x) + dot(R.y, z.y) + dot(Rp, z_p))
+        alpha   = r_dot_z / (dot(p.x, Ap.x) + dot(p.y, Ap.y) + dot(p_p, Ap_p) )
+ 
+        # Update the solution vector x
+        dV.x .+= alpha * p.x
+        dV.y .+= alpha * p.y
+        dPt  .+= alpha * p_p
+        
+        # Compute new residual
+        R.x .-= alpha * Ap.x
+        R.y .-= alpha * Ap.y
+        Rp  .-= alpha * Ap_p
+        norm_r_new = sqrt(sum(R.x.*R.x) + sum(R.y.*R.y) + sum(Rp.*Rp)) 
+        
+        # Check for convergence
+        if norm_r_new / norm_r0 < tol  #|| norm_r_new/sqrt(n) < 2*tol 
+            println("Converged in $k iterations.")
+            break
+        end
+        
+        # Apply preconditioner to the new residual
+        z.x .= Dinv.x.*R.x; z.y .= Dinv.y.*R.y; z_p  .= Dinv_p.*Rp
+        
+        # Compute the beta value for the direction update
+        beta = (dot(R.x, z.x) + dot(R.y, z.y) + dot(Rp, z_p)) / r_dot_z
+
+        # Update the direction p and residual r
+        p.x .= z.x .+ beta .* p.x
+        p.y .= z.y .+ beta .* p.y
+        p_p .= z_p .+ beta .* p_p
+    end
+
+    dx = zeros(nVx + nVy + nPt)
+    Δx = (x=dV.x, y=dV.y, p=dPt )
+    SetRHS!(dx, Δx, number, type, nc)
 
     #--------------------------------------------#
     UpdateStokeSolution!(V, Pt, dx, number, type, nc)
@@ -517,9 +594,9 @@ let
     𝑀diff = 𝑀 - 𝑀'
     dropzeros!(𝑀diff)
     @show norm(𝑀diff)
-    f = GLMakie.spy(rotr90(𝑀diff))
+    # f = GLMakie.spy(rotr90(𝑀diff))
     # f = GLMakie.spy(rotr90(𝑀))
-    # f = GLMakie.spy(rotr90(D_PC_inv))
+    f = GLMakie.spy(rotr90(D_PC_inv))
     GLMakie.DataInspector(f)
     display(f)
 

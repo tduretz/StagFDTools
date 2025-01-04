@@ -6,6 +6,75 @@ import GLMakie
 
 include("BasicIterativeSolvers.jl")
 
+# Preconditioner is the identity matrix (no preconditioning)
+function ApplyPC(Dinv, x)
+    return Dinv*x  # Identity preconditioner (no change)
+end
+
+# Function for applying the preconditioner M^{-1} to a vector
+# Here, M_inv is a function that implements the preconditioner
+function preconditioned_bicgstab(A, b, ApplyPC, Dinv, x0 = zeros(length(b)), tol = 1e-8, max_iter = 1000)
+    # Initial residual
+    r0 = b - A * x0
+    z0 = ApplyPC(Dinv,r0)  # Apply preconditioner
+    
+    # Initialize variables
+    x = x0
+    r = r0
+    z = z0
+    p = z
+    p_hat = z
+    rho_old = 1.0
+    alpha = 1.0
+    omega = 1.0
+    tol_b = norm(b) * tol
+    
+    for k = 1:max_iter
+        rho = dot(r, z)
+        
+        if abs(rho) < eps()
+            println("Breakdown: rho is too small.")
+            return x
+        end
+        
+        if k > 1
+            beta = (rho / rho_old) * (alpha / omega)
+            p = z + beta * (p - omega * p_hat)
+        else
+            p = z
+        end
+        
+        # Apply A to p
+        Ap = A * p
+        p_hat = ApplyPC(Dinv, A' * p)  # Apply preconditioner to the transpose
+        
+        # Compute alpha
+        alpha = rho / dot(r, p_hat)
+        
+        # Update x and r
+        x = x + alpha * p
+        r_new = r - alpha * Ap
+        
+        # Compute omega (stabilization factor)
+        omega = dot(r_new, p_hat) / dot(Ap, p_hat)
+        
+        # Update residual
+        r = r_new
+        z = ApplyPC(Dinv,r)  # Precondition residual
+        
+        # Check convergence
+        if norm(r) < tol_b
+            println("Converged after $k iterations.")
+            return x
+        end
+        
+        rho_old = rho
+    end
+    
+    println("Max iterations reached.")
+    return x
+end
+
 struct NumberingV <: AbstractPattern # ??? where is AbstractPattern defined 
     Vx
     Vy
@@ -452,8 +521,19 @@ let
     ε̇  = -1.0
     V.x[inx_Vx,iny_Vx] .=  ε̇*xv .+ 0*yc' 
     V.y[inx_Vy,iny_Vy] .= 0*xc .-  ε̇*yv' 
-    η.y[(xvy.^2 .+ (yvy').^2) .<= 1^2] .= 0.1
-    η.x[(xvx.^2 .+ (yvx').^2) .<= 1^2] .= 0.1 
+
+    η0       = 1.0e-3
+    η1       = 1.0
+    ηi    = (s=min(η0,η1), w=1/min(η0,η1)) 
+    x_inc = [0.0       0.2  -0.3 -0.4  0.0 -0.3 0.4  0.3  0.35 -0.1] *10
+    y_inc = [0.0       0.4   0.4 -0.3 -0.2  0.2 -0.2 -0.4 0.2  -0.4] *10
+    r_inc = [0.2       0.09  0.05 0.08 0.08  0.1 0.07 0.08 0.07 0.07]*10
+    η_inc = [ηi.s      ηi.w  ηi.w ηi.s ηi.w ηi.s ηi.w ηi.s ηi.s ηi.w]
+    
+    for i in eachindex(η_inc)
+        η.y[((xvy.-x_inc[i]).^2 .+ (yvy'.-y_inc[i]).^2) .<= r_inc[i]^2] .= η_inc[i]
+        η.x[((xvx.-x_inc[i]).^2 .+ (yvx'.-y_inc[i]).^2) .<= r_inc[i]^2] .= η_inc[i] 
+    end
     η.p .= 0.25.*(η.x[1:end-1,2:end-1].+η.x[2:end-0,2:end-1].+η.y[2:end-1,1:end-1].+η.y[2:end-1,2:end-0])
     
     #--------------------------------------------#
@@ -481,25 +561,103 @@ let
 
     #--------------------------------------------#
     # Direct solver 
-    dx = - 𝑀 \ r
+    # dx = - 𝑀 \ r
 
     #--------------------------------------------#
-    # # Iterative solver 
-    # D_PC    = I(size(𝑀,1)) # no preconditioner
+    # Iterative solver 
+    D_PC    = I(size(𝑀,1)) # no preconditioner
 
-    # # Diagonal preconditioner
-    # D_PC    = spdiagm(diag(𝑀))
-    # diag_Pt = max(nc...) ./ η.p[inx_Pt, iny_Pt]
-    # D_PC[(nVx+nVy+1):end, (nVx+nVy+1):end] .+= spdiagm(diag_Pt[:])
-    # D_PC_inv =  spdiagm(1 ./ diag(D_PC))
+    # Diagonal preconditioner
+    D_PC    = spdiagm(diag(𝑀))
+    diag_Pt = max(nc...) ./ η.p[inx_Pt, iny_Pt]
+    D_PC[(nVx+nVy+1):end, (nVx+nVy+1):end] .+= spdiagm(diag_Pt[:])
+    D_PC_inv =  spdiagm(1 ./ diag(D_PC))
 
-    # dx = preconditioned_minres(𝑀, -r, ApplyPC, D_PC_inv)
-    # # dx = preconditioned_bicgstab(𝑀, b, ApplyPC, D_PC_inv)
+    dx = preconditioned_minres(𝑀, -r, ApplyPC, D_PC_inv)
+    # dx = preconditioned_bicgstab(𝑀, b, ApplyPC, D_PC_inv)
+
+    #--------------------------------------------#
+
+    Dinv   = (x=zeros(size_x...), y=zeros(size_y...))
+    Dinv_p = zeros(size_p...)
+    UpdateStokeSolution!(Dinv, Dinv_p, diag(D_PC_inv), number, type, nc)
+
+    # #--------------------------------------------#
+    # n = nVx + nVy + nPt
+
+    # dV   = (x=zeros(size_x...), y=zeros(size_y...))
+    # dPt  = zeros(size_p...)
+
+    # Ap   = (x=zeros(size_x...), y=zeros(size_y...))
+    # Ap_p = zeros(size_p...)
+    # z    = (x=zeros(size_x...), y=zeros(size_y...))
+    # z_p  = zeros(size_p...)
+    # p    = (x=zeros(size_x...), y=zeros(size_y...))
+    # p_p  = zeros(size_p...)
+
+    # # Initial guess (zero vector)
+    # dV.x .= 0.; dV.y .= 0.; dPt  .= 0.
+    
+    # # Initial residual and preconditioned residual
+    # z.x  .= Dinv.x.*R.x; z.y  .= Dinv.y.*R.y; z_p   .= Dinv_p.*Rp
+    # p.x  .= z.x;          p.y .= z.y;         p_p   .= z_p
+    
+    # # Initialize residual and preconditioned residual
+    # norm_r0 = sqrt(sum(R.x.*R.x) + sum(R.y.*R.y) + sum(Rp.*Rp)) 
+    
+    # max_iter = n
+    # tol      = 1e-8
+    
+    # # Iteration loop
+    # for k in 1:max_iter
+
+    #     # Compute A * p
+    #     ResidualContinuity2D!(Ap_p, p, p_p, η, number, type, BC, nc, Δ) 
+    #     ResidualMomentum2D_x!(Ap,   p, p_p, η, number, type, BC, nc, Δ)
+    #     ResidualMomentum2D_y!(Ap,   p, p_p, η, number, type, BC, nc, Δ)
+        
+    #     # Compute step size alpha
+    #     r_dot_z = (dot(R.x, z.x) + dot(R.y, z.y) + dot(Rp, z_p))
+    #     alpha   = r_dot_z / (dot(p.x, Ap.x) + dot(p.y, Ap.y) + dot(p_p, Ap_p) )
+ 
+    #     # Update the solution vector x
+    #     V.x .+= alpha .* p.x
+    #     V.y .+= alpha .* p.y
+    #     Pt  .+= alpha .* p_p
+        
+    #     # Compute new residual
+    #     R.x .-= alpha .* Ap.x
+    #     R.y .-= alpha .* Ap.y
+    #     Rp  .-= alpha .* Ap_p
+    #     norm_r_new = sqrt(sum(R.x.*R.x) + sum(R.y.*R.y) + sum(Rp.*Rp)) 
+        
+    #     # Check for convergence
+    #     if norm_r_new / norm_r0 < tol  #|| norm_r_new/sqrt(n) < 2*tol 
+    #         println("Converged in $k iterations.")
+    #         break
+    #     end
+        
+    #     # Apply preconditioner to the new residual
+    #     z.x .= Dinv.x.*R.x; z.y .= Dinv.y.*R.y; z_p  .= Dinv_p.*Rp
+        
+    #     # Compute the beta value for the direction update
+    #     beta = (dot(R.x, z.x) + dot(R.y, z.y) + dot(Rp, z_p)) / r_dot_z
+
+    #     # Update the direction p and residual r
+    #     p.x .= z.x .+ beta .* p.x
+    #     p.y .= z.y .+ beta .* p.y
+    #     p_p .= z_p .+ beta .* p_p
+    # end
+
+    # #--------------------------------------------#
+    # dx = zeros(nVx + nVy + nPt)
+    # Δx = (x=dV.x, y=dV.y, p=dPt )
+    # SetRHS!(dx, Δx, number, type, nc)
 
     #--------------------------------------------#
     UpdateStokeSolution!(V, Pt, dx, number, type, nc)
 
-    #--------------------------------------------#
+    # #--------------------------------------------#
     # Residual check
     ResidualContinuity2D!(Rp, V, Pt, η, number, type, BC, nc, Δ) 
     ResidualMomentum2D_x!(R,  V, Pt, η, number, type, BC, nc, Δ)
@@ -517,9 +675,9 @@ let
     𝑀diff = 𝑀 - 𝑀'
     dropzeros!(𝑀diff)
     @show norm(𝑀diff)
-    f = GLMakie.spy(rotr90(𝑀diff))
+    # f = GLMakie.spy(rotr90(𝑀diff))
     # f = GLMakie.spy(rotr90(𝑀))
-    # f = GLMakie.spy(rotr90(D_PC_inv))
+    f = GLMakie.spy(rotr90(D_PC_inv))
     GLMakie.DataInspector(f)
     display(f)
 
@@ -527,7 +685,7 @@ let
 
     p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc))
     p2 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc))
-    p3 = heatmap(xc, yc,  Pt[inx_Pt,iny_Pt]' .- mean(Pt[inx_Pt,iny_Pt]), aspect_ratio=1, xlim=extrema(xc))
+    p3 = heatmap(xc, yc, Pt[inx_Pt,iny_Pt]' .- mean(Pt[inx_Pt,iny_Pt]), aspect_ratio=1, xlim=extrema(xc))
     display(plot(p1, p2, p3))
 
     #--------------------------------------------#
