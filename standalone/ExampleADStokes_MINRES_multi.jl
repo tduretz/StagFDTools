@@ -4,76 +4,7 @@ using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 import GLMakie
 
-include("BasicIterativeSolvers.jl")
-
-# Preconditioner is the identity matrix (no preconditioning)
-function ApplyPC(Dinv, x)
-    return Dinv*x  # Identity preconditioner (no change)
-end
-
-# Function for applying the preconditioner M^{-1} to a vector
-# Here, M_inv is a function that implements the preconditioner
-function preconditioned_bicgstab(A, b, ApplyPC, Dinv, x0 = zeros(length(b)), tol = 1e-8, max_iter = 1000)
-    # Initial residual
-    r0 = b - A * x0
-    z0 = ApplyPC(Dinv,r0)  # Apply preconditioner
-    
-    # Initialize variables
-    x = x0
-    r = r0
-    z = z0
-    p = z
-    p_hat = z
-    rho_old = 1.0
-    alpha = 1.0
-    omega = 1.0
-    tol_b = norm(b) * tol
-    
-    for k = 1:max_iter
-        rho = dot(r, z)
-        
-        if abs(rho) < eps()
-            println("Breakdown: rho is too small.")
-            return x
-        end
-        
-        if k > 1
-            beta = (rho / rho_old) * (alpha / omega)
-            p = z + beta * (p - omega * p_hat)
-        else
-            p = z
-        end
-        
-        # Apply A to p
-        Ap = A * p
-        p_hat = ApplyPC(Dinv, A' * p)  # Apply preconditioner to the transpose
-        
-        # Compute alpha
-        alpha = rho / dot(r, p_hat)
-        
-        # Update x and r
-        x = x + alpha * p
-        r_new = r - alpha * Ap
-        
-        # Compute omega (stabilization factor)
-        omega = dot(r_new, p_hat) / dot(Ap, p_hat)
-        
-        # Update residual
-        r = r_new
-        z = ApplyPC(Dinv,r)  # Precondition residual
-        
-        # Check convergence
-        if norm(r) < tol_b
-            println("Converged after $k iterations.")
-            return x
-        end
-        
-        rho_old = rho
-    end
-    
-    println("Max iterations reached.")
-    return x
-end
+include("../examples/Stokes/BasicIterativeSolvers.jl")
 
 struct NumberingV <: AbstractPattern # ??? where is AbstractPattern defined 
     Vx
@@ -583,76 +514,83 @@ let
     UpdateStokeSolution!(Dinv, Dinv_p, diag(D_PC_inv), number, type, nc)
 
     # #--------------------------------------------#
-    # n = nVx + nVy + nPt
+    n = nVx + nVy + nPt
 
-    # dV   = (x=zeros(size_x...), y=zeros(size_y...))
-    # dPt  = zeros(size_p...)
+    dV   = (x=zeros(size_x...), y=zeros(size_y...))
+    dPt  = zeros(size_p...)
 
-    # Ap   = (x=zeros(size_x...), y=zeros(size_y...))
-    # Ap_p = zeros(size_p...)
-    # z    = (x=zeros(size_x...), y=zeros(size_y...))
-    # z_p  = zeros(size_p...)
-    # p    = (x=zeros(size_x...), y=zeros(size_y...))
-    # p_p  = zeros(size_p...)
+    Ap   = (x=zeros(size_x...), y=zeros(size_y...))
+    Ap_p = zeros(size_p...)
+    z    = (x=zeros(size_x...), y=zeros(size_y...))
+    z_p  = zeros(size_p...)
+    p    = (x=zeros(size_x...), y=zeros(size_y...))
+    p_p  = zeros(size_p...)
 
-    # # Initial guess (zero vector)
-    # dV.x .= 0.; dV.y .= 0.; dPt  .= 0.
+    # Initial guess (zero vector)
+    dV.x .= 0.; dV.y .= 0.; dPt  .= 0.
     
-    # # Initial residual and preconditioned residual
-    # z.x  .= Dinv.x.*R.x; z.y  .= Dinv.y.*R.y; z_p   .= Dinv_p.*Rp
-    # p.x  .= z.x;          p.y .= z.y;         p_p   .= z_p
+    # Initial residual and preconditioned residual
+    z.x  .= Dinv.x.*R.x; z.y  .= Dinv.y.*R.y; z_p   .= Dinv_p.*Rp
+    p.x  .= z.x;          p.y .= z.y;         p_p   .= z_p
     
-    # # Initialize residual and preconditioned residual
-    # norm_r0 = sqrt(sum(R.x.*R.x) + sum(R.y.*R.y) + sum(Rp.*Rp)) 
-    
-    # max_iter = n
-    # tol      = 1e-8
-    
-    # # Iteration loop
-    # for k in 1:max_iter
+    # Initialize residual and preconditioned residual
+    norm_r0 = sqrt(sum(R.x.*R.x) + sum(R.y.*R.y) + sum(Rp.*Rp)) 
+    @show norm_r0
 
-    #     # Compute A * p
-    #     ResidualContinuity2D!(Ap_p, p, p_p, η, number, type, BC, nc, Δ) 
-    #     ResidualMomentum2D_x!(Ap,   p, p_p, η, number, type, BC, nc, Δ)
-    #     ResidualMomentum2D_y!(Ap,   p, p_p, η, number, type, BC, nc, Δ)
+    max_iter = 1
+    tol      = 1e-8
+    
+    # Iteration loop
+    for k in 1:max_iter
+
+        # Compute A * p
+        ResidualContinuity2D!(Ap_p, p, p_p, η, number, type, BC, nc, Δ) 
+        ResidualMomentum2D_x!(Ap,   p, p_p, η, number, type, BC, nc, Δ)
+        ResidualMomentum2D_y!(Ap,   p, p_p, η, number, type, BC, nc, Δ)
+
+        @show norm(Ap.x[inx_Vx, iny_Vx])
+        @show norm(Ap.y[inx_Vy, iny_Vy])
+        @show norm(Ap_p[inx_Pt, iny_Pt])
         
-    #     # Compute step size alpha
-    #     r_dot_z = (dot(R.x, z.x) + dot(R.y, z.y) + dot(Rp, z_p))
-    #     alpha   = r_dot_z / (dot(p.x, Ap.x) + dot(p.y, Ap.y) + dot(p_p, Ap_p) )
+        # Compute step size alpha
+        r_dot_z = (dot(R.x, z.x) + dot(R.y, z.y) + dot(Rp, z_p))
+        alpha   = r_dot_z / (dot(p.x, Ap.x) + dot(p.y, Ap.y) + dot(p_p, Ap_p) )
  
-    #     # Update the solution vector x
-    #     V.x .+= alpha .* p.x
-    #     V.y .+= alpha .* p.y
-    #     Pt  .+= alpha .* p_p
-        
-    #     # Compute new residual
-    #     R.x .-= alpha .* Ap.x
-    #     R.y .-= alpha .* Ap.y
-    #     Rp  .-= alpha .* Ap_p
-    #     norm_r_new = sqrt(sum(R.x.*R.x) + sum(R.y.*R.y) + sum(Rp.*Rp)) 
-        
-    #     # Check for convergence
-    #     if norm_r_new / norm_r0 < tol  #|| norm_r_new/sqrt(n) < 2*tol 
-    #         println("Converged in $k iterations.")
-    #         break
-    #     end
-        
-    #     # Apply preconditioner to the new residual
-    #     z.x .= Dinv.x.*R.x; z.y .= Dinv.y.*R.y; z_p  .= Dinv_p.*Rp
-        
-    #     # Compute the beta value for the direction update
-    #     beta = (dot(R.x, z.x) + dot(R.y, z.y) + dot(Rp, z_p)) / r_dot_z
+        @show alpha
 
-    #     # Update the direction p and residual r
-    #     p.x .= z.x .+ beta .* p.x
-    #     p.y .= z.y .+ beta .* p.y
-    #     p_p .= z_p .+ beta .* p_p
-    # end
+        # Update the solution vector x
+        V.x .+= alpha .* p.x
+        V.y .+= alpha .* p.y
+        Pt  .+= alpha .* p_p
+        
+        # Compute new residual
+        R.x .-= alpha .* Ap.x
+        R.y .-= alpha .* Ap.y
+        Rp  .-= alpha .* Ap_p
+        norm_r_new = sqrt(sum(R.x.*R.x) + sum(R.y.*R.y) + sum(Rp.*Rp)) 
+        
+        # Check for convergence
+        if norm_r_new / norm_r0 < tol  #|| norm_r_new/sqrt(n) < 2*tol 
+            println("Converged in $k iterations.")
+            break
+        end
+        
+        # Apply preconditioner to the new residual
+        z.x .= Dinv.x.*R.x; z.y .= Dinv.y.*R.y; z_p  .= Dinv_p.*Rp
+        
+        # Compute the beta value for the direction update
+        beta = (dot(R.x, z.x) + dot(R.y, z.y) + dot(Rp, z_p)) / r_dot_z
 
-    # #--------------------------------------------#
-    # dx = zeros(nVx + nVy + nPt)
-    # Δx = (x=dV.x, y=dV.y, p=dPt )
-    # SetRHS!(dx, Δx, number, type, nc)
+        # Update the direction p and residual r
+        p.x .= z.x .+ beta .* p.x
+        p.y .= z.y .+ beta .* p.y
+        p_p .= z_p .+ beta .* p_p
+    end
+
+    #--------------------------------------------#
+    dx = zeros(nVx + nVy + nPt)
+    Δx = (x=dV.x, y=dV.y, p=dPt )
+    SetRHS!(dx, Δx, number, type, nc)
 
     #--------------------------------------------#
     UpdateStokeSolution!(V, Pt, dx, number, type, nc)
@@ -663,15 +601,15 @@ let
     ResidualMomentum2D_x!(R,  V, Pt, η, number, type, BC, nc, Δ)
     ResidualMomentum2D_y!(R,  V, Pt, η, number, type, BC, nc, Δ)
     
-    @info "Residuals"
-    @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
-    @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-    @show norm(Rp[inx_Pt,iny_Pt])/sqrt(nPt)
+    # @info "Residuals"
+    # @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
+    # @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
+    # @show norm(Rp[inx_Pt,iny_Pt])/sqrt(nPt)
 
     #--------------------------------------------#
     @info "Velocity block symmetry"
     # display(K - K')
-    @show norm(K-K')
+    # @show norm(K-K')
     𝑀diff = 𝑀 - 𝑀'
     dropzeros!(𝑀diff)
     @show norm(𝑀diff)
@@ -691,72 +629,153 @@ let
     #--------------------------------------------#
 end
 
-@views function (@main)(nc)
 
-    size_x, size_y, size_p, size_xy = (nc.x+1, nc.y+2), (nc.x+2, nc.y+1), (nc.x, nc.y), (nc.x+1, nc.y+1)
-    inx_Vx, iny_Vx = 2:nc.x, 2:nc.y+1
-    inx_Vy, iny_Vy = 2:nc.x+1, 2:nc.y
+# function Residual!(R, Rp, V, Pt, ε̇, τ, η, Δ, inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt)
+#     @. V.x[:,[2 end-1]] .= V.x[:,[3 end-2]]
+#     @. V.y[[2 end-1],:] .= V.y[[3 end-2],:]
+#     @. ε̇.kk = (V.x[2:end-0,2:end-1] - V.x[1:end-1,2:end-1]) / Δ.x + (V.y[2:end-1,2:end-0] - V.y[2:end-1,1:end-1]) / Δ.y
+#     @. ε̇.xx = (V.x[2:end-0,2:end-1] - V.x[1:end-1,2:end-1]) / Δ.x - 1/3*ε̇.kk 
+#     @. ε̇.yy = (V.y[2:end-1,2:end-0] - V.y[2:end-1,1:end-1]) / Δ.y - 1/3*ε̇.kk 
+#     @. τ.xx = 2 * η.p  * ε̇.xx
+#     @. τ.yy = 2 * η.p  * ε̇.yy
+#     @. τ.xy = 2 * η.xy * ε̇.xy
+#     @. R.x[inx_Vx, iny_Vx] = (τ.xx[2:end,2:end-1] - τ.xx[1:end-1,2:end-1]) / Δ.x + (τ.xy[:,2:end] - τ.xy[:,1:end-1]) / Δ.y - (Pt[2:end,2:end-1] - Pt[1:end-1,2:end-1]) / Δ.x
+#     @. R.y[inx_Vy, iny_Vy] = (τ.yy[2:end-1,2:end] - τ.yy[2:end-1,1:end-1]) / Δ.y + (τ.xy[2:end,:] - τ.xy[1:end-1,:]) / Δ.x - (Pt[2:end-1,2:end] - Pt[2:end-1,1:end-1]) / Δ.y
+#     @. Rp[inx_Pt, iny_Pt] = ε̇.kk[inx_Pt, iny_Pt]
+#     return nothing
+# end
 
-    # Intialise field
-    L   = (x=10.0, y=10.0)
-    Δ   = (x=L.x/nc.x, y=L.y/nc.y)
-    R   = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_p...))
-    V   = (x=zeros(size_x...), y=zeros(size_y...))
-    ε̇   = (xx=zeros(size_p...), yy=zeros(size_p...), kk=zeros(size_p...), xy=zeros(size_xy...))
-    τ   = (xx=zeros(size_p...), yy=zeros(size_p...), xy=zeros(size_xy...))
-    η   = (x= ones(size_x...), y= ones(size_y...), p=ones(size_p...), xy=zeros(size_xy...) )
-    Rp  = zeros(size_p...)
-    Pt  = zeros(size_p...)
-    xv  = LinRange(-L.x/2, L.x/2, nc.x+1)
-    yv  = LinRange(-L.y/2, L.y/2, nc.y+1)
-    xc  = LinRange(-L.x/2-Δ.x/2, L.x/2+Δ.x/2, nc.x+2)
-    yc  = LinRange(-L.y/2-Δ.y/2, L.y/2+Δ.y/2, nc.y+2)
+# @views function (@main)(nc)
 
-    # Initial configuration
-    ε̇bg  = -1.0
-    V.x .= ε̇bg*xv .+ 0*yc' 
-    V.y .= 0*xc .-  ε̇bg*yv' 
+#     size_x, size_y, size_p, size_xy = (nc.x+3, nc.y+4), (nc.x+4, nc.y+3), (nc.x+2, nc.y+2), (nc.x+1, nc.y+1)
+#     inx_Vx, iny_Vx = 2:nc.x+2, 3:nc.y+2
+#     inx_Vy, iny_Vy = 3:nc.x+2, 2:nc.y+2
+#     inx_Pt, iny_Pt = 2:nc.x+1, 2:nc.y+1
 
-    η0       = 1.0e-3
-    η1       = 1.0
-    ηi    = (s=min(η0,η1), w=1/min(η0,η1)) 
-    x_inc = [0.0       0.2  -0.3 -0.4  0.0 -0.3 0.4  0.3  0.35 -0.1] *10
-    y_inc = [0.0       0.4   0.4 -0.3 -0.2  0.2 -0.2 -0.4 0.2  -0.4] *10
-    r_inc = [0.2       0.09  0.05 0.08 0.08  0.1 0.07 0.08 0.07 0.07]*10
-    η_inc = [ηi.s      ηi.w  ηi.w ηi.s ηi.w ηi.s ηi.w ηi.s ηi.s ηi.w]
+
+#     # Intialise field
+#     L   = (x=10.0, y=10.0)
+#     Δ   = (x=L.x/nc.x, y=L.y/nc.y)
+#     R   = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_p...))
+#     V   = (x=zeros(size_x...), y=zeros(size_y...))
+#     ε̇   = (xx=zeros(size_p...), yy=zeros(size_p...), kk=zeros(size_p...), xy=zeros(size_xy...))
+#     τ   = (xx=zeros(size_p...), yy=zeros(size_p...), xy=zeros(size_xy...))
+#     η   = (x= ones(size_x...), y= ones(size_y...), p=ones(size_p...), xy=ones(size_xy...) )
+#     Rp  = zeros(size_p...)
+#     Pt  = zeros(size_p...)
+#     xv  = LinRange(-L.x/2, L.x/2, nc.x+1)
+#     yv  = LinRange(-L.y/2, L.y/2, nc.y+1)
+#     xc  = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
+#     yc  = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
+#     xvx = LinRange(-L.x/2-Δ.x, L.x/2+Δ.x, nc.x+3)
+#     xvy = LinRange(-L.x/2-3Δ.x/2, L.x/2+3Δ.x/2, nc.x+4)
+#     yvy = LinRange(-L.y/2-Δ.y, L.y/2+Δ.y, nc.y+3)
+#     yvx = LinRange(-L.y/2-3Δ.y/2, L.y/2+3Δ.y/2, nc.y+4)
+
+#     # Initial configuration
+#     ε̇bg  = -1.0
+#     V.x[inx_Vx,iny_Vx] .=  ε̇bg*xv .+ 0*yc' 
+#     V.y[inx_Vy,iny_Vy] .= 0*xc .-  ε̇bg*yv'  
+
+#     η0       = 1.0e-3
+#     η1       = 1.0
+#     ηi    = (s=min(η0,η1), w=1/min(η0,η1)) 
+#     x_inc = [0.0       0.2  -0.3 -0.4  0.0 -0.3 0.4  0.3  0.35 -0.1] *10
+#     y_inc = [0.0       0.4   0.4 -0.3 -0.2  0.2 -0.2 -0.4 0.2  -0.4] *10
+#     r_inc = [0.2       0.09  0.05 0.08 0.08  0.1 0.07 0.08 0.07 0.07]*10
+#     η_inc = [ηi.s      ηi.w  ηi.w ηi.s ηi.w ηi.s ηi.w ηi.s ηi.s ηi.w]
     
-    for i in eachindex(η_inc)
-        η.x[((xv.-x_inc[i]).^2 .+ (yc'.-y_inc[i]).^2) .<= r_inc[i]^2] .= η_inc[i] 
-        η.y[((xc.-x_inc[i]).^2 .+ (yv'.-y_inc[i]).^2) .<= r_inc[i]^2] .= η_inc[i]
-    end
-    η.p  .= 0.25.*(η.x[1:end-1,2:end-1].+η.x[2:end-0,2:end-1].+η.y[2:end-1,1:end-1].+η.y[2:end-1,2:end-0])
-    η.xy .= 0.25.*(η.y[1:end-1,:].+η.y[2:end-0,:].+η.x[:,1:end-1].+η.x[:,2:end-0])
+#     for i in eachindex(η_inc)
+#         η.y[((xvy.-x_inc[i]).^2 .+ (yvy'.-y_inc[i]).^2) .<= r_inc[i]^2] .= η_inc[i]
+#         η.x[((xvx.-x_inc[i]).^2 .+ (yvx'.-y_inc[i]).^2) .<= r_inc[i]^2] .= η_inc[i] 
+#     end
+#     η.p .= 0.25.*(η.x[1:end-1,2:end-1].+η.x[2:end-0,2:end-1].+η.y[2:end-1,1:end-1].+η.y[2:end-1,2:end-0])
+#     η.xy .= 0.25.*(η.y[2:end-2,2:end-1].+η.y[3:end-1,2:end-1].+η.x[2:end-1,2:end-2].+η.x[2:end-1,3:end-1])
 
-    # Diagonal preconditioner
-    D    = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_p...))
-    dx, dy = Δ.x, Δ.y
-    etaW, etaE = η.p[1:end-1,:], η.p[2:end-0,:]
-    etaS, etaN = η.xy[2:end-1,1:end-1], η.xy[2:end-1,2:end-0] #TODO: BC
-    D.x[2:end-1,2:end-1] .= (-etaN ./ dy - etaS ./ dy) ./ dy + (-etaE ./ dx - etaW ./ dx) ./ dx
-    etaW, etaE = η.xy[1:end-1,2:end-1],  η.xy[2:end-0,2:end-1] #TODO: BC
-    etaS, etaN = η.p[:,1:end-1], η.p[:,2:end-0] 
-    D.y[2:end-1,2:end-1] .= (-etaN ./ dy - etaS ./ dy) ./ dy + (-etaE ./ dx - etaW ./ dx) ./ dx
-    D.p .= max(nc...) ./ η.p
+#     # Diagonal preconditioner
+#     D    = (x=ones(size_x...), y=ones(size_y...), p=ones(size_p...))
+#     dx, dy = Δ.x, Δ.y
+#     etaW, etaE = η.p[1:end-1,2:end-1], η.p[2:end-0,2:end-1]
+#     etaS, etaN = η.xy[:,1:end-1], η.xy[:,2:end-0]
+#     etaS[:,1]   .= 0.0
+#     etaN[:,end] .= 0.0
+#     D.x[inx_Vx,iny_Vx] .= (-etaN ./ dy - etaS ./ dy) ./ dy + (-4 // 3 * etaE ./ dx - 4 // 3 * etaW ./ dx) ./ dx
+#     etaW, etaE = η.xy[1:end-1,:],  η.xy[2:end-0,:] 
+#     etaS, etaN = η.p[2:end-1,1:end-1], η.p[2:end-1,2:end-0] 
+#     etaW[1,:]   .= 0.0
+#     etaE[end,:] .= 0.0
+#     D.y[inx_Vy,iny_Vy] .= (-4 // 3 * etaN ./ dy - 4 // 3 * etaS ./ dy) ./ dy + (-etaE ./ dx - etaW ./ dx) ./ dx
+#     D.p .= max(nc...) ./ η.p
 
-    # Residual
-    @. V.x[:,[1 end]] .= V.x[:,[2 end-1]]
-    @. V.y[[1 end],:] .= V.y[[2 end-1],:]
-    @. ε̇.kk = (V.x[2:end-0,2:end-1] - V.x[1:end-1,2:end-1]) / Δ.x + (V.y[2:end-1,2:end-0] - V.y[2:end-1,1:end-1]) / Δ.y
-    @. ε̇.xx = (V.x[2:end-0,2:end-1] - V.x[1:end-1,2:end-1]) / Δ.x - 1/3*ε̇.kk 
-    @. ε̇.yy = (V.y[2:end-1,2:end-0] - V.y[2:end-1,1:end-1]) / Δ.y - 1/3*ε̇.kk 
-    @. τ.xx = 2 * η.p  * ε̇.xx
-    @. τ.yy = 2 * η.p  * ε̇.yy
-    @. τ.xy = 2 * η.xy * ε̇.xy
-    @. R.x[2:end-1,2:end-1] = (τ.xx[2:end,:] - τ.xx[1:end-1,:]) / Δ.x + (τ.xy[2:end-1,2:end] - τ.xy[2:end-1,1:end-1]) / Δ.y - (Pt[2:end,:] - Pt[1:end-1,:]) / Δ.x
-    @. R.y[2:end-1,2:end-1] = (τ.yy[:,2:end] - τ.yy[:,1:end-1]) / Δ.y + (τ.xy[2:end,2:end-1] - τ.xy[1:end-1,2:end-1]) / Δ.x - (Pt[:,2:end] - Pt[:,1:end-1]) / Δ.y
-    @. Rp = ε̇.kk
+#     # Initial residual
+#     Residual!(R, Rp, V, Pt, ε̇, τ, η, Δ, inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt)
 
-end
+#     # Arrays for solver 
+#     dV   = (x=zeros(size_x...), y=zeros(size_y...)); dPt  = zeros(size_p...)
+#     Ap   = (x=zeros(size_x...), y=zeros(size_y...)); Ap_p = zeros(size_p...)
+#     z    = (x=zeros(size_x...), y=zeros(size_y...)); z_p  = zeros(size_p...)
+#     p    = (x=zeros(size_x...), y=zeros(size_y...)); p_p  = zeros(size_p...)
+    
+#     # Initial residual and preconditioned residual
+#     z.x  .= (1 ./D.x).*R.x; z.y  .= (1 ./D.y).*R.y; z_p   .= (1 ./D.p).*Rp
+#     p.x  .= z.x;            p.y .= z.y;             p_p   .= z_p
+    
+#     # Initialize residual and preconditioned residual
+#     norm_r0 = sqrt(sum(R.x.*R.x) + sum(R.y.*R.y) + sum(Rp.*Rp)) 
+#     @show norm_r0
+    
+#     max_iter = 1
+#     tol      = 1e-8
 
-nc = (x = 30, y = 32)
-main(nc)
+#     # Iteration loop
+#     for k in 1:max_iter
+
+#         # Compute A * p
+#         Residual!(Ap, Ap_p, p, p_p, ε̇, τ, η, Δ, inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt)
+
+       
+#         @show norm(R.x[inx_Vx, iny_Vx])
+#         @show norm(R.y[inx_Vy, iny_Vy])
+#         @show norm(Rp[inx_Pt, iny_Pt])
+
+
+#         # Compute step size alpha
+#         r_dot_z = (dot(R.x, z.x) + dot(R.y, z.y) + dot(Rp, z_p))
+#         alpha   = r_dot_z / (dot(p.x, Ap.x) + dot(p.y, Ap.y) + dot(p_p, Ap_p) )
+ 
+#         @show alpha
+
+#         # Update the solution vector x
+#         dV.x .+= alpha .* p.x
+#         dV.y .+= alpha .* p.y
+#         dPt  .+= alpha .* p_p
+        
+#         # Compute new residual
+#         R.x .-= alpha .* Ap.x
+#         R.y .-= alpha .* Ap.y
+#         Rp  .-= alpha .* Ap_p
+#         norm_r_new = sqrt(sum(R.x.*R.x) + sum(R.y.*R.y) + sum(Rp.*Rp)) 
+#         @show norm_r_new
+        
+#         # Check for convergence
+#         if norm_r_new / norm_r0 < tol  #|| norm_r_new/sqrt(n) < 2*tol 
+#             println("Converged in $k iterations.")
+#             break
+#         end
+        
+#         # Apply preconditioner to the new residual
+#         z.x  .= (1 ./D.x).*R.x; z.y  .= (1 ./D.y).*R.y; z_p   .= (1 ./D.p).*Rp
+        
+#         # Compute the beta value for the direction update
+#         beta = (dot(R.x, z.x) + dot(R.y, z.y) + dot(Rp, z_p)) / r_dot_z
+
+#         # Update the direction p and residual r
+#         p.x .= z.x .+ beta .* p.x
+#         p.y .= z.y .+ beta .* p.y
+#         p_p .= z_p .+ beta .* p_p
+#     end
+
+# end
+
+
+# main( (x=30, y=32)) 
