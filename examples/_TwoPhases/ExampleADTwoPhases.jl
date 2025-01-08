@@ -687,10 +687,9 @@ function UpdateSolution_TwoPhases!(V, P, dx, number, type, nc)
     end
 end
 
-let
+@views function (@main)(nc)
     
     # Resolution
-    nc = (x = 30, y = 30)
 
     inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_p = Ranges_Stokes(nc)
     
@@ -858,3 +857,5 @@ let
 
     #--------------------------------------------#
 end
+
+main( (x=300, y=300) )

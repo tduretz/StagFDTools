@@ -77,7 +77,8 @@ function Momentum_x(Vx, Vy, Pt, Pf, η, type, bcv, Δ)
     fx  = (τxx[2,2] - τxx[1,2]) * invΔx 
     fx += (τxy[2,2] - τxy[2,1]) * invΔy 
     fx -= ( Pt[2,2] -  Pt[1,2]) * invΔx
-    fx *= -1#Δ.x*Δ.y
+    fx *= -1
+    fx *= Δ.x*Δ.y
 
     return fx
 end
@@ -133,7 +134,8 @@ function Momentum_y(Vx, Vy, Pt, Pf, η, type, bcv, Δ)
     fy  = (τyy[2,2] - τyy[2,1]) * invΔy 
     fy += (τxy[2,2] - τxy[1,2]) * invΔx 
     fy -= (Pt[2,2] - Pt[2,1]) * invΔy
-    fy *= -1#Δ.x*Δ.y
+    fy *= -1
+    fy *= Δ.x*Δ.y
 
     return fy
 end
@@ -142,7 +144,7 @@ function Continuity(Vx, Vy, Pt, Pf, ηϕ, ϕ, type_loc, bcv_loc, Δ)
     invΔx    = 1 / Δ.x
     invΔy    = 1 / Δ.y
     fp = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy + (Pt[1] - Pf[2,2])/((1-ϕ)*ηϕ))
-    # fp *= η/(Δ.x+Δ.y)
+    fp *= ηϕ/(Δ.x+Δ.y)/2*Δ.x*Δ.y
     return fp
 end
 
@@ -187,7 +189,10 @@ function FluidContinuity(Vx, Vy, Pt, Pf, ηϕ, ϕ, kμ, type_loc, bcv_loc, Δ)
     qyS = -kμ.yy[1]*(PfC - PfS)/Δ.y
     qyN = -kμ.yy[2]*(PfN - PfC)/Δ.y
 
-    return (qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y - (Pt[1]-Pf[2,2])/((1-ϕ)*ηϕ)
+    fp = (qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y - (Pt[1]-Pf[2,2])/((1-ϕ)*ηϕ)
+    fp *= Δ.x*Δ.y
+
+    return fp
 end
 
 function ResidualMomentum2D_x!(R, V, P, rheo, number, type, BC, nc, Δ) 
@@ -687,10 +692,9 @@ function UpdateSolution_TwoPhases!(V, P, dx, number, type, nc)
     end
 end
 
-let
+@views function (@main)(nc)
     
     # Resolution
-    nc = (x = 30, y = 30)
 
     inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_p = Ranges_Stokes(nc)
     
@@ -830,17 +834,17 @@ let
 
     #--------------------------------------------#
     # # Direct solver 
-    # dx = - 𝑀 \ r
+    @time dx = - 𝑀 \ r
 
 
     # A  = [M.Vx.Vx M.Vx.Vy;
     #       M.Vy.Vx M.Vy.Vy]
     
     # B  = [M.Vx.Pt M.Vx.Pf;
-    #       M.Vy.Pt M.Vy.Pf;]
+    #       M.Vy.Pt M.Vy.Pf;].*1e-0
 
     # C  = [M.Pt.Vx M.Pt.Vy
-    #       M.Pf.Vx M.Pf.Vy]
+    #       M.Pf.Vx M.Pf.Vy] .*1e-0
 
     # D  = [M.Pt.Pt M.Pt.Pf;
     #       M.Pf.Pt M.Pf.Pf]
@@ -848,32 +852,47 @@ let
     # Ac = cholesky(A)
     # Dc = cholesky(D)
 
+    # A_D_inv = spdiagm(1 ./ diag(A  ))
+    # D_D_inv = spdiagm(1 ./ diag(D  ))
+
     # fv = -r[1:(nVx+nVy)]
     # fp = -r[(nVx+nVy+1):end]
     # dv = zeros(nVx+nVy)
     # dp = zeros(nPt+nPf)
+    # dv0 = zeros(nVx+nVy)
+    # dp0 = zeros(nPt+nPf)
     # for iter=1:40
-    #     dv .= A\(fv - B*dp )
-    #     dp .= D\(fp - C*dv)
 
     #     rv  = fv - (A*dv + B*dp) 
     #     rp  = fp - (C*dv + D*dp)
 
+    #     dv .= (A_D_inv*A)\(A_D_inv*(fv - B*dp))
+    #     dp .= (D_D_inv*D)\(D_D_inv*(fp - C*dv))
+
     #     @show norm(rv), norm(rp)
     # end
+
+    # dx = zeros(nVx + nVy + nPt + nPf)
     # dx[1:(nVx+nVy)] .= dv
     # dx[(nVx+nVy+1):end] .= dp
 
-    # M2Di stuff
-    fv  = -r[1:(nVx+nVy)]
-    fpt = -r[(nVx+nVy+1):(nVx+nVy+nPt)]
-    fpf = -r[(nVx+nVy+nPt+1):end]
-    dv  = zeros(nVx+nVy)
-    dpt = zeros(nPt)
-    dpf = zeros(nPf)
-    rv  = zeros(nVx+nVy)
-    rpt = zeros(nPt)
-    rpf = zeros(nPf)
+    # M2Di solver
+    fv    = -r[1:(nVx+nVy)]
+    fpt   = -r[(nVx+nVy+1):(nVx+nVy+nPt)]
+    fpf   = -r[(nVx+nVy+nPt+1):end]
+    dv    = zeros(nVx+nVy)
+    dpt   = zeros(nPt)
+    dpf   = zeros(nPf)
+    rv    = zeros(nVx+nVy)
+    rpt   = zeros(nPt)
+    rpf   = zeros(nPf)
+    rv_t  = zeros(nVx+nVy)
+    rpt_t = zeros(nPt)
+    s     = zeros(nPf)
+    ddv   = zeros(nVx+nVy)
+    ddpt  = zeros(nPt)
+    ddpf  = zeros(nPf)
+
 
     Jvv  = [M.Vx.Vx M.Vx.Vy;
             M.Vy.Vx M.Vy.Vy]
@@ -887,40 +906,40 @@ let
     Jpf  = M.Pf.Pf
     Kvv  = Jvv
 
-    # Pre-conditionning (~Jacobi)
-    Jpv_t = Jpv  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfv
-    Jpp_t = Jpp  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfp
-    Jvv_t = Kvv  - Jvp *spdiagm(1 ./ diag(Jpp_t))*Jpv 
-    Jpf_h  = cholesky(Jpf  )                       # Cholesky factors
-    Jvv_th = cholesky(Jvv_t)                       # Cholesky factors
-    Jpp_th = spdiagm(1 ./diag(Jpp_t));             # trivial inverse
-    rv0=norm(fv); rpt0=norm(fpt); rpf0=norm(fpf);
-    for itPH=1:15
-        rv  = -( Jvv*dv  + Jvp*dpt             - fv  )
-        rpt = -( Jpv*dv  + Jpp*dpt  + Jppf*dpf - fpt ); #rpt .-= mean(rpt);
-        rpf = -( Jpfv*dv + Jpfp*dpt + Jpf*dpf  - fpf )
-        s     = Jpf_h \ rpf
-        rpt_t = -( Jppf*s - rpt)
-        s     =    Jpp_th*rpt_t
-        rv_t  = -( Jvp*s  - rv )
-        ddv   = Jvv_th \ rv_t
-        s     = -( Jpv_t*ddv - rpt_t )
-        ddpt =    Jpp_th*s
-        s    = -( Jpfp*ddpt + Jpfv*ddv - rpf )
-        ddpf = Jpf_h \ s
-        dv  .+=  ddv
-        dpt .+=  ddpt
-        dpf .+=  ddpf
-        @printf("  --- iteration %d --- \n",itPH);
-        @printf("  ||res.v ||=%2.2e\n", norm(rv)/ 1)
-        @printf("  ||res.pt||=%2.2e\n", norm(rpt)/1)
-        @printf("  ||res.pf||=%2.2e\n", norm(rpf)/1)
-        
-    #     if ((norm(rv)/length(rv)) < tol_linv) && ((norm(rpt)/length(rpt)) < tol_linpt) && ((norm(rpf)/length(rpf)) < tol_linpf), break; end
-    #     if ((norm(rv)/length(rv)) > (norm(rv0)/length(rv0)) && norm(rv)/length(rv) < tol_glob && (norm(rpt)/length(rpt)) > (norm(rpt0)/length(rpt0)) && norm(rpt)/length(rpt) < tol_glob && (norm(rpf)/length(rpf)) > (norm(rpf0)/length(rpf0)) && norm(rpf)/length(rpf) < tol_glob),
-    #         if noisy>=1, fprintf(' > Linear residuals do no converge further:\n'); break; end
-    #     end
-    #     rv0=rv; rpt0=rpt; rpf0=rpf; if (itPH==nPH), nfail=nfail+1; end
+    @time begin 
+        # Pre-conditionning (~Jacobi)
+        Jpv_t  = Jpv  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfv
+        Jpp_t  = Jpp  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfp
+        Jvv_t  = Kvv  - Jvp *spdiagm(1 ./ diag(Jpp_t))*Jpv 
+        Jpf_h  = cholesky(Jpf, check = false  )        # Cholesky factors
+        Jvv_th = cholesky(Jvv_t, check = false)        # Cholesky factors
+        Jpp_th = spdiagm(1 ./diag(Jpp_t));             # trivial inverse
+        @views for itPH=1:15
+            rv    .= -( Jvv*dv  + Jvp*dpt             - fv  )
+            rpt   .= -( Jpv*dv  + Jpp*dpt  + Jppf*dpf - fpt )
+            rpf   .= -( Jpfv*dv + Jpfp*dpt + Jpf*dpf  - fpf )
+            s     .= Jpf_h \ rpf
+            rpt_t .= -( Jppf*s - rpt)
+            s     .=    Jpp_th*rpt_t
+            rv_t  .= -( Jvp*s  - rv )
+            ddv   .= Jvv_th \ rv_t
+            s     .= -( Jpv_t*ddv - rpt_t )
+            ddpt  .=    Jpp_th*s
+            s     .= -( Jpfp*ddpt + Jpfv*ddv - rpf )
+            ddpf  .= Jpf_h \ s
+            dv   .+= ddv
+            dpt  .+= ddpt
+            dpf  .+= ddpf
+            @printf("  --- iteration %d --- \n",itPH);
+            @printf("  ||res.v ||=%2.2e\n", norm(rv)/ 1)
+            @printf("  ||res.pt||=%2.2e\n", norm(rpt)/1)
+            @printf("  ||res.pf||=%2.2e\n", norm(rpf)/1)
+        #     if ((norm(rv)/length(rv)) < tol_linv) && ((norm(rpt)/length(rpt)) < tol_linpt) && ((norm(rpf)/length(rpf)) < tol_linpf), break; end
+        #     if ((norm(rv)/length(rv)) > (norm(rv0)/length(rv0)) && norm(rv)/length(rv) < tol_glob && (norm(rpt)/length(rpt)) > (norm(rpt0)/length(rpt0)) && norm(rpt)/length(rpt) < tol_glob && (norm(rpf)/length(rpf)) > (norm(rpf0)/length(rpf0)) && norm(rpf)/length(rpf) < tol_glob),
+        #         if noisy>=1, fprintf(' > Linear residuals do no converge further:\n'); break; end
+        #     end
+        #     rv0=rv; rpt0=rpt; rpf0=rpf; if (itPH==nPH), nfail=nfail+1; end
+        end
     end
     
     dx = zeros(nVx + nVy + nPt + nPf)
@@ -954,3 +973,5 @@ let
 
     #--------------------------------------------#
 end
+
+main( (x=300, y=300) )

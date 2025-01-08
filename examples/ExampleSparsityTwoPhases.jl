@@ -272,10 +272,9 @@ end
 end
 
 
-let
+@views function (@main)(nc)
     
     # Resolution
-    nc = (x = 3, y = 3)
     
     # Define node types and set BC flags
     type = Numbering(
@@ -355,3 +354,5 @@ let
     display(P - P')
 
 end
+
+main( (x=3, y=3) )
