@@ -39,7 +39,7 @@ Base.@kwdef mutable struct NumberingStokes
     Pt ::Union{StokesPattern, Missing} = missing
 end
 
-function NumberingStokes!(N, nc)
+function Numbering_Stokes!(N, nc)
     
     ndof  = 0
     neq   = 0
@@ -267,7 +267,7 @@ let
     numbering.Pt.patternVx = @SMatrix([0 1 0; 0 1 0])
     numbering.Pt.patternVy = @SMatrix([0 0; 1 1 ; 0 0]) 
     numbering.Pt.patternPt = @SMatrix([1])
-    num        = NumberingStokes!(numbering, nc)
+    num        = Numbering_Stokes!(numbering, nc)
 
     @info "Assembly"
     M  = SparsityPatternStokes(numbering, nc)

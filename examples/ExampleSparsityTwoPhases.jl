@@ -1,25 +1,28 @@
 using StagFDTools, ExtendableSparse, StaticArrays
 
-struct NumberingV <: AbstractPattern # ??? where is AbstractPattern defined 
+struct NumberingV <: AbstractPattern
     Vx
     Vy
     Pt
+    Pf
 end
 
-struct Numbering{Tx,Ty,Tp}
+struct Numbering{Tx,Ty,Tp,Tpf}
     Vx::Tx
     Vy::Ty
     Pt::Tp
+    Pf::Tpf
 end
 
 function Base.getindex(x::Numbering, i::Int64)
-    @assert 0 < i < 4 
+    @assert 0 < i < 5 
     i == 1 && return x.Vx
     i == 2 && return x.Vy
     i == 3 && return x.Pt
+    i == 4 && return x.Pf
 end
 
-function NumberingStokes2!(N, type, nc)
+function NumberingTwoPhases!(N, type, nc)
     
     ndof  = 0
     neq   = 0
@@ -108,9 +111,34 @@ function NumberingStokes2!(N, type, nc)
 
     neq = maximum(N.Pt)
 
+    ############ Numbering Pf ############
+
+    neq_Pf                    = nc.x * nc.y
+    N.Pf[2:end-1,2:end-1] .= reshape(1:neq_Pf, nc.x, nc.y)
+
+    # Make periodic in x
+    for j in axes(type.Pf,2)
+        if type.Pf[1,j] === :periodic
+            N.Pf[1,j] = N.Pf[end-1,j]
+        end
+        if type.Pf[end,j] === :periodic
+            N.Pf[end,j] = N.Pf[2,j]
+        end
+    end
+
+    # Make periodic in y
+    for i in axes(type.Pf,1)
+        if type.Pf[i,1] === :periodic
+            N.Pf[i,1] = N.Pf[i,end-1]
+        end
+        if type.Pf[i,end] === :periodic
+            N.Pf[i,end] = N.Pf[i,2]
+        end
+    end
+
 end
 
-@views function SparsityPatternStokes2!(K, num, pattern, nc) 
+@views function SparsityPatternTwoPhases!(K, num, pattern, nc) 
     ############ Numbering Vx ############
     shift  = (x=1, y=2)
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
@@ -129,10 +157,17 @@ end
             end
         end
         # Vx --- Pt
-        Local = num.Pt[i-1:i+1,j-1:j] .* pattern[1][3]
+        Local = num.Pt[i-1:i,j-2:j] .* pattern[1][3]
         for jj in axes(Local,2), ii in axes(Local,1)
             if (Local[ii,jj]>0) && num.Vx[i,j]>0
                 K[1][3][num.Vx[i,j], Local[ii,jj]] = 1 
+            end
+        end
+        # Vx --- Pf
+        Local = num.Pf[i-1:i,j-2:j] .* pattern[1][4]
+        for jj in axes(Local,2), ii in axes(Local,1)
+            if (Local[ii,jj]>0) && num.Vx[i,j]>0
+                K[1][4][num.Vx[i,j], Local[ii,jj]] = 1 
             end
         end
     end
@@ -154,25 +189,32 @@ end
             end
         end
         # Vy --- Pt
-        Local = num.Pt[i-1:i,j-1:j+1] .* pattern[2][3]
+        Local = num.Pt[i-2:i,j-1:j] .* pattern[2][3]
         for jj in axes(Local,2), ii in axes(Local,1)
             if (Local[ii,jj]>0) && num.Vy[i,j]>0
                 K[2][3][num.Vy[i,j], Local[ii,jj]] = 1 
             end
         end
+        # Vy --- Pf
+        Local = num.Pf[i-2:i,j-1:j] .* pattern[2][4]
+        for jj in axes(Local,2), ii in axes(Local,1)
+            if (Local[ii,jj]>0) && num.Vy[i,j]>0
+                K[2][4][num.Vy[i,j], Local[ii,jj]] = 1 
+            end
+        end
     end
-    # ############ Numbering Pt ############
+    ############ Numbering Pt ############
     shift  = (x=1, y=1)
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
         # Pt --- Vx
-        Local = num.Vx[i-1:i+1,j:j+1] .* pattern[3][1]
+        Local = num.Vx[i:i+1,j:j+2] .* pattern[3][1]
         for jj in axes(Local,2), ii in axes(Local,1)
             if (Local[ii,jj]>0) && num.Pt[i,j]>0
                 K[3][1][num.Pt[i,j], Local[ii,jj]] = 1 
             end
         end
         # Pt --- Vy
-        Local = num.Vy[i:i+1,j-1:j+1] .* pattern[3][2]
+        Local = num.Vy[i:i+2,j:j+1] .* pattern[3][2]
         for jj in axes(Local,2), ii in axes(Local,1)
             if (Local[ii,jj]>0) && num.Pt[i,j]>0
                 K[3][2][num.Pt[i,j], Local[ii,jj]] = 1 
@@ -185,6 +227,45 @@ end
                 K[3][3][num.Pt[i,j], Local[ii,jj]] = 1 
             end
         end
+        # Pt --- Pf
+        Local = num.Pf[i,j] .* pattern[3][4]
+        for jj in axes(Local,2), ii in axes(Local,1)
+            if (Local[ii,jj]>0) && num.Pt[i,j]>0
+                K[3][4][num.Pt[i,j], Local[ii,jj]] = 1 
+            end
+        end
+    end
+    ############ Numbering Pf ############
+    shift  = (x=1, y=1)
+    for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
+        # Pf --- Vx
+        Local = num.Vx[i:i+1,j:j+2] .* pattern[4][1]
+        for jj in axes(Local,2), ii in axes(Local,1)
+            if (Local[ii,jj]>0) && num.Pf[i,j]>0
+                K[4][1][num.Pf[i,j], Local[ii,jj]] = 1 
+            end
+        end
+        # Pf --- Vy
+        Local = num.Vy[i:i+2,j:j+1] .* pattern[4][2]
+        for jj in axes(Local,2), ii in axes(Local,1)
+            if (Local[ii,jj]>0) && num.Pf[i,j]>0
+                K[4][2][num.Pf[i,j], Local[ii,jj]] = 1 
+            end
+        end
+        # Pf --- Pt
+        Local = num.Pt[i,j] .* pattern[4][3]
+        for jj in axes(Local,2), ii in axes(Local,1)
+            if (Local[ii,jj]>0) && num.Pf[i,j]>0
+                K[4][3][num.Pf[i,j], Local[ii,jj]] = 1 
+            end
+        end
+        # Pf --- Pf
+        Local = num.Pf[i-1:i+1,j-1:j+1] .* pattern[4][4]
+        for jj in axes(Local,2), ii in axes(Local,1)
+            if (Local[ii,jj]>0) && num.Pf[i,j]>0
+                K[4][4][num.Pf[i,j], Local[ii,jj]] = 1 
+            end
+        end
     end
     ############ End ############
     return K
@@ -192,16 +273,15 @@ end
 
 
 let
-    physics = Physics()
-    physics.Stokes = true
     
     # Resolution
-    nc = (x = 4, y = 3)
+    nc = (x = 3, y = 3)
     
     # Define node types and set BC flags
     type = Numbering(
         fill(:out, (nc.x+3, nc.y+4)),
         fill(:out, (nc.x+4, nc.y+3)),
+        fill(:out, (nc.x+2, nc.y+2)),
         fill(:out, (nc.x+2, nc.y+2)),
     )
     # -------- Vx -------- #
@@ -218,12 +298,19 @@ let
     type.Vy[2:end-1,end-1]   .= :constant 
     # -------- Pt -------- #
     type.Pt[2:end-1,2:end-1] .= :in
+    # -------- Pf -------- #
+    type.Pf[2:end-1,2:end-1] .= :in
+    type.Pf[1,:]             .= :Dirichlet 
+    type.Pf[end,:]           .= :Dirichlet 
+    type.Pf[:,1]             .= :Dirichlet
+    type.Pf[:,end]           .= :Dirichlet
     
     # Stencil extent for each block matrix
     pattern = Numbering(
-        Numbering(@SMatrix([0 1 0; 1 1 1; 0 1 0]),                 @SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]), @SMatrix([0 0; 1 1; 0 0])), 
-        Numbering(@SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]),  @SMatrix([0 1 0; 1 1 1; 0 1 0]),                @SMatrix([0 1 0; 0 1 0])), 
-        Numbering(@SMatrix([0 0; 1 1; 0 0]),                       @SMatrix([0 1 0; 0 1 0]),                       @SMatrix([1]))
+        Numbering(@SMatrix([0 1 0; 1 1 1; 0 1 0]),                 @SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]), @SMatrix([0 1 0;  0 1 0]),        @SMatrix([0 1 0;  0 1 0])), 
+        Numbering(@SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]),  @SMatrix([0 1 0; 1 1 1; 0 1 0]),                @SMatrix([0 0; 1 1; 0 0]),        @SMatrix([0 0; 1 1; 0 0])),
+        Numbering(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]),                    @SMatrix([1])),
+        Numbering(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]),                    @SMatrix([1 1 1; 1 1 1; 1 1 1])),
     )
 
     # Equation numbering
@@ -231,31 +318,40 @@ let
         fill(0, (nc.x+3, nc.y+4)),
         fill(0, (nc.x+4, nc.y+3)),
         fill(0, (nc.x+2, nc.y+2)),
+        fill(0, (nc.x+2, nc.y+2)),
     )
-    NumberingStokes2!(number, type, nc)
+    NumberingTwoPhases!(number, type, nc)
 
     # Sparse matrix assembly
     nVx   = maximum(number.Vx)
     nVy   = maximum(number.Vy)
     nPt   = maximum(number.Pt)
+    nPf   = maximum(number.Pf)
     M = Numbering(
-        Numbering(ExtendableSparseMatrix(nVx, nVx), ExtendableSparseMatrix(nVx, nVy), ExtendableSparseMatrix(nVx, nPt)), 
-        Numbering(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt)), 
-        Numbering(ExtendableSparseMatrix(nPt, nVx), ExtendableSparseMatrix(nPt, nVy), ExtendableSparseMatrix(nPt, nPt))
+        Numbering(ExtendableSparseMatrix(nVx, nVx), ExtendableSparseMatrix(nVx, nVy), ExtendableSparseMatrix(nVx, nPt), ExtendableSparseMatrix(nVx, nPt)), 
+        Numbering(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt), ExtendableSparseMatrix(nVy, nPt)), 
+        Numbering(ExtendableSparseMatrix(nPt, nVx), ExtendableSparseMatrix(nPt, nVy), ExtendableSparseMatrix(nPt, nPt), ExtendableSparseMatrix(nPt, nPf)),
+        Numbering(ExtendableSparseMatrix(nPf, nVx), ExtendableSparseMatrix(nPf, nVy), ExtendableSparseMatrix(nPf, nPt), ExtendableSparseMatrix(nPf, nPf)),
     )
 
-    @info "Assembly, ndof  = $(nVx + nVy + nPt)"
-    SparsityPatternStokes2!(M, number, pattern, nc)
+    @info "Assembly, ndof  = $(nVx + nVy + nPt + nPf)"
+    SparsityPatternTwoPhases!(M, number, pattern, nc)
 
     # Stokes operator as block matrices
     K  = [M.Vx.Vx M.Vx.Vy; M.Vy.Vx M.Vy.Vy]
     Q  = [M.Vx.Pt; M.Vy.Pt]
     Qᵀ = [M.Pt.Vx M.Pt.Vy]
-
+    P  = M.Pf.Pf
     @info "Velocity block symmetry"
     display(K - K')
 
     @info "Grad-Div symmetry"
     display(Q' - Qᵀ)
+
+    @info "Grad-Div symmetry"
+    display(Q' - Qᵀ)
+
+    @info "Fluid pressure symmetry"
+    display(P - P')
 
 end

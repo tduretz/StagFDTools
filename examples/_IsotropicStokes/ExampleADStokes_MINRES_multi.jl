@@ -75,7 +75,7 @@ function preconditioned_bicgstab(A, b, ApplyPC, Dinv, x0 = zeros(length(b)), tol
     return x
 end
 
-struct NumberingV <: AbstractPattern # ??? where is AbstractPattern defined 
+struct NumberingV <: AbstractPattern
     Vx
     Vy
     Pt
@@ -433,7 +433,7 @@ let
     # Resolution
     nc = (x = 30, y = 32)
 
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_p = RangesStokes(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_p = Ranges_Stokes(nc)
 
     #--------------------------------------------#
     # Boundary conditions
@@ -479,7 +479,7 @@ let
         fill(0, size_y),
         fill(0, size_p),
     )
-    NumberingStokes!(number, type, nc)
+    Numbering_Stokes!(number, type, nc)
 
     #--------------------------------------------#
     # Stencil extent for each block matrix
@@ -544,7 +544,7 @@ let
 
     # Set global residual vector
     r = zeros(nVx + nVy + nPt)
-    SetRHS!(r, R, number, type, nc)
+    SetRHS_Stokes!(r, R, number, type, nc)
 
     #--------------------------------------------#
     # Assembly
@@ -580,7 +580,7 @@ let
 
     Dinv   = (x=zeros(size_x...), y=zeros(size_y...))
     Dinv_p = zeros(size_p...)
-    UpdateStokeSolution!(Dinv, Dinv_p, diag(D_PC_inv), number, type, nc)
+    UpdateSolution_Stokes!(Dinv, Dinv_p, diag(D_PC_inv), number, type, nc)
 
     # #--------------------------------------------#
     # n = nVx + nVy + nPt
@@ -652,10 +652,10 @@ let
     # #--------------------------------------------#
     # dx = zeros(nVx + nVy + nPt)
     # Δx = (x=dV.x, y=dV.y, p=dPt )
-    # SetRHS!(dx, Δx, number, type, nc)
+    # SetRHS_Stokes!(dx, Δx, number, type, nc)
 
     #--------------------------------------------#
-    UpdateStokeSolution!(V, Pt, dx, number, type, nc)
+    UpdateSolution_Stokes!(V, Pt, dx, number, type, nc)
 
     # #--------------------------------------------#
     # Residual check

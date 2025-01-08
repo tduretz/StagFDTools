@@ -9,7 +9,7 @@ include("Poisson.jl")
 export RangesPoisson, NumberingPoisson!, SparsityPatternPoisson, SparsityPatternPoisson_SA
 
 include("Stokes.jl")
-export RangesStokes, NumberingStokes!, SetRHS!, UpdateStokeSolution!
+export Ranges_Stokes, Numbering_Stokes!, SetRHS_Stokes!, UpdateSolution_Stokes!
 
 include("Utils.jl")
 export printxy

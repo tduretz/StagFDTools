@@ -10,7 +10,7 @@ include("BasicIterativeSolvers.jl")
 function rayleigh_quotient(A, v)
     return (v' * A * v) / (v' * v)
 end
-struct NumberingV <: AbstractPattern # ??? where is AbstractPattern defined 
+struct NumberingV <: AbstractPattern
     Vx
     Vy
     Pt
@@ -366,7 +366,7 @@ end
 @views function (@main)(nc) 
     #--------------------------------------------#
     # Resolution
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_p = RangesStokes(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_p = Ranges_Stokes(nc)
 
     #--------------------------------------------#
     # Boundary conditions
@@ -412,7 +412,7 @@ end
         fill(0, size_y),
         fill(0, size_p),
     )
-    NumberingStokes!(number, type, nc)
+    Numbering_Stokes!(number, type, nc)
 
     #--------------------------------------------#
     # Stencil extent for each block matrix
@@ -466,7 +466,7 @@ end
 
     # Set global residual vector
     r = zeros(nVx + nVy + nPt)
-    SetRHS!(r, R, number, type, nc)
+    SetRHS_Stokes!(r, R, number, type, nc)
 
     #--------------------------------------------#
     # Assembly
@@ -537,7 +537,7 @@ end
 
     # Dinv   = (x=zeros(size_x...), y=zeros(size_y...))
     # Dinv_p = zeros(size_p...)
-    # UpdateStokeSolution!(Dinv, Dinv_p, diag(D_PC_inv), number, type, nc)
+    # UpdateSolution_Stokes!(Dinv, Dinv_p, diag(D_PC_inv), number, type, nc)
 
     # # #--------------------------------------------#
     # n = nVx + nVy + nPt
@@ -608,10 +608,10 @@ end
 
     # dx = zeros(nVx + nVy + nPt)
     # Δx = (x=dV.x, y=dV.y, p=dPt )
-    # SetRHS!(dx, Δx, number, type, nc)
+    # SetRHS_Stokes!(dx, Δx, number, type, nc)
 
     #--------------------------------------------#
-    UpdateStokeSolution!(V, Pt, dx, number, type, nc)
+    UpdateSolution_Stokes!(V, Pt, dx, number, type, nc)
 
     #--------------------------------------------#
     # Residual check

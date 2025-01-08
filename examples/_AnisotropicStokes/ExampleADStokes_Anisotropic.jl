@@ -4,7 +4,7 @@ using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 import GLMakie
 
-struct NumberingV <: AbstractPattern # ??? where is AbstractPattern defined 
+struct NumberingV <: AbstractPattern
     Vx
     Vy
     Pt
@@ -360,7 +360,7 @@ let
     nc = (x = 7, y = 7)
     # nc = (x = 3, y = 3)
 
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_p = RangesStokes(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_p = Ranges_Stokes(nc)
 
     #--------------------------------------------#
     # Boundary conditions
@@ -406,7 +406,7 @@ let
         fill(0, size_y),
         fill(0, size_p),
     )
-    NumberingStokes!(number, type, nc)
+    Numbering_Stokes!(number, type, nc)
 
     #--------------------------------------------#
     # Stencil extent for each block matrix
@@ -468,7 +468,7 @@ let
 
     # Set global residual vector
     r = zeros(nVx + nVy + nPt)
-    SetRHS!(r, R, number, type, nc)
+    SetRHS_Stokes!(r, R, number, type, nc)
 
     #--------------------------------------------#
     # Assembly
@@ -494,7 +494,7 @@ let
 
     #--------------------------------------------#
 
-    UpdateStokeSolution!(V, Pt, dx, number, type, nc)
+    UpdateSolution_Stokes!(V, Pt, dx, number, type, nc)
 
     #--------------------------------------------#
     # Residual check

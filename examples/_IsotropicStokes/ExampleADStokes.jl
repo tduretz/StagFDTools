@@ -4,9 +4,8 @@ using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 import GLMakie
 
-include("BasicIterativeSolvers.jl")
 
-struct NumberingV <: AbstractPattern # ??? where is AbstractPattern defined 
+struct NumberingV <: AbstractPattern 
     Vx
     Vy
     Pt
@@ -364,7 +363,7 @@ let
     # Resolution
     nc = (x = 30, y = 32)
 
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_p = RangesStokes(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_p = Ranges_Stokes(nc)
 
     #--------------------------------------------#
     # Boundary conditions
@@ -410,12 +409,12 @@ let
         fill(0, size_y),
         fill(0, size_p),
     )
-    NumberingStokes!(number, type, nc)
+    Numbering_Stokes!(number, type, nc)
 
     #--------------------------------------------#
     # Stencil extent for each block matrix
     pattern = Numbering(
-        Numbering(@SMatrix([0 1 0; 1 1 1; 0 1 0]),                 @SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]), @SMatrix([0 1 0; 0 1 0])), 
+        Numbering(@SMatrix([0 1 0; 1 1 1; 0 1 0]),                 @SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]), @SMatrix([0 1 0;  0 1 0])), 
         Numbering(@SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]),  @SMatrix([0 1 0; 1 1 1; 0 1 0]),                @SMatrix([0 0; 1 1; 0 0])), 
         Numbering(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]))
     )
@@ -464,7 +463,7 @@ let
 
     # Set global residual vector
     r = zeros(nVx + nVy + nPt)
-    SetRHS!(r, R, number, type, nc)
+    SetRHS_Stokes!(r, R, number, type, nc)
 
     #--------------------------------------------#
     # Assembly
@@ -484,20 +483,7 @@ let
     dx = - 𝑀 \ r
 
     #--------------------------------------------#
-    # # Iterative solver 
-    # D_PC    = I(size(𝑀,1)) # no preconditioner
-
-    # # Diagonal preconditioner
-    # D_PC    = spdiagm(diag(𝑀))
-    # diag_Pt = max(nc...) ./ η.p[inx_Pt, iny_Pt]
-    # D_PC[(nVx+nVy+1):end, (nVx+nVy+1):end] .+= spdiagm(diag_Pt[:])
-    # D_PC_inv =  spdiagm(1 ./ diag(D_PC))
-
-    # dx = preconditioned_minres(𝑀, -r, ApplyPC, D_PC_inv)
-    # # dx = preconditioned_bicgstab(𝑀, b, ApplyPC, D_PC_inv)
-
-    #--------------------------------------------#
-    UpdateStokeSolution!(V, Pt, dx, number, type, nc)
+    UpdateSolution_Stokes!(V, Pt, dx, number, type, nc)
 
     #--------------------------------------------#
     # Residual check

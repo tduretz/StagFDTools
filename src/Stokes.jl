@@ -1,8 +1,8 @@
-function RangesStokes(nc)     
+function Ranges_Stokes(nc)     
     return (inx_Vx = 2:nc.x+2, iny_Vx = 3:nc.y+2, inx_Vy = 3:nc.x+2, iny_Vy = 2:nc.y+2, inx_Pt = 2:nc.x+1, iny_Pt = 2:nc.y+1, size_x = (nc.x+3, nc.y+4), size_y = (nc.x+4, nc.y+3), size_p = (nc.x+2, nc.y+2))
 end
 
-function SetRHS!(r, R, number, type, nc)
+function SetRHS_Stokes!(r, R, number, type, nc)
 
     nVx, nVy   = maximum(number.Vx), maximum(number.Vy)
 
@@ -26,7 +26,7 @@ function SetRHS!(r, R, number, type, nc)
     end
 end
 
-function UpdateStokeSolution!(V, Pt, dx, number, type, nc)
+function UpdateSolution_Stokes!(V, Pt, dx, number, type, nc)
 
     nVx, nVy   = maximum(number.Vx), maximum(number.Vy)
 
@@ -50,7 +50,7 @@ function UpdateStokeSolution!(V, Pt, dx, number, type, nc)
     end
 end
 
-function NumberingStokes!(N, type, nc)
+function Numbering_Stokes!(N, type, nc)
     
     ndof  = 0
     neq   = 0
