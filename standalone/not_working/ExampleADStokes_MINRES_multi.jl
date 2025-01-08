@@ -455,7 +455,7 @@ let
 
     η0       = 1.0e-3
     η1       = 1.0
-    ηi    = (s=min(η0,η1), w=1/min(η0,η1)) 
+    ηi    = (w=min(η0,η1), s=1/min(η0,η1)) 
     x_inc = [0.0       0.2  -0.3 -0.4  0.0 -0.3 0.4  0.3  0.35 -0.1] *10
     y_inc = [0.0       0.4   0.4 -0.3 -0.2  0.2 -0.2 -0.4 0.2  -0.4] *10
     r_inc = [0.2       0.09  0.05 0.08 0.08  0.1 0.07 0.08 0.07 0.07]*10
@@ -500,7 +500,7 @@ let
 
     # Diagonal preconditioner
     D_PC    = spdiagm(diag(𝑀))
-    diag_Pt = max(nc...) ./ η.p[inx_Pt, iny_Pt]
+    diag_Pt = 1/2*max(nc...) ./ η.p[inx_Pt, iny_Pt]
     D_PC[(nVx+nVy+1):end, (nVx+nVy+1):end] .+= spdiagm(diag_Pt[:])
     D_PC_inv =  spdiagm(1 ./ diag(D_PC))
 
@@ -513,7 +513,7 @@ let
     Dinv_p = zeros(size_p...)
     UpdateStokeSolution!(Dinv, Dinv_p, diag(D_PC_inv), number, type, nc)
 
-    # #--------------------------------------------#
+    #--------------------------------------------#
     n = nVx + nVy + nPt
 
     dV   = (x=zeros(size_x...), y=zeros(size_y...))
@@ -526,6 +526,10 @@ let
     p    = (x=zeros(size_x...), y=zeros(size_y...))
     p_p  = zeros(size_p...)
 
+    R.x .*= -1
+    R.y .*= -1
+    R.p .*= -1
+
     # Initial guess (zero vector)
     dV.x .= 0.; dV.y .= 0.; dPt  .= 0.
     
@@ -537,7 +541,7 @@ let
     norm_r0 = sqrt(sum(R.x.*R.x) + sum(R.y.*R.y) + sum(Rp.*Rp)) 
     @show norm_r0
 
-    max_iter = 1
+    max_iter = 3000
     tol      = 1e-8
     
     # Iteration loop
@@ -548,15 +552,15 @@ let
         ResidualMomentum2D_x!(Ap,   p, p_p, η, number, type, BC, nc, Δ)
         ResidualMomentum2D_y!(Ap,   p, p_p, η, number, type, BC, nc, Δ)
 
-        @show norm(Ap.x[inx_Vx, iny_Vx])
-        @show norm(Ap.y[inx_Vy, iny_Vy])
-        @show norm(Ap_p[inx_Pt, iny_Pt])
+        # @show norm(Ap.x[inx_Vx, iny_Vx])
+        # @show norm(Ap.y[inx_Vy, iny_Vy])
+        # @show norm(Ap_p[inx_Pt, iny_Pt])
         
         # Compute step size alpha
         r_dot_z = (dot(R.x, z.x) + dot(R.y, z.y) + dot(Rp, z_p))
         alpha   = r_dot_z / (dot(p.x, Ap.x) + dot(p.y, Ap.y) + dot(p_p, Ap_p) )
  
-        @show alpha
+        # @show alpha
 
         # Update the solution vector x
         V.x .+= alpha .* p.x
@@ -572,6 +576,7 @@ let
         # Check for convergence
         if norm_r_new / norm_r0 < tol  #|| norm_r_new/sqrt(n) < 2*tol 
             println("Converged in $k iterations.")
+            isnan(norm_r_new) ? erros("Nans") : nothing
             break
         end
         
@@ -601,10 +606,10 @@ let
     ResidualMomentum2D_x!(R,  V, Pt, η, number, type, BC, nc, Δ)
     ResidualMomentum2D_y!(R,  V, Pt, η, number, type, BC, nc, Δ)
     
-    # @info "Residuals"
-    # @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
-    # @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-    # @show norm(Rp[inx_Pt,iny_Pt])/sqrt(nPt)
+    @info "Residuals"
+    @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
+    @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
+    @show norm(Rp[inx_Pt,iny_Pt])/sqrt(nPt)
 
     #--------------------------------------------#
     @info "Velocity block symmetry"
@@ -623,7 +628,7 @@ let
 
     p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc))
     p2 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc))
-    p3 = heatmap(xc, yc, Pt[inx_Pt,iny_Pt]' .- mean(Pt[inx_Pt,iny_Pt]), aspect_ratio=1, xlim=extrema(xc))
+    p3 = heatmap(xc, yc, Pt[inx_Pt,iny_Pt]' .- mean(Pt[inx_Pt,iny_Pt]), aspect_ratio=1, xlim=extrema(xc), clim=(-10,10))
     display(plot(p1, p2, p3))
 
     #--------------------------------------------#
