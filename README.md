@@ -81,3 +81,10 @@ This package aims at generating flexible FD stencils that can interoperate with 
   ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅ 
   ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅ 
 ```
+
+# Power-law Stokes
+![image](https://github.com/user-attachments/assets/e29d72a5-93cf-4cc5-84a1-c353a05a4edb)
+
+# Two-phase flow
+![image](https://github.com/user-attachments/assets/e5606f59-1a56-43e8-84d9-25381318eb0c)
+
