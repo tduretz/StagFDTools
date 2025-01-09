@@ -23,7 +23,7 @@ function Base.getindex(x::Numbering, i::Int64)
     i == 3 && return x.Pt
 end
 
-function Momentum_x(Vx, Vy, Pt, η, type, bcv, Δ)
+function Momentum_x(Vx, Vy, Pt, phases, materials, type, bcv, Δ)
     
     invΔx    = 1 / Δ.x
     invΔy    = 1 / Δ.y
@@ -63,22 +63,29 @@ function Momentum_x(Vx, Vy, Pt, η, type, bcv, Δ)
 
     ε̇xx = Dxx - 1/2*Dkk
     ε̇yy = Dyy - 1/2*Dkk
-    ε̇xy = 1/2 * ( Dxy + Dyx ) 
+    ε̇xy = 1/2 * ( Dxy + Dyx )
+    
+    ε̇x̄x̄ = ( ε̇xx[:,1:end-1] + ε̇xx[:,2:end]) / 2
+    ε̇ȳȳ = ( ε̇yy[:,1:end-1] + ε̇yy[:,2:end]) / 2
+    ε̇x̄ȳ = ( ε̇xy[1:end-1,:] + ε̇xy[2:end,:]) / 2
+    ε̇II = sqrt.(1/2*(ε̇x̄x̄.^2 .+ ε̇ȳȳ.^2) .+ ε̇x̄ȳ.^2)
+    n   = materials.n[phases]
+    η0  = materials.η0[phases]
+    ηy  =  η0 .* ε̇II.^(1 ./ n .- 1.0 )
 
-    τxx = 2 * 1/2 * ( ε̇xx[:,1:end-1] +  ε̇xx[:,2:end] ) .* η.y[2:end-1,2:end-1]
-    τyy = 2 * 1/2 * ( ε̇yy[:,1:end-1] +  ε̇yy[:,2:end] ) .* η.y[2:end-1,2:end-1]
-    τxy = 2 * 1/2 * ( ε̇xy[1:end-1,:] +  ε̇xy[2:end,:] ) .* η.y[2:end-1,2:end-1]
-    # τxy = 2 * 1/2 * ( 1/2 * (Dxy[1:end-1,:] + Dxy[2:end,:]) .* η.y[2:end-1,2:end-1]  + 1/2*(Dyx[1:end-1,:] +  Dyx[2:end,:]) .* η.y[2:end-1,2:end-1]' )
+    τx̄x̄ = 2 .* ηy .* ε̇x̄x̄
+    τȳȳ = 2 .* ηy .* ε̇ȳȳ
+    τx̄ȳ = 2 .* ηy .* ε̇x̄ȳ
 
-    fx  = 1/2*(τxx[2,1] + τxx[2,2] - τxx[1,1] - τxx[1,2]) * invΔx 
-    fx += ( (τxy[1,2] + τxy[2,2])/2 - (τxy[1,1] + τxy[2,1])/2) * invΔy
+    fx  = 1/2*(τx̄x̄[2,1] + τx̄x̄[2,2] - τx̄x̄[1,1] - τx̄x̄[1,2]) * invΔx 
+    fx += ( (τx̄ȳ[1,2] + τx̄ȳ[2,2])/2 - (τx̄ȳ[1,1] + τx̄ȳ[2,1])/2) * invΔy
     fx -= (Pt[2,2] - Pt[1,2]) * invΔx
     fx *= -1 * Δ.x * Δ.y
 
     return fx
 end
 
-function Momentum_y(Vx, Vy, Pt, η, type, bcv, Δ)
+function Momentum_y(Vx, Vy, Pt, phases, materials, type, bcv, Δ)
     
     invΔx    = 1 / Δ.x
     invΔy    = 1 / Δ.y
@@ -120,26 +127,33 @@ function Momentum_y(Vx, Vy, Pt, η, type, bcv, Δ)
     ε̇yy = Dyy - 1/2*Dkk
     ε̇xy = 1/2 * ( Dxy + Dyx ) 
 
-    τxx = 2 * 1/2 * ( ε̇xx[1:end-1,:] +  ε̇xx[2:end,:] ) .* η.x[2:end-1,2:end-1]
-    τyy = 2 * 1/2 * ( ε̇yy[1:end-1,:] +  ε̇yy[2:end,:] ) .* η.x[2:end-1,2:end-1]
-    τxy = 2 * 1/2 * ( ε̇xy[:,1:end-1] +  ε̇xy[:,2:end] ) .* η.x[2:end-1,2:end-1]
-    
-    fy  = 1/2*(τyy[1,2] + τyy[2,2] - τyy[1,1] - τyy[2,1]) * invΔy
-    fy += ((τxy[2,1] + τxy[2,2])/2 - (τxy[1,1] + τxy[1,2])/2) * invΔx
+    ε̇x̄x̄ = 1/2 * ( ε̇xx[1:end-1,:] +  ε̇xx[2:end,:] )
+    ε̇ȳȳ = 1/2 * ( ε̇yy[1:end-1,:] +  ε̇yy[2:end,:] )
+    ε̇x̄ȳ = 1/2 * ( ε̇xy[:,1:end-1] +  ε̇xy[:,2:end] )
+    ε̇II = sqrt.(1/2*(ε̇x̄x̄.^2 + ε̇ȳȳ.^2) + ε̇x̄ȳ.^2)
+    n   = materials.n[phases]
+    η0  = materials.η0[phases]
+    ηx  =  η0 .* ε̇II.^(1 ./ n .- 1.0 )
+
+    τx̄x̄ = 2 .* ηx .* ε̇x̄x̄
+    τȳȳ = 2 .* ηx .* ε̇ȳȳ
+    τx̄ȳ = 2 .* ηx .* ε̇x̄ȳ
+
+    fy  = 1/2*(τȳȳ[1,2] + τȳȳ[2,2] - τȳȳ[1,1] - τȳȳ[2,1]) * invΔy
+    fy += ((τx̄ȳ[2,1] + τx̄ȳ[2,2])/2 - (τx̄ȳ[1,1] + τx̄ȳ[1,2])/2) * invΔx
     fy -= (Pt[2,2] - Pt[2,1]) * invΔy
     fy *= -1 * Δ.x * Δ.y
     
     return fy
 end
 
-function Continuity(Vx, Vy, Pt, η_loc, type_loc, bcv_loc, Δ)
+function Continuity(Vx, Vy, Pt, type_loc, bcv_loc, Δ)
     invΔx    = 1 / Δ.x
     invΔy    = 1 / Δ.y
-    fp = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy)
-    return fp
+    return ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy)
 end
 
-function ResidualMomentum2D_x!(R, V, P, η, number, type, BC, nc, Δ) 
+function ResidualMomentum2D_x!(R, V, P, phases, materials, number, type, BC, nc, Δ) 
                 
     shift    = (x=1, y=2)
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x+1
@@ -149,20 +163,18 @@ function ResidualMomentum2D_x!(R, V, P, η, number, type, BC, nc, Δ)
         bcy_loc    = SMatrix{4,4}(    BC.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
         typex_loc  = SMatrix{3,3}(  type.Vx[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         typey_loc  = SMatrix{4,4}(  type.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
-        ηx_loc     = SMatrix{3,3}(      η.x[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        ηy_loc     = SMatrix{4,4}(      η.y[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
+        phy_loc    = SMatrix{2,2}( phases.y[ii,jj] for ii in i:i+1,   jj in j-1:j  )
         P_loc      = SMatrix{2,3}(        P[ii,jj] for ii in i-1:i,   jj in j-2:j  )
-        η_loc      = (x=ηx_loc, y=ηy_loc)
         bcv_loc    = (x=bcx_loc, y=bcy_loc)
         type_loc   = (x=typex_loc, y=typey_loc)
         if type.Vx[i,j] == :in
-            R.x[i,j]   = Momentum_x(Vx_loc, Vy_loc, P_loc, η_loc, type_loc, bcv_loc, Δ)
+            R.x[i,j]   = Momentum_x(Vx_loc, Vy_loc, P_loc, phy_loc, materials, type_loc, bcv_loc, Δ)
         end
     end
     return nothing
 end
 
-function AssembleMomentum2D_x!(K, V, P, η, num, pattern, type, BC, nc, Δ) 
+function AssembleMomentum2D_x!(K, V, P, phases, materials, num, pattern, type, BC, nc, Δ) 
 
     ∂R∂Vx = @MMatrix zeros(3,3)
     ∂R∂Vy = @MMatrix zeros(4,4)
@@ -177,21 +189,19 @@ function AssembleMomentum2D_x!(K, V, P, η, num, pattern, type, BC, nc, Δ)
             bcy_loc    = SMatrix{4,4}(    BC.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
             typex_loc  = SMatrix{3,3}(  type.Vx[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             typey_loc  = SMatrix{4,4}(  type.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
-            ηx_loc     = SMatrix{3,3}(      η.x[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-            ηy_loc     = SMatrix{4,4}(      η.y[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
+            phy_loc    = SMatrix{2,2}( phases.y[ii,jj] for ii in i:i+1,   jj in j-1:j  )
  
             Vx_loc     = MMatrix{3,3}(      V.x[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             Vy_loc     = MMatrix{4,4}(      V.y[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
             P_loc      = MMatrix{2,3}(        P[ii,jj] for ii in i-1:i,   jj in j-2:j  )
 
-            η_loc      = (x=ηx_loc, y=ηy_loc)
             bcv_loc    = (x=bcx_loc, y=bcy_loc)
             type_loc   = (x=typex_loc, y=typey_loc)
             
             ∂R∂Vx .= 0.
             ∂R∂Vy .= 0.
             ∂R∂Pt .= 0.
-            autodiff(Enzyme.Reverse, Momentum_x, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(η_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
+            autodiff(Enzyme.Reverse, Momentum_x, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(phy_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
             # Vx --- Vx
             Local = num.Vx[i-1:i+1,j-1:j+1] .* pattern[1][1]
             for jj in axes(Local,2), ii in axes(Local,1)
@@ -220,7 +230,7 @@ function AssembleMomentum2D_x!(K, V, P, η, num, pattern, type, BC, nc, Δ)
     return nothing
 end
 
-function ResidualMomentum2D_y!(R, V, P, η, number, type, BC, nc, Δ)                 
+function ResidualMomentum2D_y!(R, V, P, phases, materials, number, type, BC, nc, Δ)                 
     shift    = (x=2, y=1)
     for j in 1+shift.y:nc.y+shift.y+1, i in 1+shift.x:nc.x+shift.x
         Vx_loc     = MMatrix{4,4}(      V.x[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
@@ -229,20 +239,18 @@ function ResidualMomentum2D_y!(R, V, P, η, number, type, BC, nc, Δ)
         bcy_loc    = SMatrix{3,3}(    BC.Vy[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         typex_loc  = SMatrix{4,4}(  type.Vx[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
         typey_loc  = SMatrix{3,3}(  type.Vy[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        ηx_loc     = SMatrix{4,4}(      η.x[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
-        ηy_loc     = SMatrix{3,3}(      η.y[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+        phx_loc    = SMatrix{2,2}( phases.x[ii,jj] for ii in i-1:i,   jj in j:j+1  )
         P_loc      = MMatrix{3,2}(        P[ii,jj] for ii in i-2:i,   jj in j-1:j  )
-        η_loc      = (x=ηx_loc, y=ηy_loc)
         bcv_loc    = (x=bcx_loc, y=bcy_loc)
         type_loc   = (x=typex_loc, y=typey_loc)
         if type.Vy[i,j] == :in
-            R.y[i,j]   = Momentum_y(Vx_loc, Vy_loc, P_loc, η_loc, type_loc, bcv_loc, Δ)
+            R.y[i,j]   = Momentum_y(Vx_loc, Vy_loc, P_loc, phx_loc, materials, type_loc, bcv_loc, Δ)
         end
     end
     return nothing
 end
 
-function AssembleMomentum2D_y!(K, V, P, η, num, pattern, type, BC, nc, Δ) 
+function AssembleMomentum2D_y!(K, V, P, phases, materials, num, pattern, type, BC, nc, Δ) 
     
     ∂R∂Vy = @MMatrix zeros(3,3)
     ∂R∂Vx = @MMatrix zeros(4,4)
@@ -261,17 +269,15 @@ function AssembleMomentum2D_y!(K, V, P, η, num, pattern, type, BC, nc, Δ)
         bcy_loc    = SMatrix{3,3}(    BC.Vy[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         typex_loc  = SMatrix{4,4}(  type.Vx[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
         typey_loc  = SMatrix{3,3}(  type.Vy[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        ηx_loc     = SMatrix{4,4}(      η.x[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
-        ηy_loc     = SMatrix{3,3}(      η.y[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+        phx_loc    = SMatrix{2,2}( phases.x[ii,jj] for ii in i-1:i,   jj in j:j+1  )
         P_loc      = MMatrix{3,2}(        P[ii,jj] for ii in i-2:i,   jj in j-1:j  )
-        η_loc      = (x=ηx_loc, y=ηy_loc)
         bcv_loc    = (x=bcx_loc, y=bcy_loc)
         type_loc   = (x=typex_loc, y=typey_loc)
         if type.Vy[i,j] == :in
             ∂R∂Vx .= 0.
             ∂R∂Vy .= 0.
             ∂R∂Pt .= 0.
-            autodiff(Enzyme.Reverse, Momentum_y, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(η_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
+            autodiff(Enzyme.Reverse, Momentum_y, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(phx_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
             # Vy --- Vx
             Local = num.Vx[i-2:i+1,j-1:j+2] .* pattern[2][1]
             for jj in axes(Local,2), ii in axes(Local,1)
@@ -298,7 +304,7 @@ function AssembleMomentum2D_y!(K, V, P, η, num, pattern, type, BC, nc, Δ)
     return nothing
 end
 
-function ResidualContinuity2D!(R, V, P, η, number, type, BC, nc, Δ) 
+function ResidualContinuity2D!(R, V, P, phases, materials, number, type, BC, nc, Δ) 
                 
     shift    = (x=1, y=1)
     # (; bc_val, type, pattern, num) = numbering
@@ -309,15 +315,14 @@ function ResidualContinuity2D!(R, V, P, η, number, type, BC, nc, Δ)
         bcy_loc    = SMatrix{2,3}(    BC.Vy[ii,jj] for ii in i:i+1, jj in j:j+2)
         typex_loc  = SMatrix{3,2}(  type.Vx[ii,jj] for ii in i:i+2, jj in j:j+1) 
         typey_loc  = SMatrix{2,3}(  type.Vy[ii,jj] for ii in i:i+1, jj in j:j+2)
-        η_loc      =   SVector{4}([η.y[i+1,j] η.x[i,j+1] η.x[i+1,j+1] η.y[i+1,j+1]] )
         bcv_loc    = (x=bcx_loc, y=bcy_loc)
         type_loc   = (x=typex_loc, y=typey_loc)
-        R[i,j]     = Continuity(Vx_loc, Vy_loc, P[i,j], η_loc, type_loc, bcv_loc, Δ)
+        R.p[i,j]   = Continuity(Vx_loc, Vy_loc, P[i,j], type_loc, bcv_loc, Δ)
     end
     return nothing
 end
 
-function AssembleContinuity2D!(K, V, P, η, num, pattern, type, BC, nc, Δ) 
+function AssembleContinuity2D!(K, V, P, phases, materials, num, pattern, type, BC, nc, Δ) 
                 
     shift    = (x=1, y=1)
     # (; bc_val, type, pattern, num) = numbering
@@ -331,13 +336,12 @@ function AssembleContinuity2D!(K, V, P, η, num, pattern, type, BC, nc, Δ)
         bcy_loc    = SMatrix{2,3}(    BC.Vy[ii,jj] for ii in i:i+1, jj in j:j+2)
         typex_loc  = SMatrix{3,2}(  type.Vx[ii,jj] for ii in i:i+2, jj in j:j+1) 
         typey_loc  = SMatrix{2,3}(  type.Vy[ii,jj] for ii in i:i+1, jj in j:j+2)
-        η_loc      =   SVector{4}([η.y[i+1,j] η.x[i,j+1] η.x[i+1,j+1] η.y[i+1,j+1]] )
         bcv_loc    = (x=bcx_loc, y=bcy_loc)
         type_loc   = (x=typex_loc, y=typey_loc)
         
         ∂R∂Vx .= 0.
         ∂R∂Vy .= 0.
-        autodiff(Enzyme.Reverse, Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Const(P[i,j]), Const(η_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
+        autodiff(Enzyme.Reverse, Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Const(P[i,j]), Const(type_loc), Const(bcv_loc), Const(Δ))
 
         # Pt --- Vx
         Local = num.Vx[i:i+1,j:j+2] .* pattern[3][1]
@@ -357,10 +361,9 @@ function AssembleContinuity2D!(K, V, P, η, num, pattern, type, BC, nc, Δ)
     return nothing
 end
 
-let  
+@views function (@main)(nc)
     #--------------------------------------------#
     # Resolution
-    nc = (x = 12, y = 11)
 
     inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_p = Ranges_Stokes(nc)
 
@@ -435,7 +438,6 @@ let
     R  = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_p...))
     V  = (x=zeros(size_x...), y=zeros(size_y...))
     η  = (x= ones(size_x...), y= ones(size_y...), p=ones(size_p...) )
-    Rp = zeros(size_p...)
     Pt = zeros(size_p...)
     xv = LinRange(-L.x/2, L.x/2, nc.x+1)
     yv = LinRange(-L.y/2, L.y/2, nc.y+1)
@@ -445,6 +447,12 @@ let
     xvy = LinRange(-L.x/2-3Δ.x/2, L.x/2+3Δ.x/2, nc.x+4)
     yvy = LinRange(-L.y/2-Δ.y, L.y/2+Δ.y, nc.y+3)
     yvx = LinRange(-L.y/2-3Δ.y/2, L.y/2+3Δ.y/2, nc.y+4)
+    phases  = (x= ones(Int64, size_x...), y= ones(Int64, size_y...))  # phase on velocity points
+
+    materials = ( 
+        n  = [3.0 1.0],
+        η0 = [1e2 1e-1] 
+    )
 
     # Initial configuration
     ε̇  = -1.0
@@ -458,69 +466,70 @@ let
     # BC.Vx[inx_Vx,2]         .= ε̇.*-L.y/2
     # BC.Vx[inx_Vx,end-1]     .= ε̇.* L.y/2
 
-    η.x .= 1e2
-    η.y .= 1e2
-    η.x[(xvx.^2 .+ (yvx').^2) .<= 0.1^2] .= 1e-1 
-    η.y[(xvy.^2 .+ (yvy').^2) .<= 0.1^2] .= 1e-1
-    η.p .= 0.25.*(η.x[1:end-1,2:end-1].+η.x[2:end-0,2:end-1].+η.y[2:end-1,1:end-1].+η.y[2:end-1,2:end-0])
+    phases.x[(xvx.^2 .+ (yvx').^2) .<= 0.1^2] .= 2
+    phases.y[(xvy.^2 .+ (yvy').^2) .<= 0.1^2] .= 2
 
+    # # η.x[(xvx.^2 .+ (yvx').^2) .<= 0.1^2] .= .1 
+    # # η.y[(xvy.^2 .+ (yvy').^2) .<= 0.1^2] .= .1
+    # # η.p .= 0.25.*(η.x[1:end-1,2:end-1].+η.x[2:end-0,2:end-1].+η.y[2:end-1,1:end-1].+η.y[2:end-1,2:end-0])
+
+    p1 = heatmap(xv, yc, phases.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc))
+    p2 = heatmap(xc, yv, phases.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc))
+    display(plot(p1, p2))
     #--------------------------------------------#
-    # Residual check
-    ResidualContinuity2D!(Rp, V, Pt, η, number, type, BC, nc, Δ) 
-    ResidualMomentum2D_x!(R,  V, Pt, η, number, type, BC, nc, Δ)
-    ResidualMomentum2D_y!(R,  V, Pt, η, number, type, BC, nc, Δ)
+    # Newton solver
+    niter = 10
+    err   = (x = zeros(niter), y = zeros(niter), p = zeros(niter))
 
-    # Set global residual vector
-    r = zeros(nVx + nVy + nPt)
-    SetRHS_Stokes!(r, R, number, type, nc)
-
-    #--------------------------------------------#
-    # Assembly
-    @info "Assembly, ndof  = $(nVx + nVy + nPt)"
-    AssembleContinuity2D!(M, V, Pt, η, number, pattern, type, BC, nc, Δ)
-    AssembleMomentum2D_x!(M, V, Pt, η, number, pattern, type, BC, nc, Δ)
-    AssembleMomentum2D_y!(M, V, Pt, η, number, pattern, type, BC, nc, Δ)
-
-    # Stokes operator as block matrices
-    K  = [M.Vx.Vx M.Vx.Vy; M.Vy.Vx M.Vy.Vy]
-    Q  = [M.Vx.Pt; M.Vy.Pt]
-    Qᵀ = [M.Pt.Vx M.Pt.Vy]
-    𝑀 = [K Q; Qᵀ M.Pt.Pt]
-
-    @info "Velocity block symmetry"
-    display(K)
-    @show norm(K-K')
+    for iter=1:niter
     
+        #--------------------------------------------#
+        # Residual check
+        ResidualContinuity2D!(R, V, Pt, phases, materials, number, type, BC, nc, Δ) 
+        ResidualMomentum2D_x!(R, V, Pt, phases, materials, number, type, BC, nc, Δ)
+        ResidualMomentum2D_y!(R, V, Pt, phases, materials, number, type, BC, nc, Δ)
+
+        err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
+        err.y[iter] = norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
+        err.p[iter] = norm(R.p[inx_Pt,iny_Pt])/sqrt(nPt)
+
+        #--------------------------------------------#
+        # Set global residual vector
+        r = zeros(nVx + nVy + nPt)
+        SetRHS_Stokes!(r, R, number, type, nc)
+
+        #--------------------------------------------#
+        # Assembly
+        AssembleContinuity2D!(M, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ)
+        AssembleMomentum2D_x!(M, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ)
+        AssembleMomentum2D_y!(M, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ)
+
+        # Stokes operator as block matrices
+        K  = [M.Vx.Vx M.Vx.Vy; M.Vy.Vx M.Vy.Vy]
+        Q  = [M.Vx.Pt; M.Vy.Pt]
+        Qᵀ = [M.Pt.Vx M.Pt.Vy]
+        𝑀 = [K Q; Qᵀ M.Pt.Pt]
+        
+        #--------------------------------------------#
+        # Direct solver (TODO: need a better solver)
+        dx = - 𝑀 \ r
+
+        #--------------------------------------------#
+        # Update solutions (TODO: need a line search here)
+        UpdateSolution_Stokes!(V, Pt, dx, number, type, nc)
+
+    end
+
     #--------------------------------------------#
-    # Direct solver
-
-    dx = - 𝑀 \ r
-
-    #--------------------------------------------#
-
-    UpdateSolution_Stokes!(V, Pt, dx, number, type, nc)
-
-    #--------------------------------------------#
-    # Residual check
-    ResidualContinuity2D!(Rp, V, Pt, η, number, type, BC, nc, Δ) 
-    ResidualMomentum2D_x!(R,  V, Pt, η, number, type, BC, nc, Δ)
-    ResidualMomentum2D_y!(R,  V, Pt, η, number, type, BC, nc, Δ)
-
-    @info "Residuals"
-    @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
-    @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-    @show norm(Rp[inx_Pt,iny_Pt])/sqrt(nPt)
-
-    #--------------------------------------------#
-    p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc))
-    p2 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc))
-    p3 = heatmap(xc, yc,  Pt[inx_Pt,iny_Pt]' .- mean(Pt[inx_Pt,iny_Pt]), aspect_ratio=1, xlim=extrema(xc))
-    display(plot(p1, p2, p3))
+    p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
+    p2 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy")
+    p3 = heatmap(xc, yc,  Pt[inx_Pt,iny_Pt]' .- mean(Pt[inx_Pt,iny_Pt]), aspect_ratio=1, xlim=extrema(xc), title="Pt")
+    p4 = plot(xlabel="Iterations", ylabel="log₁₀ error")
+    p4 = plot!(1:niter, log10.(err.x[1:niter]), label="Vx")
+    p4 = plot!(1:niter, log10.(err.y[1:niter]), label="Vy")
+    p4 = plot!(1:niter, log10.(err.p[1:niter]), label="Pt")
+    display(plot(p1, p2, p3, p4))
     
-    #--------------------------------------------#
-    Kdiff = K - K'
-    dropzeros!(Kdiff)
-    f = GLMakie.spy(rotr90(Kdiff))
-    GLMakie.DataInspector(f)
-    display(f)
 end
+
+main((x = 12, y = 11))
