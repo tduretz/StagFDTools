@@ -1,40 +1,42 @@
-using StagFDTools, ExtendableSparse, StaticArrays
+using StagFDTools.Poisson, ExtendableSparse, StaticArrays
 
 let
-    # Generates an empty numbering structure
-    numbering = NumberingPoisson{3}()
-    
+
     # Resolution in FD cells
     nc = (x = 3, y = 4)
-    
-    # Define node types and set BC flags
-    numbering.type = fill(:out, (nc.x+2, nc.y+2))
-    numbering.type[2:end-1,2:end-1] .= :in
-    numbering.type[1,:]             .= :periodic 
-    numbering.type[end,:]           .= :periodic 
-    numbering.type[:,1]             .= :Dirichlet
-    numbering.type[:,end]           .= :Neumannn
-    
-    @info "Node types"
-    printxy(numbering.type) 
 
+    # # Generates an empty numbering structure
+    # numbering = NumberingPoisson{3}()
+        
+    # Define node types and set BC flags
+    type = Fields( fill(:out, (nc.x+2, nc.y+2)) )
+    type.u[2:end-1,2:end-1] .= :in
+    type.u[1,:]             .= :periodic 
+    type.u[end,:]           .= :periodic 
+    type.u[:,1]             .= :Dirichlet
+    type.u[:,end]           .= :Neumannn
+    
     # 5-point stencil
-    numbering.pattern = @SMatrix([0 1 0; 1 1 1; 0 1 0]) 
-    NumberingPoisson!(numbering, nc)
-    @time K    = SparsityPatternPoisson(numbering, nc)
-    @time K_SA = SparsityPatternPoisson_SA(numbering.num, numbering.pattern, nc)
-    @assert K == K_SA
+    pattern = Fields( Fields( @SMatrix([0 1 0; 1 1 1; 0 1 0]) ) )
+
+    # Equation numbering
+    number = Fields( fill(0, (nc.x+2, nc.y+2)) )
+    Numbering!(number, type, nc)
+
+    # Sparse matrix assembly
+    nu  = maximum(number.u)
+    M   = Fields( Fields( ExtendableSparseMatrix(nu, nu) ))
+
+    @info "Assembly, ndof  = $(nu)"
+    SparsityPattern!(M, number, pattern, nc)
     @info "5-point stencil"
-    display(K)
-    display(K-K')
+    display(M.u.u)
+    display(M.u.u - M.u.u')
 
     # 9-point stencil
-    pattern = @SMatrix([1 1 1; 1 1 1; 1 1 1]) 
-    NumberingPoisson!(numbering, nc)
-    K    = SparsityPatternPoisson(numbering, nc)
-    K_SA = SparsityPatternPoisson_SA(numbering.num, numbering.pattern, nc)
-    @assert K == K_SA
+    pattern = Fields( Fields( @SMatrix([1 1 1; 1 1 1; 1 1 1]) ) )
+    SparsityPattern!(M, number, pattern, nc)
     @info "9-point stencil"
-    display(K)
-    display(K-K')               
+    display(M.u.u)
+    display(M.u.u - M.u.u')             
 end

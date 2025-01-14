@@ -1,27 +1,28 @@
 module StagFDTools
 
-using StaticArrays, ExtendableSparse
+using StaticArrays, ExtendableSparse, StaticArrays
 
 include("operators.jl")
 export inn, inn_x, inn_y, av, harm, ∂x, ∂y, ∂kk
 
-include("Structures.jl")
-export Physics, NumberingPoisson, NumberingPoisson2 #, NumberingStokes, StokesPattern
+include("Utils.jl")
+export printxy
 
-include("Poisson.jl")
-export RangesPoisson, NumberingPoisson!, SparsityPatternPoisson, SparsityPatternPoisson_SA
-
+module Poisson
+    using StaticArrays, ExtendableSparse, StaticArrays
+    include("Poisson.jl")
+    export Fields, Ranges, Numbering!, SparsityPattern!
+end
 module Stokes
+    using StaticArrays, ExtendableSparse, StaticArrays
     include("Stokes.jl")
     export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx!, SetBCVy!
 end
 
 module TwoPhases
+    using StaticArrays, ExtendableSparse, StaticArrays
     include("TwoPhases.jl")
     export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx!, SetBCVy!
 end
-
-include("Utils.jl")
-export printxy
 
 end # module StagFDTools

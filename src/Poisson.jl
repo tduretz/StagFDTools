@@ -1,71 +1,46 @@
-function RangesPoisson(nc)
+struct Fields{Tu}
+    u::Tu
+end
+
+function Ranges(nc)
     return (inx = 2:nc.x+1, iny = 2:nc.y+1)
 end
 
-function NumberingPoisson!(N, nc)
+function Numbering!(N, type, nc)
     neq                     = nc.x * nc.y
-    N.num                   = zeros(Int64, nc.x+2, nc.y+2)
-    N.num[2:end-1,2:end-1] .= reshape(1:neq, nc.x, nc.y)
+    N.u[2:end-1,2:end-1] .= reshape(1:neq, nc.x, nc.y)
 
     # Make periodic in x
-    for j in axes(N.type,2)
-        if N.type[1,j]==:periodic
-            N.num[1,j] = N.num[end-1,j]
+    for j in axes(type.u,2)
+        if type.u[1,j] === :periodic
+            N.u[1,j] = N.u[end-1,j]
         end
-        if N.type[end,j]==:periodic
-            N.num[end,j] = N.num[2,j]
+        if type.u[end,j] === :periodic
+            N.u[end,j] = N.u[2,j]
         end
     end
 
     # Make periodic in y
-    for i in axes(N.type,1)
-        if N.type[i,1]==:periodic
-            N.num[i,1] = N.num[i,end-1]
+    for i in axes(type.u,1)
+        if type.u[i,1] === :periodic
+            N.u[i,1] = N.u[i,end-1]
         end
-        if N.type[i,end]==:periodic
-            N.num[i,end] = N.num[i,2]
-        end
-    end
-end
-
-function NumberingPoisson!(N::NumberingPoisson2, nc)
-    neq                     = nc.x * nc.y
-    N.num[2:end-1,2:end-1] .= reshape(1:neq, nc.x, nc.y)
-
-    # Make periodic in x
-    for j in axes(N.type,2)
-        if N.type[1,j] === :periodic
-            N.num[1,j] = N.num[end-1,j]
-        end
-        if N.type[end,j] === :periodic
-            N.num[end,j] = N.num[2,j]
-        end
-    end
-
-    # Make periodic in y
-    for i in axes(N.type,1)
-        if N.type[i,1] === :periodic
-            N.num[i,1] = N.num[i,end-1]
-        end
-        if N.type[i,end] === :periodic
-            N.num[i,end] = N.num[i,2]
+        if type.u[i,end] === :periodic
+            N.u[i,end] = N.u[i,2]
         end
     end
 end
 
-@views function SparsityPatternPoisson(num, nc) 
-    ndof   = maximum(num.num)
-    K      = ExtendableSparseMatrix(ndof, ndof)
+@views function SparsityPattern!(K, num, pattern, nc) 
     shift  = (x=1, y=1)
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
-        Local = num.num[i-1:i+1,j-1:j+1] .* num.pattern
+        Local = SMatrix( num.u[i-1:i+1,j-1:j+1] .* pattern.u.u )
         for jj in axes(Local,2), ii in axes(Local,1)
-            if (Local[ii,jj]>0) 
-                K[num.num[i,j], Local[ii,jj]] = 1 
+            if Local[ii,jj] > 0 
+                K.u.u[num.u[i,j], Local[ii,jj]] = 1 
             end
         end
     end
-    return K
 end
 
 function SparsityPatternPoisson_SA(num, pattern::SMatrix{N, N, T}, nc) where {N,T}
