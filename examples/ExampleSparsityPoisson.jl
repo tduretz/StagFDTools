@@ -4,9 +4,6 @@ let
 
     # Resolution in FD cells
     nc = (x = 3, y = 4)
-
-    # # Generates an empty numbering structure
-    # numbering = NumberingPoisson{3}()
         
     # Define node types and set BC flags
     type = Fields( fill(:out, (nc.x+2, nc.y+2)) )
