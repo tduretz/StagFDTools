@@ -8,8 +8,15 @@ export Physics, NumberingPoisson, NumberingPoisson2 #, NumberingStokes, StokesPa
 include("Poisson.jl")
 export RangesPoisson, NumberingPoisson!, SparsityPatternPoisson, SparsityPatternPoisson_SA
 
-include("Stokes.jl")
-export Ranges_Stokes, Numbering_Stokes!, SetRHS_Stokes!, UpdateSolution_Stokes!
+module Stokes
+    include("Stokes.jl")
+    export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx!, SetBCVy!
+end
+
+module TwoPhases
+    include("TwoPhases.jl")
+    export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx!, SetBCVy!
+end
 
 include("Utils.jl")
 export printxy

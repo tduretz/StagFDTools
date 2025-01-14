@@ -1,38 +1,38 @@
-using Test, StaticArrays
+using Test, StaticArrays, StagFDTools
 
-function SetBCVx!(Vx_loc, bcx_loc, Vx_BC, ∂Vx∂x_BC, ∂Vx∂y_BC, Δ)
+function SetBCVx!(Vx_loc, bcx_loc, bcv, Δ)
 
     for ii in axes(Vx_loc, 1)
 
         # Set Vx boundaries at S (this must be done 1st)
         if bcx_loc[ii,begin] == :Neumann 
-            Vx_loc[ii,begin] =  Vx_loc[ii,begin+1] - Δ.y*∂Vx∂y_BC[ii,1]
+            Vx_loc[ii,begin] =  Vx_loc[ii,begin+1] - Δ.y*bcv.∂Vx∂y_BC[ii,1]
         elseif bcx_loc[ii,begin] == :Dirichlet 
-            Vx_loc[ii,begin] = -Vx_loc[ii,begin+1] + 2*Vx_BC[ii,1]
+            Vx_loc[ii,begin] = -Vx_loc[ii,begin+1] + 2*bcv.Vx_BC[ii,1]
         end
         if bcx_loc[ii,begin] == :out 
             if bcx_loc[ii,begin+1] == :Neumann
-                Vx_loc[ii,begin+1] =  Vx_loc[ii,begin+2] -   Δ.y*∂Vx∂y_BC[ii,1]
-                Vx_loc[ii,begin]   =  Vx_loc[ii,begin+3] - 3*Δ.y*∂Vx∂y_BC[ii,1] 
+                Vx_loc[ii,begin+1] =  Vx_loc[ii,begin+2] -   Δ.y*bcv.∂Vx∂y_BC[ii,1]
+                Vx_loc[ii,begin]   =  Vx_loc[ii,begin+3] - 3*Δ.y*bcv.∂Vx∂y_BC[ii,1] 
             elseif bcx_loc[ii,begin+1] == :Dirichlet
-                Vx_loc[ii,begin+1] = -Vx_loc[ii,begin+2] + 2*Vx_BC[ii,1]
-                Vx_loc[ii,begin]   = -Vx_loc[ii,begin+3] + 2*Vx_BC[ii,1] 
+                Vx_loc[ii,begin+1] = -Vx_loc[ii,begin+2] + 2*bcv.Vx_BC[ii,1]
+                Vx_loc[ii,begin]   = -Vx_loc[ii,begin+3] + 2*bcv.Vx_BC[ii,1] 
             end
         end
 
         # Set Vx boundaries at N (this must be done 1st)
         if bcx_loc[ii,end] == :Neumann 
-            Vx_loc[ii,end] =  Vx_loc[ii,end-1] + Δ.y*∂Vx∂y_BC[ii,2] 
+            Vx_loc[ii,end] =  Vx_loc[ii,end-1] + Δ.y*bcv.∂Vx∂y_BC[ii,2] 
         elseif bcx_loc[ii,end] == :Dirichlet 
-            Vx_loc[ii,end] = -Vx_loc[ii,end-1] + 2*Vx_BC[ii,2]
+            Vx_loc[ii,end] = -Vx_loc[ii,end-1] + 2*bcv.Vx_BC[ii,2]
         end
         if bcx_loc[ii,end] == :out
             if bcx_loc[ii,end-1] == :Neumann
-                Vx_loc[ii,end-1] =  Vx_loc[ii,end-2] +   Δ.y*∂Vx∂y_BC[ii,2] 
-                Vx_loc[ii,end]   =  Vx_loc[ii,end-3] + 3*Δ.y*∂Vx∂y_BC[ii,2]   
+                Vx_loc[ii,end-1] =  Vx_loc[ii,end-2] +   Δ.y*bcv.∂Vx∂y_BC[ii,2] 
+                Vx_loc[ii,end]   =  Vx_loc[ii,end-3] + 3*Δ.y*bcv.∂Vx∂y_BC[ii,2]   
             elseif bcx_loc[ii,3] == :Dirichlet
-                Vx_loc[ii,end-1] = -Vx_loc[ii,end-2] + 2*Vx_BC[ii,2] 
-                Vx_loc[ii,end]   = -Vx_loc[ii,end-3] + 2*Vx_BC[ii,2]  
+                Vx_loc[ii,end-1] = -Vx_loc[ii,end-2] + 2*bcv.Vx_BC[ii,2] 
+                Vx_loc[ii,end]   = -Vx_loc[ii,end-3] + 2*bcv.Vx_BC[ii,2]  
             end
         end
     end
@@ -40,48 +40,48 @@ function SetBCVx!(Vx_loc, bcx_loc, Vx_BC, ∂Vx∂x_BC, ∂Vx∂y_BC, Δ)
     for jj in axes(Vx_loc, 2)
         # Set Vx boundaries at W (this must be done 2nd)
         if bcx_loc[1,jj] == :out
-            Vx_loc[1,jj] = Vx_loc[2,jj] - Δ.x*∂Vx∂x_BC[1,jj] 
+            Vx_loc[1,jj] = Vx_loc[2,jj] - Δ.x*bcv.∂Vx∂x_BC[1,jj] 
         end
         # Set Vx boundaries at E (this must be done 2nd)
         if bcx_loc[3,jj] == :out
-            Vx_loc[3,jj] = Vx_loc[2,jj] + Δ.x*∂Vx∂x_BC[2,jj] 
+            Vx_loc[3,jj] = Vx_loc[2,jj] + Δ.x*bcv.∂Vx∂x_BC[2,jj] 
         end
     end
 end
 
-function SetBCVy!(Vy_loc, bcy_loc, Vy_BC, ∂Vy∂y_BC, ∂Vy∂x_BC, Δ)
+function SetBCVy!(Vy_loc, bcy_loc, bcv, Δ)
     
     for jj in axes(Vy_loc, 2)
 
         # Set Vy boundaries at W (this must be done 1st)
         if bcy_loc[begin,jj] == :Neumann 
-            Vy_loc[begin,jj] =  Vy_loc[begin+1,jj] - Δ.x*∂Vy∂x_BC[1,jj] 
+            Vy_loc[begin,jj] =  Vy_loc[begin+1,jj] - Δ.x*bcv.∂Vy∂x_BC[1,jj] 
         elseif bcy_loc[begin,jj] == :Dirichlet 
-            Vy_loc[begin,jj] = -Vy_loc[begin+1,jj] + 2*Vy_BC[1,jj]
+            Vy_loc[begin,jj] = -Vy_loc[begin+1,jj] + 2*bcv.Vy_BC[1,jj]
         end
         if bcy_loc[begin,jj] == :out
             if bcy_loc[begin+1,jj] == :Neumann 
-                Vy_loc[begin+1,jj] = Vy_loc[begin+2,jj] -   Δ.y*∂Vy∂x_BC[1,jj] 
-                Vy_loc[begin,jj]   = Vy_loc[begin+3,jj] - 3*Δ.y*∂Vy∂x_BC[1,jj] 
+                Vy_loc[begin+1,jj] = Vy_loc[begin+2,jj] -   Δ.y*bcv.∂Vy∂x_BC[1,jj] 
+                Vy_loc[begin,jj]   = Vy_loc[begin+3,jj] - 3*Δ.y*bcv.∂Vy∂x_BC[1,jj] 
             elseif bcy_loc[begin+1,jj] == :Dirichlet
-                Vy_loc[begin+1,jj] = -Vy_loc[begin+2,jj] + 2*Vy_BC[1,jj]
-                Vy_loc[begin,jj]   = -Vy_loc[begin+3,jj] + 2*Vy_BC[1,jj]
+                Vy_loc[begin+1,jj] = -Vy_loc[begin+2,jj] + 2*bcv.Vy_BC[1,jj]
+                Vy_loc[begin,jj]   = -Vy_loc[begin+3,jj] + 2*bcv.Vy_BC[1,jj]
             end 
         end
 
         # Set Vy boundaries at E (this must be done 1st)
         if bcy_loc[end,jj] == :Neumann 
-            Vy_loc[end,jj] = Vy_loc[end-1,jj] + Δ.x*∂Vy∂x_BC[1,jj] 
+            Vy_loc[end,jj] = Vy_loc[end-1,jj] + Δ.x*bcv.∂Vy∂x_BC[1,jj] 
         elseif bcy_loc[end,jj] == :Dirichlet 
-            Vy_loc[end,jj] = -Vy_loc[end-1,jj] + 2*Vy_BC[2,jj]
+            Vy_loc[end,jj] = -Vy_loc[end-1,jj] + 2*bcv.Vy_BC[2,jj]
         end
         if bcy_loc[end,jj] == :out
             if bcy_loc[end-1,jj] == :Neumann 
-                Vy_loc[end-1,jj] = Vy_loc[end-2,jj] +   Δ.y*∂Vy∂x_BC[1,jj]
-                Vy_loc[end,jj]   = Vy_loc[end-3,jj] + 3*Δ.y*∂Vy∂x_BC[1,jj]
+                Vy_loc[end-1,jj] = Vy_loc[end-2,jj] +   Δ.y*bcv.∂Vy∂x_BC[1,jj]
+                Vy_loc[end,jj]   = Vy_loc[end-3,jj] + 3*Δ.y*bcv.∂Vy∂x_BC[1,jj]
             elseif bcy_loc[3,jj] == :Dirichlet 
-                Vy_loc[end-1,jj] = -Vy_loc[end-2,jj] + 2*Vy_BC[2,jj]
-                Vy_loc[end,jj]   = -Vy_loc[end-3,jj] + 2*Vy_BC[2,jj]
+                Vy_loc[end-1,jj] = -Vy_loc[end-2,jj] + 2*bcv.Vy_BC[2,jj]
+                Vy_loc[end,jj]   = -Vy_loc[end-3,jj] + 2*bcv.Vy_BC[2,jj]
             end
         end
     end
@@ -89,11 +89,11 @@ function SetBCVy!(Vy_loc, bcy_loc, Vy_BC, ∂Vy∂y_BC, ∂Vy∂x_BC, Δ)
     for ii in axes(Vy_loc, 1)
         # Set Vy boundaries at S (this must be done 2nd)
         if bcy_loc[ii,1] == :out
-            Vy_loc[ii,1] = Vy_loc[ii,2] - Δ.y*∂Vy∂y_BC[ii,1]
+            Vy_loc[ii,1] = Vy_loc[ii,2] - Δ.y*bcv.∂Vy∂y_BC[ii,1]
         end
         # Set Vy boundaries at S (this must be done 2nd)
         if bcy_loc[ii,3] == :out
-            Vy_loc[ii,3] = Vy_loc[ii,2] + Δ.y*∂Vy∂y_BC[ii,2]
+            Vy_loc[ii,3] = Vy_loc[ii,2] + Δ.y*bcv.∂Vy∂y_BC[ii,2]
         end
     end
 end
@@ -198,12 +198,14 @@ function TestShearStrainRate(D_BC)
         ∂Vx∂y_BC   = SMatrix{3,2}(BC.∂Vx∂y[i:i+2,:])
         ∂Vy∂x_BC   = SMatrix{2,3}(BC.∂Vy∂x[:,j:j+2])
         ∂Vy∂y_BC   = SMatrix{4,2}(BC.∂Vy∂y[i:i+3,:])
+        bcv_Vx     = (Vx_BC=Vx_BC, ∂Vx∂x_BC=∂Vx∂x_BC, ∂Vx∂y_BC=∂Vx∂y_BC)
+        bcv_Vy     = (Vy_BC=Vy_BC, ∂Vy∂x_BC=∂Vy∂x_BC, ∂Vy∂y_BC=∂Vy∂y_BC)
 
         #########################
-        SetBCVx!(Vx_loc, bcx_loc, Vx_BC, ∂Vx∂x_BC, ∂Vx∂y_BC, Δ)
+        SetBCVx1!(Vx_loc, bcx_loc, bcv_Vx, Δ)
 
         #########################
-        SetBCVy!(Vy_loc, bcy_loc, Vy_BC, ∂Vy∂y_BC, ∂Vy∂x_BC, Δ)
+        SetBCVy1!(Vy_loc, bcy_loc, bcv_Vy, Δ)
 
         # ########################
         ε̇xy_loc .= 1/2* ( diff(Vx_loc, dims=2)/Δ.y + diff(Vy_loc, dims=1)/Δ.x ) 
@@ -218,8 +220,7 @@ function TestShearStrainRate(D_BC)
 
     printxy(ε̇xy)
 
-    return mean(ε̇xy)    
-end
+    return mean(ε̇xy)    end
 
 let
     # Pure Shear
