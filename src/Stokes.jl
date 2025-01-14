@@ -12,7 +12,7 @@ function Base.getindex(x::Fields, i::Int64)
 end
 
 function Ranges(nc)     
-    return (inx_Vx = 2:nc.x+2, iny_Vx = 3:nc.y+2, inx_Vy = 3:nc.x+2, iny_Vy = 2:nc.y+2, inx_Pt = 2:nc.x+1, iny_Pt = 2:nc.y+1, size_x = (nc.x+3, nc.y+4), size_y = (nc.x+4, nc.y+3), size_p = (nc.x+2, nc.y+2))
+    return (inx_Vx = 2:nc.x+2, iny_Vx = 3:nc.y+2, inx_Vy = 3:nc.x+2, iny_Vy = 2:nc.y+2, inx_Pt = 2:nc.x+1, iny_Pt = 2:nc.y+1, size_x = (nc.x+3, nc.y+4), size_y = (nc.x+4, nc.y+3), size_p = (nc.x+2, nc.y+2), size_v = (nc.x+1, nc.y+1))
 end
 
 @views function SparsityPattern!(K, num, pattern, nc) 
