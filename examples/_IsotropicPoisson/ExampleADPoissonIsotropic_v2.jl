@@ -209,17 +209,17 @@ let
     u[inx,iny] .-= reshape(du, nc...)
     # Residual check
     ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ)     # @info norm(r)/sqrt(length(r))
-    # Visualization
-    p1 = heatmap(xc[inx], yc[iny], u[inx,iny]', aspect_ratio=1, xlim=extrema(xc))
-    # qx = -diff(u[inx,iny],dims=1)/Δ.x
-    # qy = -diff(u[inx,iny],dims=2)/Δ.y
-    # @show     mean(qx[1,:])
-    # @show     mean(qx[end,:])
-    # @show     mean(qy[:,1])
-    # @show     mean(qy[:,end])
-    # heatmap(xc[1:end-3], yc[iny], qx')
-    # heatmap(xc[inx], yc[1:end-3], qy')
-    display(p1)
+    # # Visualization
+    # p1 = heatmap(xc[inx], yc[iny], u[inx,iny]', aspect_ratio=1, xlim=extrema(xc))
+    # # qx = -diff(u[inx,iny],dims=1)/Δ.x
+    # # qy = -diff(u[inx,iny],dims=2)/Δ.y
+    # # @show     mean(qx[1,:])
+    # # @show     mean(qx[end,:])
+    # # @show     mean(qy[:,1])
+    # # @show     mean(qy[:,end])
+    # # heatmap(xc[1:end-3], yc[iny], qx')
+    # # heatmap(xc[inx], yc[1:end-3], qy')
+    # display(p1)
     display(to)
 
 end
