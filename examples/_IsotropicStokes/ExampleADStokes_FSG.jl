@@ -3,7 +3,9 @@ using ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
-import GLMakie
+
+const rheology = :anisotropic
+# const rheology = :powerlaw
 
 function ViscosityTensor(η0, δ, n, engineering)
     two   = engineering ? 2 : 1
@@ -105,21 +107,25 @@ function Momentum_x(Vx, V̄x, Vy, V̄y, Pt, P̄t, phase, p̄hase, materials, tx,
     ε̇̄yy = D̄yy[2:end-1,:] - 1/3*D̄kk
     ε̇̄xy = 1/2 * ( D̄xy + D̄yx[:,2:end-1] ) 
 
-    ε̇II = sqrt.(1/2*(ε̇xx.^2 .+ ε̇yy.^2) .+ ε̇̄xy.^2)
-    ε̇̄II = sqrt.(1/2*(ε̇̄xx.^2 .+ ε̇̄yy.^2) .+ ε̇xy.^2)
-    η  = materials.η0[phase] .* ε̇II.^(1 ./ materials.n[phase] .- 1.0 )
-    η̄  = materials.η0[p̄hase] .* ε̇̄II.^(1 ./ materials.n[p̄hase] .- 1.0 )
-    τxx = 2 * η .* ε̇xx
-    τxy = 2 * η̄ .* ε̇xy
+    if rheology == :powerlaw
+        ε̇II = sqrt.(1/2*(ε̇xx.^2 .+ ε̇yy.^2) .+ ε̇̄xy.^2)
+        ε̇̄II = sqrt.(1/2*(ε̇̄xx.^2 .+ ε̇̄yy.^2) .+ ε̇xy.^2)
+        η  = materials.η0[phase] .* ε̇II.^(1 ./ materials.n[phase] .- 1.0 )
+        η̄  = materials.η0[p̄hase] .* ε̇̄II.^(1 ./ materials.n[p̄hase] .- 1.0 )
+        τxx = 2 * η .* ε̇xx
+        τxy = 2 * η̄ .* ε̇xy
+    end
 
-    # D  = materials.D[phase] 
-    # D̄  = materials.D[p̄hase] 
-    # τxx = zeros(2,1)
-    # τxy = zeros(1,2)
-    # τxx[1,1] = D[1][1,1] .* ε̇xx[1] .+ D[1][1,2] .* ε̇yy[1] .+ D[1][1,3] .* ε̇̄xy[1]
-    # τxx[2,1] = D[2][1,1] .* ε̇xx[2] .+ D[2][1,2] .* ε̇yy[2] .+ D[2][1,3] .* ε̇̄xy[2]
-    # τxy[1,1] = D̄[1][3,1] .* ε̇̄xx[1] .+ D̄[1][3,2] .* ε̇̄yy[1] .+ D̄[1][3,3] .* ε̇xy[1]
-    # τxy[1,2] = D̄[2][3,1] .* ε̇̄xx[2] .+ D̄[2][3,2] .* ε̇̄yy[2] .+ D̄[2][3,3] .* ε̇xy[2]
+    if rheology == :anisotropic
+        D  = materials.D[phase] 
+        D̄  = materials.D[p̄hase] 
+        τxx = zeros(2,1)
+        τxy = zeros(1,2)
+        for ii=1:2
+            τxx[ii,1] = D[ii][1,1] .* ε̇xx[ii] .+ D[ii][1,2] .* ε̇yy[ii] .+ D[ii][1,3] .* ε̇̄xy[ii]
+            τxy[1,ii] = D̄[ii][3,1] .* ε̇̄xx[ii] .+ D̄[ii][3,2] .* ε̇̄yy[ii] .+ D̄[ii][3,3] .* ε̇xy[ii]       
+        end
+    end
 
     fx = 0
     fx  = (τxx[2,1] - τxx[1,1]) * invΔx 
@@ -208,22 +214,25 @@ function Momentum_y(Vx, V̄x, Vy, V̄y, Pt, P̄t, phase, p̄hase, materials, tx,
     ε̇̄yy = D̄yy - 1/3*D̄kk
     ε̇̄xy = 1/2 * ( D̄xy[2:end-1,:] + D̄yx ) 
 
+    if rheology == :powerlaw
     ε̇II = sqrt.(1/2*(ε̇xx.^2 .+ ε̇yy.^2) .+ ε̇̄xy.^2)
     ε̇̄II = sqrt.(1/2*(ε̇̄xx.^2 .+ ε̇̄yy.^2) .+ ε̇xy.^2)
     η  = materials.η0[phase] .* ε̇II.^(1 ./ materials.n[phase] .- 1.0 )
     η̄  = materials.η0[p̄hase] .* ε̇̄II.^(1 ./ materials.n[p̄hase] .- 1.0 )
     τyy = 2 * η .* ε̇yy
     τxy = 2 * η̄ .* ε̇xy
+    end
 
-    # D  = materials.D[phase] 
-    # D̄  = materials.D[p̄hase] 
-    # τyy = zeros(1,2)
-    # τxy = zeros(2,1)
-    # τyy[1,1] = D[1][2,1] .* ε̇xx[1] + D[1][2,2] .* ε̇yy[1] + D[1][2,3] .* ε̇̄xy[1]
-    # τyy[1,2] = D[2][2,1] .* ε̇xx[2] + D[2][2,2] .* ε̇yy[2] + D[2][2,3] .* ε̇̄xy[2]
-    # τxy[1,1] = D̄[1][3,1] .* ε̇̄xx[1] + D̄[1][3,2] .* ε̇̄yy[1] + D̄[1][3,3] .* ε̇xy[1]
-    # τxy[2,1] = D̄[2][3,1] .* ε̇̄xx[2] + D̄[2][3,2] .* ε̇̄yy[2] + D̄[2][3,3] .* ε̇xy[2]
-
+    if rheology == :anisotropic
+        D  = materials.D[phase] 
+        D̄  = materials.D[p̄hase] 
+        τyy = zeros(1,2)
+        τxy = zeros(2,1)
+        for ii=1:2
+            τyy[1,ii] = D[ii][2,1] .* ε̇xx[ii] + D[ii][2,2] .* ε̇yy[ii] + D[ii][2,3] .* ε̇̄xy[ii]
+            τxy[ii,1] = D̄[ii][3,1] .* ε̇̄xx[ii] + D̄[ii][3,2] .* ε̇̄yy[ii] + D̄[ii][3,3] .* ε̇xy[ii]
+        end
+    end
     fy  = 0 
     fy  = (τyy[1,2] - τyy[1,1]) * invΔy 
     fy += (τxy[2,1] - τxy[1,1]) * invΔx 
