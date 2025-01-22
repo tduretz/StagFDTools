@@ -5,17 +5,41 @@ using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 import GLMakie
 
+function ViscosityTensor(η0, δ, n, engineering)
+    two   = engineering ? 2 : 1
+    μ_N   = η0
+    C_ISO = 2 * μ_N * [1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0/two] # Viscosity tensor for isotropic flow
+
+    # we need to normalise the director every time it is updated
+    Norm_dir   = norm(n)
+    n ./= Norm_dir
+
+    # once we know the n we compute anisotropy matrix
+    a0 = 2 * n[1]^2 * n[2]^2
+    a1 = n[1] * n[2] * (-n[1]^2 + n[2]^2)
+
+    # build the matrix 
+    C_ANI = [-a0 a0 2*a1/two; a0 -a0 -2*a1/two; a1 -a1 (-1+2*a0)/two]
+
+    # operator
+    μ_S = μ_N / δ
+    𝐷     = C_ISO + 2 * (μ_N - μ_S) * C_ANI 
+    return  𝐷
+end
+
 function Momentum_x(Vx, V̄x, Vy, V̄y, Pt, P̄t, phase, p̄hase, materials, tx, t̄x, ty, t̄y, bc_val, Δ)
     
     invΔx    = 1 / Δ.x
     invΔy    = 1 / Δ.y
 
-    # TODO: add BC for stress on sides
+    # TODO: add BC for shear stress on sides
+    ############################################
     if tx[2,1] == :Neumann_tangent  # South
         Vx[2,1] = Vx[2,2] - Δ.y*bc_val.D[1,2] 
     elseif tx[2,1] == :Dirichlet_tangent
         Vx[2,1] = 2*bc_val.x.S[1] - Vx[2,2]
     end
+
     if tx[1,2] == :Neumann_normal # West
         Vx[1,2] = Vx[2,2] - Δ.x*bc_val.D[1,1]
     elseif tx[1,2] == :Dirichlet_normal
@@ -34,42 +58,74 @@ function Momentum_x(Vx, V̄x, Vy, V̄y, Pt, P̄t, phase, p̄hase, materials, tx,
         Vx[2,3] = 2*bc_val.x.N[1] - Vx[2,2]
     end
 
-    # if t̄y[2,1] == :Dirichlet_normal
-    #     V̄y[2,1] = 2*bc_val.y.S[1] - V̄y[2,2]
-    # elseif t̄y[2,1] == :Neumann_normal
-    #     V̄y[2,1] = V̄y[2,2] - Δ.y*bc_val.D[2,2] 
-    # end
-    # if t̄y[2,end] == :Dirichlet_normal 
-    #     V̄y[2,end] = 2*bc_val.y.N[1] - V̄y[2,end-1]
-    # elseif t̄y[2,end] == :Neumann_normal
-    #     V̄y[2,end] = V̄y[2,end-1] + Δ.y*bc_val.D[2,2]
-    # end
+    ############################################
+
+    if t̄y[2,1] == :Neumann_normal # South
+        V̄y[2,1] = V̄y[2,2] - Δ.y*bc_val.D[2,2] 
+    elseif t̄y[2,1] == :Dirichlet_normal
+        V̄y[2,1] = 2*bc_val.y.S[1] - V̄y[2,2]
+    end
+
+    if t̄y[1,2] == :Neumann_tangent # West
+        V̄y[1,2] = V̄y[2,2] - Δ.x*bc_val.D[2,1]
+    elseif t̄y[1,2] == :Dirichlet_tangent
+        V̄y[1,2] = 2*bc_val.y.W[1] - V̄y[2,2]
+    end
+
+    if t̄y[3,2] == :Neumann_tangent # East
+        V̄y[3,2] = V̄y[2,2] + Δ.x*bc_val.D[2,1]
+    elseif t̄y[3,2] == :Dirichlet_tangent
+        V̄y[3,2] = 2*bc_val.y.E[1] - V̄y[2,2]
+    end
+
+    if t̄y[2,3] == :Neumann_normal # North
+        V̄y[2,3] = V̄y[2,2] + Δ.y*bc_val.D[2,2]
+    elseif t̄y[2,3] == :Dirichlet_normal 
+        V̄y[2,3] = 2*bc_val.y.N[1] - V̄y[2,2]
+    end
+
+    ############################################
      
     Dxx = (Vx[2:end,:] - Vx[1:end-1,:]) * invΔx             # Static Arrays ???
     Dyy = (Vy[:,2:end] - Vy[:,1:end-1]) * invΔy             
     Dkk = Dxx[:,2:end-1] + Dyy
-
     Dxy = (Vx[:,2:end] - Vx[:,1:end-1]) * invΔy 
     Dyx = (Vy[2:end,:] - Vy[1:end-1,:]) * invΔx 
 
+    D̄xx = (V̄x[2:end,:] - V̄x[1:end-1,:]) * invΔx             # Static Arrays ???
+    D̄yy = (V̄y[:,2:end] - V̄y[:,1:end-1]) * invΔy             
+    D̄kk = D̄xx + D̄yy[2:end-1,:]
+    D̄xy = (V̄x[:,2:end] - V̄x[:,1:end-1]) * invΔy 
+    D̄yx = (V̄y[2:end,:] - V̄y[1:end-1,:]) * invΔx 
+
     ε̇xx = Dxx[:,2:end-1] - 1/3*Dkk
     ε̇yy = Dyy - 1/3*Dkk
-    ε̇xy = 1/2 * ( Dxy[2:end-1,:] + Dyx ) 
+    ε̇xy = 1/2 * ( Dxy[2:end-1,:] + Dyx )
+    ε̇̄xx = D̄xx - 1/3*D̄kk
+    ε̇̄yy = D̄yy[2:end-1,:] - 1/3*D̄kk
+    ε̇̄xy = 1/2 * ( D̄xy + D̄yx[:,2:end-1] ) 
 
-    # ε̇II = sqrt.(1/2*(ε̇xx.^2 .+ ε̇yy.^2) .+ ε̇x̄ȳ.^2)
-    # n   = materials.n[phase]
-    η  = materials.η0[phase]
-    η̄  = materials.η0[p̄hase]
-    # ηy  =  η0 .* ε̇II.^(1 ./ n .- 1.0 )
-
+    ε̇II = sqrt.(1/2*(ε̇xx.^2 .+ ε̇yy.^2) .+ ε̇̄xy.^2)
+    ε̇̄II = sqrt.(1/2*(ε̇̄xx.^2 .+ ε̇̄yy.^2) .+ ε̇xy.^2)
+    η  = materials.η0[phase] .* ε̇II.^(1 ./ materials.n[phase] .- 1.0 )
+    η̄  = materials.η0[p̄hase] .* ε̇̄II.^(1 ./ materials.n[p̄hase] .- 1.0 )
     τxx = 2 * η .* ε̇xx
     τxy = 2 * η̄ .* ε̇xy
+
+    # D  = materials.D[phase] 
+    # D̄  = materials.D[p̄hase] 
+    # τxx = zeros(2,1)
+    # τxy = zeros(1,2)
+    # τxx[1,1] = D[1][1,1] .* ε̇xx[1] .+ D[1][1,2] .* ε̇yy[1] .+ D[1][1,3] .* ε̇̄xy[1]
+    # τxx[2,1] = D[2][1,1] .* ε̇xx[2] .+ D[2][1,2] .* ε̇yy[2] .+ D[2][1,3] .* ε̇̄xy[2]
+    # τxy[1,1] = D̄[1][3,1] .* ε̇̄xx[1] .+ D̄[1][3,2] .* ε̇̄yy[1] .+ D̄[1][3,3] .* ε̇xy[1]
+    # τxy[1,2] = D̄[2][3,1] .* ε̇̄xx[2] .+ D̄[2][3,2] .* ε̇̄yy[2] .+ D̄[2][3,3] .* ε̇xy[2]
 
     fx = 0
     fx  = (τxx[2,1] - τxx[1,1]) * invΔx 
     fx += (τxy[1,2] - τxy[1,1]) * invΔy 
     fx -= ( Pt[2,1] -  Pt[1,1]) * invΔx
-    fx *= -1#*Δ.x*Δ.y
+    fx *= -1*Δ.x*Δ.y
 
     return fx
 end
@@ -79,7 +135,8 @@ function Momentum_y(Vx, V̄x, Vy, V̄y, Pt, P̄t, phase, p̄hase, materials, tx,
     invΔx    = 1 / Δ.x
     invΔy    = 1 / Δ.y
    
-    # TODO: add BC for stress on sides
+    # TODO: add BC for shear stress on sides
+    ############################################
     if ty[2,1] == :Neumann_normal # South
         Vy[2,1] = Vy[2,2] - Δ.y*bc_val.D[2,2]
     elseif ty[2,1] == :Dirichlet_normal
@@ -104,42 +161,74 @@ function Momentum_y(Vx, V̄x, Vy, V̄y, Pt, P̄t, phase, p̄hase, materials, tx,
         Vy[2,end] = 2*bc_val.y.N[1] - Vy[2,end-1]
     end
 
-    # if t̄x[2,1] == :Dirichlet
-    #     V̄x[2,1] = 2*bc_val.x.S[1] - V̄x[2,2]
-    # elseif t̄x[2,1] == :Neumann_tangent
-    #     V̄x[2,1] = V̄x[2,2] - Δ.y*bc_val.D[1,1] 
-    # end
-    # if t̄x[2,end] == :Dirichlet_tangent 
-    #     V̄x[2,end] = 2*bc_val.x.N[1] - V̄x[2,end-1]
-    # elseif t̄x[2,end] == :Neumann_tangent
-    #     V̄x[2,end] = V̄x[2,end-1] + Δ.y*bc_val.D[1,1] 
-    # end
+    ############################################
+
+    if t̄x[2,1] == :Neumann_tangent # Shouth
+        V̄x[2,1] = V̄x[2,2] - Δ.y*bc_val.D[1,2] 
+    elseif t̄x[2,1] == :Dirichlet_tangent
+        V̄x[2,1] = 2*bc_val.x.S[1] - V̄x[2,2]
+    end
+
+    if t̄x[1,2] == :Neumann_normal # West
+        V̄x[1,2] = V̄x[2,2] - Δ.x*bc_val.D[1,1] 
+    elseif t̄x[1,2] == :Dirichlet_normal
+        V̄x[1,2] =  2*bc_val.x.W[1] - V̄x[2,2] 
+    end
+
+    if t̄x[3,2] == :Neumann_normal # East
+        V̄x[3,2] = V̄x[2,2] + Δ.x*bc_val.D[1,1] 
+    elseif t̄x[3,2] == :Dirichlet_normal
+        V̄x[3,2] = 2*bc_val.x.E[1] - V̄x[2,2] 
+    end
+
+    if t̄x[2,3] == :Neumann_tangent # North
+        V̄x[2,3] = V̄x[2,2] + Δ.y*bc_val.D[1,2] 
+    elseif t̄x[2,3] == :Dirichlet_tangent 
+        V̄x[2,3] = 2*bc_val.x.N[1] - V̄x[2,2]
+    end
+
+    ############################################
+
+    D̄yy = (V̄y[:,2:end] - V̄y[:,1:end-1]) * invΔy             # Static Arrays ???
+    D̄xx = (V̄x[2:end,:] - V̄x[1:end-1,:]) * invΔx             
+    D̄kk = D̄xx[:,2:end-1] + D̄yy
+    D̄xy = (V̄x[:,2:end] - V̄x[:,1:end-1]) * invΔy 
+    D̄yx = (V̄y[2:end,:] - V̄y[1:end-1,:]) * invΔx 
 
     Dyy = (Vy[:,2:end] - Vy[:,1:end-1]) * invΔy             # Static Arrays ???
     Dxx = (Vx[2:end,:] - Vx[1:end-1,:]) * invΔx             
     Dkk = Dxx + Dyy[2:end-1,:]
-
     Dxy = (Vx[:,2:end] - Vx[:,1:end-1]) * invΔy 
     Dyx = (Vy[2:end,:] - Vy[1:end-1,:]) * invΔx 
 
     ε̇xx = Dxx            - 1/3*Dkk
     ε̇yy = Dyy[2:end-1,:] - 1/3*Dkk
     ε̇xy = 1/2 * ( Dxy + Dyx[:,2:end-1] ) 
+    ε̇̄xx = D̄xx[:,2:end-1] - 1/3*D̄kk
+    ε̇̄yy = D̄yy - 1/3*D̄kk
+    ε̇̄xy = 1/2 * ( D̄xy[2:end-1,:] + D̄yx ) 
 
-    # ε̇II = sqrt.(1/2*(ε̇xx.^2 .+ ε̇yy.^2) .+ ε̇x̄ȳ.^2)
-    # n   = materials.n[phase]
-    η  = materials.η0[phase]
-    η̄  = materials.η0[p̄hase]
-    # ηy  =  η0 .* ε̇II.^(1 ./ n .- 1.0 )
- 
+    ε̇II = sqrt.(1/2*(ε̇xx.^2 .+ ε̇yy.^2) .+ ε̇̄xy.^2)
+    ε̇̄II = sqrt.(1/2*(ε̇̄xx.^2 .+ ε̇̄yy.^2) .+ ε̇xy.^2)
+    η  = materials.η0[phase] .* ε̇II.^(1 ./ materials.n[phase] .- 1.0 )
+    η̄  = materials.η0[p̄hase] .* ε̇̄II.^(1 ./ materials.n[p̄hase] .- 1.0 )
     τyy = 2 * η .* ε̇yy
     τxy = 2 * η̄ .* ε̇xy
+
+    # D  = materials.D[phase] 
+    # D̄  = materials.D[p̄hase] 
+    # τyy = zeros(1,2)
+    # τxy = zeros(2,1)
+    # τyy[1,1] = D[1][2,1] .* ε̇xx[1] + D[1][2,2] .* ε̇yy[1] + D[1][2,3] .* ε̇̄xy[1]
+    # τyy[1,2] = D[2][2,1] .* ε̇xx[2] + D[2][2,2] .* ε̇yy[2] + D[2][2,3] .* ε̇̄xy[2]
+    # τxy[1,1] = D̄[1][3,1] .* ε̇̄xx[1] + D̄[1][3,2] .* ε̇̄yy[1] + D̄[1][3,3] .* ε̇xy[1]
+    # τxy[2,1] = D̄[2][3,1] .* ε̇̄xx[2] + D̄[2][3,2] .* ε̇̄yy[2] + D̄[2][3,3] .* ε̇xy[2]
 
     fy  = 0 
     fy  = (τyy[1,2] - τyy[1,1]) * invΔy 
     fy += (τxy[2,1] - τxy[1,1]) * invΔx 
     fy -= ( Pt[1,2] -  Pt[1,1]) * invΔy
-    fy *= -1#*Δ.x*Δ.y
+    fy *= -1*Δ.x*Δ.y
 
     return fy
 end
@@ -523,7 +612,6 @@ end
 function main(nc) 
     #--------------------------------------------#
     # Resolution
-    # nc = (x = 5, y = 4)
 
     inx_V  = FSG_Array( 2:nc.x+2, 2:nc.x+1 )
     iny_V  = FSG_Array( 2:nc.y+1, 2:nc.y+2 )
@@ -551,12 +639,12 @@ function main(nc)
     type.Vy[1][inx_V[1],iny_V[1]] .= :in       
     type.Vy[1][2,iny_V[1]]        .= :constant 
     type.Vy[1][end-1,iny_V[1]]    .= :constant 
-    type.Vy[1][inx_V[1],1]        .= :Dirichlet_normal
-    type.Vy[1][inx_V[1],end]      .= :Dirichlet_normal
+    type.Vy[1][inx_V[1],1]        .= :Neumann_normal
+    type.Vy[1][inx_V[1],end]      .= :Neumann_normal
     # -------- V grid 2 -------- #
     type.Vx[2][inx_V[2],iny_V[2]] .= :in       
-    type.Vx[2][1,iny_V[2]]        .= :Dirichlet_normal
-    type.Vx[2][end,iny_V[2]]      .= :Dirichlet_normal
+    type.Vx[2][1,iny_V[2]]        .= :Neumann_normal
+    type.Vx[2][end,iny_V[2]]      .= :Neumann_normal
     type.Vx[2][inx_V[2],2]        .= :constant 
     type.Vx[2][inx_V[2],end-1]    .= :constant 
     type.Vy[2][inx_V[2],iny_V[2]] .= :in       
@@ -606,9 +694,9 @@ function main(nc)
 
     ################################
     # Sparse matrix assembly
-    nVx   = [maximum(number.Vx[1]) maximum(number.Vx[2])]
-    nVy   = [maximum(number.Vy[1]) maximum(number.Vy[2])]
-    nPt   = [maximum(number.Pt[1]) maximum(number.Pt[2])]
+    @show nVx   = [maximum(number.Vx[1]) maximum(number.Vx[2])]
+    @show nVy   = [maximum(number.Vy[1]) maximum(number.Vy[2])]
+    @show nPt   = [maximum(number.Pt[1]) maximum(number.Pt[2])]
 
     VxVx = FSG_Array( 
         FSG_Array(ExtendableSparseMatrix(nVx[1], nVx[1]), ExtendableSparseMatrix(nVx[1], nVx[2])),
@@ -654,7 +742,7 @@ function main(nc)
     )
 
     # Intialise field
-    L   = (x=10.0, y=10.0)
+    L   = (x=1.0, y=1.0)
     Δ   = (x=L.x/nc.x, y=L.y/nc.y)
     R   = (x = FSG_Array(zeros(size_V[1]...), zeros(size_V[2]...)), 
            y = FSG_Array(zeros(size_V[1]...), zeros(size_V[2]...)),
@@ -664,9 +752,18 @@ function main(nc)
     Pt  = FSG_Array(ones(size_P[1]...), ones(size_P[2]...))
     phases = FSG_Array(ones(Int64, size_P[1]...), ones(Int64, size_P[2]...))
 
+
+    θ  = 30
+    N  = [sind(θ) cosd(θ)]
+    η0 = [1e0 1e2]
+    δ  = [10 1]
+    D1 = ViscosityTensor(η0[1], δ[1], N, false)
+    D2 = ViscosityTensor(η0[2], δ[2], N, false)
+
     materials = ( 
-        n  = [1.3 1.0],
-        η0 = [1e0 1e2] 
+        n  = [2.0 1.0],
+        η0 = [1e0 1e2],
+        D  = [D1, D2], 
     )
 
     # Pure Shear
@@ -677,8 +774,8 @@ function main(nc)
     xc  = LinRange(-L.x/2-Δ.x/2, L.x/2+Δ.x/2, nc.x+2)
     yc  = LinRange(-L.y/2-Δ.y/2, L.y/2+Δ.y/2, nc.y+2)
 
-    phases[1][xc.^2 .+ (yc').^2 .< 1.] .= 2 
-    phases[2][xv.^2 .+ (yv').^2 .< 1.] .= 2
+    phases[1][xc.^2 .+ (yc').^2 .< 0.1^2] .= 2 
+    phases[2][xv.^2 .+ (yv').^2 .< 0.1^2] .= 2
 
     VxHR  = zeros(2*nc.x+1, 2*nc.y+1)
     VyHR  = zeros(2*nc.x+1, 2*nc.y+1)
@@ -715,143 +812,160 @@ function main(nc)
         )       
     )
 
-    ResidualContinuity2D_1!(R, V, Pt, phases, materials, number, type, BC, nc, Δ) 
-    ResidualContinuity2D_2!(R, V, Pt, phases, materials, number, type, BC, nc, Δ) 
-    ResidualMomentum2D_1!(R, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ) 
-    ResidualMomentum2D_2!(R, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ) 
+    # Newton solver
+    niter = 10
 
-    @show norm(R.x[1])
-    @show norm(R.x[2])
-    @show norm(R.y[1])
-    @show norm(R.y[2])
-    @show norm(R.p[1])
-    @show norm(R.p[2])
-
-    AssembleMomentum2D_1!(M, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ) 
-    AssembleMomentum2D_2!(M, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ) 
-    AssembleContinuity2D_1!(M, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ) 
-    AssembleContinuity2D_2!(M, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ)
-
-    # Stokes operator as block matrices
-    𝐊  = [M.Vx.Vx[1][1] M.Vx.Vx[1][2] M.Vx.Vy[1][1] M.Vx.Vy[1][2]; 
-          M.Vx.Vx[2][1] M.Vx.Vx[2][2] M.Vx.Vy[2][1] M.Vx.Vy[2][2];
-          M.Vy.Vx[1][1] M.Vy.Vx[1][2] M.Vy.Vy[1][1] M.Vy.Vy[1][2]
-          M.Vy.Vx[2][1] M.Vy.Vx[2][2] M.Vy.Vy[2][1] M.Vy.Vy[2][2]
-          ]
-  
-    𝐐  = [M.Vx.Pt[1][1] M.Vx.Pt[1][2];
-          M.Vx.Pt[2][1] M.Vx.Pt[2][2];  
-          M.Vy.Pt[1][1] M.Vy.Pt[1][2];
-          M.Vy.Pt[2][1] M.Vy.Pt[2][2];]
-    𝐐ᵀ = [M.Pt.Vx[1][1] M.Pt.Vx[1][2] M.Pt.Vy[1][1] M.Pt.Vy[1][2];
-          M.Pt.Vx[2][1] M.Pt.Vx[2][2] M.Pt.Vy[2][1] M.Pt.Vy[2][2];]
-    𝐏  = [M.Pt.Pt[1][1] M.Pt.Pt[1][2];
-          M.Pt.Pt[2][1] M.Pt.Pt[2][2];] 
-    𝐌 = [𝐊 𝐐; 𝐐ᵀ 𝐏]
-
-    # display(𝐊)
-    # display(𝐌)
-    # 𝐌diff =  𝐌 - 𝐌'
-    # dropzeros!(𝐌diff)
-    # display(𝐌diff)
-
-    # Set global residual vector
-    r = zeros(sum(nVx) + sum(nVy) + sum(nPt))
-    SetRHS!(r, R, number, type, nc)
-
-    dx = - 𝐌 \ r
-    cholesky(𝐊)
+    err = Fields(
+        FSG_Array( zeros(niter), zeros(niter) ),
+        FSG_Array( zeros(niter), zeros(niter) ),
+        FSG_Array( zeros(niter), zeros(niter) ),
+    )
     
-    UpdateSolution!(V, Pt, dx, number, type, nc)
+    for iter=1:niter
+        @info "iteration $(iter)"
+        ResidualContinuity2D_1!(R, V, Pt, phases, materials, number, type, BC, nc, Δ) 
+        ResidualContinuity2D_2!(R, V, Pt, phases, materials, number, type, BC, nc, Δ) 
+        ResidualMomentum2D_1!(R, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ) 
+        ResidualMomentum2D_2!(R, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ) 
 
-    # ############# TEST SG1
-    # 𝐊  = [M.Vx.Vx[1][1] M.Vx.Vy[1][2] ; 
-    #       M.Vy.Vx[2][1] M.Vy.Vy[2][2] 
-    #       ]
-  
-    # 𝐐  = [M.Vx.Pt[1][1] 
-    #       M.Vy.Pt[2][1];
-    #       ]
-    # 𝐐ᵀ = [M.Pt.Vx[1][1] M.Pt.Vy[1][2];]
-    # 𝐏  = [M.Pt.Pt[1][1];]
-    # 𝐌 = [𝐊 𝐐; 𝐐ᵀ 𝐏]
+        err.Vx[1][iter] = norm(R.x[1][inx_V[1],iny_V[1]])/sqrt(nVx[1])
+        err.Vy[1][iter] = norm(R.y[1][inx_V[2],iny_V[2]])/sqrt(nVy[1])
+        err.Pt[1][iter] = norm(R.p[1][inx_P[1],iny_P[1]])/sqrt(nPt[1])
+        err.Vx[2][iter] = norm(R.x[2][inx_V[2],iny_V[2]])/sqrt(nVx[2])
+        err.Vy[2][iter] = norm(R.y[2][inx_V[1],iny_V[1]])/sqrt(nVy[2])
+        err.Pt[2][iter] = norm(R.p[2][inx_P[2],iny_P[2]])/sqrt(nPt[2])
 
-    # display(𝐊)
-    # display(𝐊 - 𝐊')
-    # display(𝐌)
-    # 𝐌diff =  𝐌 - 𝐌'
-    # dropzeros!(𝐌diff)
-    # display(𝐌diff)
+        @show norm(R.x[1])
+        @show norm(R.x[2])
+        @show norm(R.y[1])
+        @show norm(R.y[2])
+        @show norm(R.p[1])
+        @show norm(R.p[2])
 
-    # # Set global residual vector
-    # r = zeros(sum(nVx[1]) + sum(nVy[2]) + sum(nPt[1]))
-    # SetRHSSG1!(r, R, number, type, nc)
+        AssembleMomentum2D_1!(M, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ) 
+        AssembleMomentum2D_2!(M, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ) 
+        AssembleContinuity2D_1!(M, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ) 
+        AssembleContinuity2D_2!(M, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ)
 
-    # dx = - 𝐌 \ r
-    # cholesky(𝐊)
-
-    # UpdateSolutionSG1!(V, Pt, dx, number, type, nc)
-    # ############# TEST SG1
-
-    # ############# TEST SG2
-    # 𝐊  = [M.Vx.Vx[2][2] M.Vx.Vy[2][1]; 
-    #       M.Vy.Vx[1][2] M.Vy.Vy[1][1] 
-    #       ]
-  
-    # 𝐐  = [M.Vx.Pt[2][2] 
-    #       M.Vy.Pt[1][2];
-    #       ]
-    # 𝐐ᵀ = [M.Pt.Vx[2][2] M.Pt.Vy[2][1];]
-    # 𝐏  = [M.Pt.Pt[2][2];]
-    # 𝐌 = [𝐊 𝐐; 𝐐ᵀ 𝐏]
-
-    # display(𝐊)
-    # display(𝐊 - 𝐊')
-    # display(𝐌)
-    # 𝐌diff =  𝐌 - 𝐌'
-    # dropzeros!(𝐌diff)
-    # display(𝐌diff)
-
-    # # Set global residual vector
-    # r = zeros(sum(nVx[2]) + sum(nVy[1]) + sum(nPt[2]))
-    # SetRHSSG2!(r, R, number, type, nc)
-
-    # dx = - 𝐌 \ r
-    # cholesky(𝐊)
+        # Stokes operator as block matrices
+        𝐊  = [M.Vx.Vx[1][1] M.Vx.Vx[1][2] M.Vx.Vy[1][1] M.Vx.Vy[1][2]; 
+            M.Vx.Vx[2][1] M.Vx.Vx[2][2] M.Vx.Vy[2][1] M.Vx.Vy[2][2];
+            M.Vy.Vx[1][1] M.Vy.Vx[1][2] M.Vy.Vy[1][1] M.Vy.Vy[1][2]
+            M.Vy.Vx[2][1] M.Vy.Vx[2][2] M.Vy.Vy[2][1] M.Vy.Vy[2][2]
+            ]
     
-    # UpdateSolutionSG2!(V, Pt, dx, number, type, nc)
+        𝐐  = [M.Vx.Pt[1][1] M.Vx.Pt[1][2];
+            M.Vx.Pt[2][1] M.Vx.Pt[2][2];  
+            M.Vy.Pt[1][1] M.Vy.Pt[1][2];
+            M.Vy.Pt[2][1] M.Vy.Pt[2][2];]
+        𝐐ᵀ = [M.Pt.Vx[1][1] M.Pt.Vx[1][2] M.Pt.Vy[1][1] M.Pt.Vy[1][2];
+            M.Pt.Vx[2][1] M.Pt.Vx[2][2] M.Pt.Vy[2][1] M.Pt.Vy[2][2];]
+        𝐏  = [M.Pt.Pt[1][1] M.Pt.Pt[1][2];
+            M.Pt.Pt[2][1] M.Pt.Pt[2][2];] 
+        𝐌 = [𝐊 𝐐; 𝐐ᵀ 𝐏]
 
-    # ############# TEST SG2
+        display(𝐊)
+        𝐊diff =  𝐊 - 𝐊'
+        droptol!(𝐊diff, 1e-11)
+        display(𝐊diff)
+        # @show 𝐊diff[end,:]
+        # @show 𝐊diff[:,end]
 
-    ResidualContinuity2D_1!(R, V, Pt, phases, materials, number, type, BC, nc, Δ) 
-    ResidualContinuity2D_2!(R, V, Pt, phases, materials, number, type, BC, nc, Δ) 
-    ResidualMomentum2D_1!(R, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ) 
-    ResidualMomentum2D_2!(R, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ) 
+        # display(𝐌)
+        # 𝐌diff =  𝐌 - 𝐌'
+        # dropzeros!(𝐌diff)
+        # display(𝐌diff)
 
-    @show norm(R.x[1])
-    @show norm(R.x[2])
-    @show norm(R.y[1])
-    @show norm(R.y[2])
-    @show norm(R.p[1])
-    @show norm(R.p[2])
+        # Set global residual vector
+        r = zeros(sum(nVx) + sum(nVy) + sum(nPt))
+        SetRHS!(r, R, number, type, nc)
 
-    # printxy(type.Vx[1])
-    # printxy(type.Vy[2])
-    printxy(type.Pt[2])
-    printxy(R.p[2])
+        dx = - 𝐌 \ r
+        # cholesky(𝐊)
+        
+        UpdateSolution!(V, Pt, dx, number, type, nc)
 
+        # ############# TEST SG1
+        # 𝐊  = [M.Vx.Vx[1][1] M.Vx.Vy[1][2] ; 
+        #       M.Vy.Vx[2][1] M.Vy.Vy[2][2] 
+        #       ]
+    
+        # 𝐐  = [M.Vx.Pt[1][1] 
+        #       M.Vy.Pt[2][1];
+        #       ]
+        # 𝐐ᵀ = [M.Pt.Vx[1][1] M.Pt.Vy[1][2];]
+        # 𝐏  = [M.Pt.Pt[1][1];]
+        # 𝐌 = [𝐊 𝐐; 𝐐ᵀ 𝐏]
+
+        # display(𝐊)
+        # display(𝐊 - 𝐊')
+        # display(𝐌)
+        # 𝐌diff =  𝐌 - 𝐌'
+        # dropzeros!(𝐌diff)
+        # display(𝐌diff)
+
+        # # Set global residual vector
+        # r = zeros(sum(nVx[1]) + sum(nVy[2]) + sum(nPt[1]))
+        # SetRHSSG1!(r, R, number, type, nc)
+
+        # dx = - 𝐌 \ r
+        # cholesky(𝐊)
+
+        # UpdateSolutionSG1!(V, Pt, dx, number, type, nc)
+        # ############# TEST SG1
+
+        # ############# TEST SG2
+        # 𝐊  = [M.Vx.Vx[2][2] M.Vx.Vy[2][1]; 
+        #       M.Vy.Vx[1][2] M.Vy.Vy[1][1] 
+        #       ]
+    
+        # 𝐐  = [M.Vx.Pt[2][2] 
+        #       M.Vy.Pt[1][2];
+        #       ]
+        # 𝐐ᵀ = [M.Pt.Vx[2][2] M.Pt.Vy[2][1];]
+        # 𝐏  = [M.Pt.Pt[2][2];]
+        # 𝐌 = [𝐊 𝐐; 𝐐ᵀ 𝐏]
+
+        # display(𝐊)
+        # display(𝐊 - 𝐊')
+        # display(𝐌)
+        # 𝐌diff =  𝐌 - 𝐌'
+        # dropzeros!(𝐌diff)
+        # display(𝐌diff)
+
+        # # Set global residual vector
+        # r = zeros(sum(nVx[2]) + sum(nVy[1]) + sum(nPt[2]))
+        # SetRHSSG2!(r, R, number, type, nc)
+
+        # dx = - 𝐌 \ r
+        # cholesky(𝐊)
+        
+        # UpdateSolutionSG2!(V, Pt, dx, number, type, nc)
+
+        # ############# TEST SG2
+    end
+
+    # Data on SG1
     p1 = heatmap(xv, yc[iny_V[1]], V.x[1][inx_V[1],iny_V[1]]', aspect_ratio=1, xlim=extrema(xc))
     p2 = heatmap(xc[inx_V[2]], yv, V.y[2][inx_V[2],iny_V[2]]', aspect_ratio=1, xlim=extrema(xc))
-    p3 = heatmap(xc[inx_P[1]], yc[iny_P[1]],  Pt[1][inx_P[1],iny_P[1]]', aspect_ratio=1, xlim=extrema(xc))
-    display(plot(p1, p2, p3))
+    p3 = heatmap(xc[inx_P[1]], yc[iny_P[1]],  Pt[1][inx_P[1],iny_P[1]]' .- mean(Pt[1][inx_P[1],iny_P[1]]'), aspect_ratio=1, xlim=extrema(xc), clims=(-3.2,3.2))
+    p4 = plot(xlabel="Iterations", ylabel="log₁₀ error")
+    p4 = plot!(1:niter, log10.(err.Vx[1][1:niter]), label="Vx")
+    p4 = plot!(1:niter, log10.(err.Vy[1][1:niter]), label="Vy")
+    p4 = plot!(1:niter, log10.(err.Pt[1][1:niter]), label="Pt")
+    display(plot(p1, p2, p3, p4))
 
-
+    # Data on SG2
     p1 = heatmap(xc[inx_V[2]], yv, V.x[2][inx_V[2],iny_V[2]]', aspect_ratio=1, xlim=extrema(xc))
     p2 = heatmap(xv, yc[iny_V[1]], V.y[1][inx_V[1],iny_V[1]]', aspect_ratio=1, xlim=extrema(xc))
-    p3 = heatmap(xv, yv,  Pt[2]', aspect_ratio=1, xlim=extrema(xc))
-    display(plot(p1, p2, p3))
+    p3 = heatmap(xv, yv,  Pt[2]', aspect_ratio=1, xlim=extrema(xc), clims=(-3.2,3.2))
+    p4 = plot(xlabel="Iterations", ylabel="log₁₀ error")
+    p4 = plot!(1:niter, log10.(err.Vx[2][1:niter]), label="Vx")
+    p4 = plot!(1:niter, log10.(err.Vy[2][1:niter]), label="Vy")
+    p4 = plot!(1:niter, log10.(err.Pt[2][1:niter]), label="Pt")
+    display(plot(p1, p2, p3, p4))
 
     #--------------------------------------------#
 end
 
-main((x=20, y=20))
+main((x=100, y=100))

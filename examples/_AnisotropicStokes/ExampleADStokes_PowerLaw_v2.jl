@@ -1,26 +1,29 @@
-using StagFDTools, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays
+using StagFDTools.Stokes, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 import GLMakie
 
-struct NumberingV <: AbstractPattern
-    Vx
-    Vy
-    Pt
-end
+function ViscosityTensor(η0, δ, n, engineering)
+    two   = engineering ? 2 : 1
+    μ_N   = η0
+    C_ISO = 2 * μ_N * [1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0/two] # Viscosity tensor for isotropic flow
 
-struct Numbering{Tx,Ty,Tp}
-    Vx::Tx
-    Vy::Ty
-    Pt::Tp
-end
+    # we need to normalise the director every time it is updated
+    Norm_dir   = norm(n)
+    n ./= Norm_dir
 
-function Base.getindex(x::Numbering, i::Int64)
-    @assert 0 < i < 4 
-    i == 1 && return x.Vx
-    i == 2 && return x.Vy
-    i == 3 && return x.Pt
+    # once we know the n we compute anisotropy matrix
+    a0 = 2 * n[1]^2 * n[2]^2
+    a1 = n[1] * n[2] * (-n[1]^2 + n[2]^2)
+
+    # build the matrix 
+    C_ANI = [-a0 a0 2*a1/two; a0 -a0 -2*a1/two; a1 -a1 (-1+2*a0)/two]
+
+    # operator
+    μ_S = μ_N / δ
+    𝐷     = C_ISO + 2 * (μ_N - μ_S) * C_ANI 
+    return  𝐷
 end
 
 struct BoundaryConditions{Tx,Ty,Tp,Txy}
@@ -61,14 +64,21 @@ function Momentum_x(Vx, Vy, Pt, phases, materials, type, bcv, Δ)
     Dȳx̄ = in_center .* 1/4*(Dyx[1:end-1,1:end-1] + Dyx[2:end-0,1:end-1] + Dyx[1:end-1,2:end-0] + Dyx[2:end-0,2:end-0])
     ε̇x̄ȳ = 1/2*(Dx̄ȳ + Dȳx̄)
 
-    ε̇II = sqrt.(1/2*(ε̇xx.^2 .+ ε̇yy.^2) .+ ε̇x̄ȳ.^2)
-    n   = materials.n[phases]
-    η0  = materials.η0[phases]
-    η   =  η0 .* ε̇II.^(1 ./ n .- 1.0 )
+    # ε̇II = sqrt.(1/2*(ε̇xx.^2 .+ ε̇yy.^2) .+ ε̇x̄ȳ.^2)
+    # n   = materials.n[phases]
+    # η0  = materials.η0[phases]
+    # η   =  η0 .* ε̇II.^(1 ./ n .- 1.0 )
 
-    τxx = 2 * η .* ε̇xx
-    τyy = 2 * η .* ε̇yy    
-    τx̄ȳ = 2 * η .* ε̇x̄ȳ
+    D  = materials.D[phases] 
+    τxx = zero(ε̇xx)
+    τx̄ȳ = zero(ε̇xx)
+    for j in axes(ε̇xx,2), i in axes(ε̇xx,1)
+        τxx[i,j] = D[i,j][1,1] .* ε̇xx[i,j] + D[i,j][1,2] .* ε̇yy[i,j] + D[i,j][1,3] .* ε̇x̄ȳ[i,j]
+        τx̄ȳ[i,j] = D[i,j][3,1] .* ε̇xx[i,j] + D[i,j][3,2] .* ε̇yy[i,j] + D[i,j][3,3] .* ε̇x̄ȳ[i,j]
+    end
+    # τxx = 2 * η .* ε̇xx
+    # τyy = 2 * η .* ε̇yy    
+    # τx̄ȳ = 2 * η .* ε̇x̄ȳ
     τxy = 1/4*(τx̄ȳ[1:end-1,1:end-1] + τx̄ȳ[2:end-0,1:end-1] + τx̄ȳ[1:end-1,2:end-0] + τx̄ȳ[2:end-0,2:end-0])
 
     # Regular stencil
@@ -105,15 +115,22 @@ function Momentum_y(Vx, Vy, Pt, phases, materials, type, bcv, Δ)
     Dȳx̄ =              1/4*(Dyx[1:end-1,1:end-1] + Dyx[2:end-0,1:end-1] + Dyx[1:end-1,2:end-0] + Dyx[2:end-0,2:end-0])
     ε̇x̄ȳ = 1/2*(Dx̄ȳ + Dȳx̄)
 
-    ε̇II = sqrt.(1/2*(ε̇xx.^2 .+ ε̇yy.^2) .+ ε̇x̄ȳ.^2)
-    n   = materials.n[phases]
-    η0  = materials.η0[phases]
-    η   =  η0 .* ε̇II.^(1 ./ n .- 1.0 )
+    # ε̇II = sqrt.(1/2*(ε̇xx.^2 .+ ε̇yy.^2) .+ ε̇x̄ȳ.^2)
+    # n   = materials.n[phases]
+    # η0  = materials.η0[phases]
+    # η   =  η0 .* ε̇II.^(1 ./ n .- 1.0 )
 
-    τxx = 2 * η .* ε̇xx
-    τyy = 2 * η .* ε̇yy
-    τx̄ȳ = 2 * η .* ε̇x̄ȳ
+    # τxx = 2 * η .* ε̇xx
+    # τyy = 2 * η .* ε̇yy
+    # τx̄ȳ = 2 * η .* ε̇x̄ȳ
 
+    D  = materials.D[phases] 
+    τyy = zero(ε̇xx)
+    τx̄ȳ = zero(ε̇xx)
+    for j in axes(ε̇xx,2), i in axes(ε̇xx,1)
+        τyy[i,j] = D[i,j][2,1] .* ε̇xx[i,j] + D[i,j][2,2] .* ε̇yy[i,j] + D[i,j][2,3] .* ε̇x̄ȳ[i,j]
+        τx̄ȳ[i,j] = D[i,j][3,1] .* ε̇xx[i,j] + D[i,j][3,2] .* ε̇yy[i,j] + D[i,j][3,3] .* ε̇x̄ȳ[i,j]
+    end
     τxy = 1/4*(τx̄ȳ[1:end-1,1:end-1] + τx̄ȳ[2:end-0,1:end-1] + τx̄ȳ[1:end-1,2:end-0] + τx̄ȳ[2:end-0,2:end-0])
     
     # Regular stencil
@@ -375,9 +392,9 @@ end
 let  
     #--------------------------------------------#
     # Resolution
-    nc = (x = 20, y = 20)
+    nc = (x = 100, y = 100)
 
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_p = Ranges_Stokes(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_p = Ranges(nc)
 
     #--------------------------------------------#
     # Boundary conditions
@@ -410,29 +427,29 @@ let
 
     #--------------------------------------------#
     # Equation numbering
-    number = Numbering(
+    number = Fields(
         fill(0, size_x),
         fill(0, size_y),
         fill(0, size_p),
     )
-    Numbering_Stokes!(number, type, nc)
+    Numbering!(number, type, nc)
 
     #--------------------------------------------#
     # Stencil extent for each block matrix
-    pattern = Numbering(
-        Numbering(@SMatrix([1 1 1 1 1; 1 1 1 1 1; 1 1 1 1 1]),     @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([0 1 0; 0 1 0])), 
-        Numbering(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]),  @SMatrix([1 1 1; 1 1 1; 1 1 1; 1 1 1; 1 1 1]),                 @SMatrix([0 0; 1 1; 0 0])), 
-        Numbering(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]))
+    pattern = Fields(
+        Fields(@SMatrix([1 1 1 1 1; 1 1 1 1 1; 1 1 1 1 1]),     @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([0 1 0; 0 1 0])), 
+        Fields(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]),  @SMatrix([1 1 1; 1 1 1; 1 1 1; 1 1 1; 1 1 1]),                 @SMatrix([0 0; 1 1; 0 0])), 
+        Fields(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]))
     )
 
     # Sparse matrix assembly
     nVx   = maximum(number.Vx)
     nVy   = maximum(number.Vy)
     nPt   = maximum(number.Pt)
-    M = Numbering(
-        Numbering(ExtendableSparseMatrix(nVx, nVx), ExtendableSparseMatrix(nVx, nVy), ExtendableSparseMatrix(nVx, nPt)), 
-        Numbering(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt)), 
-        Numbering(ExtendableSparseMatrix(nPt, nVx), ExtendableSparseMatrix(nPt, nVy), ExtendableSparseMatrix(nPt, nPt))
+    M = Fields(
+        Fields(ExtendableSparseMatrix(nVx, nVx), ExtendableSparseMatrix(nVx, nVy), ExtendableSparseMatrix(nVx, nPt)), 
+        Fields(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt)), 
+        Fields(ExtendableSparseMatrix(nPt, nVx), ExtendableSparseMatrix(nPt, nVy), ExtendableSparseMatrix(nPt, nPt))
     )
 
     #--------------------------------------------#
@@ -487,9 +504,17 @@ let
 
     phases[(xce.^2 .+ (yce').^2) .<= 0.1^2] .= 2
 
+    θ  = 30
+    N  = [sind(θ) cosd(θ)]
+    η0 = [1e0 1e2]
+    δ  = [100 1]
+    D1 = ViscosityTensor(η0[1], δ[1], N, false)
+    D2 = ViscosityTensor(η0[2], δ[2], N, false)
+
     materials = ( 
-        n  = [1.3 1.0],
-        η0 = [1e0 1e2] 
+        n  = [1.0 1.0],
+        η0 = [1e0 1e2],
+        D  = [D1, D2], 
     )
 
     # η.x .= 1e2
@@ -520,7 +545,7 @@ let
 
     # Set global residual vector
     r = zeros(nVx + nVy + nPt)
-    SetRHS_Stokes!(r, R, number, type, nc)
+    SetRHS!(r, R, number, type, nc)
 
     #--------------------------------------------#
     # Assembly
@@ -544,12 +569,11 @@ let
     #--------------------------------------------#
     # Direct solver
     dx = zeros(nVx + nVy + nPt)
-    # dx .= - 𝑀 \ r
-
+    dx .= - 𝑀 \ r
 
     #--------------------------------------------#
 
-    UpdateSolution_Stokes!(V, Pt, dx, number, type, nc)
+    UpdateSolution!(V, Pt, dx, number, type, nc)
 
     # end
 
