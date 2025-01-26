@@ -7,33 +7,10 @@ function Momentum_x(Vx, Vy, Pt, phases, materials, type, bcv, Δ)
     
     invΔx    = 1 / Δ.x
     invΔy    = 1 / Δ.y
-    
-    for j=1:4
-        if type.y[1,j] == :Dirichlet 
-            Vy[1,j] = fma(2, bcv.y[1,j], -Vy[2,j])
-        elseif type.y[1,j] == :Neumann
-            Vy[1,j] = fma(Δ.x, bcv.y[1,j], Vy[2,j])
-        end
-        if type.y[4,j] == :Dirichlet 
-            Vy[4,j] = fma(2, bcv.y[4,j], -Vy[3,j])
-        elseif type.y[4,j] == :Neumann
-            Vy[4,j] = fma(Δ.x, bcv.y[4,j], Vy[3,j])
-        end
-    end
 
-    for i=1:3
-        if type.x[i,1] == :Dirichlet 
-            Vx[i,1] = fma(2, bcv.x[i,1], -Vx[i,2])
-        elseif type.x[i,1] == :Neumann
-            Vx[i,1] = fma(Δ.y, bcv.x[i,1], Vx[i,2])
-        end
-        if type.x[i,end] == :Dirichlet 
-            Vx[i,end] = fma(2, bcv.x[i,end], -Vx[i,end-1])
-        elseif type.x[i,end] == :Neumann
-            Vx[i,end] = fma(Δ.y, bcv.x[i,end], Vx[i,end-1])
-        end
-    end
-     
+    SetBCVx1!(Vx, type.x, bcv.x, Δ)
+    SetBCVy1!(Vy, type.y, bcv.y, Δ)
+    
     Dxx = (Vx[2:end,:] - Vx[1:end-1,:]) * invΔx             # Static Arrays ???
     Dyy = (Vy[2:end-1,2:end] - Vy[2:end-1,1:end-1]) * invΔy             
     Dkk = Dxx + Dyy
@@ -77,32 +54,9 @@ function Momentum_y(Vx, Vy, Pt, phases, materials, type, bcv, Δ)
     invΔx    = 1 / Δ.x
     invΔy    = 1 / Δ.y
 
-    for i=1:4
-        if type.x[i,1] == :Dirichlet 
-            Vx[i,1] = fma(2, bcv.x[i,1], -Vx[i,2])
-        elseif type.x[i,1] == :Neumann
-            Vx[i,1] = fma(Δ.y, bcv.x[i,1], Vx[i,2])
-        end
-        if type.x[i,4] == :Dirichlet 
-            Vx[i,4] = fma(2, bcv.x[i,4], -Vx[i,3])
-        elseif type.x[i,4] == :Neumann
-            Vx[i,4] = fma(Δ.y, bcv.x[i,4], Vx[i,3])
-        end
-    end
+    SetBCVx1!(Vx, type.x, bcv.x, Δ)
+    SetBCVy1!(Vy, type.y, bcv.y, Δ)
 
-    for j=1:3
-        if type.y[1,j] == :Dirichlet 
-            Vy[1,j] = fma(2, bcv.y[1,j], -Vy[2,j])
-        elseif type.y[1,j] == :Neumann
-            Vy[1,j] = fma(Δ.x, bcv.y[1,j], Vy[2,j])
-        end
-        if type.y[end,j] == :Dirichlet 
-            Vy[end,j] = fma(2, bcv.y[end,j], -Vy[end-1,j])
-        elseif type.y[end,j] == :Neumann
-            Vy[end,j] = fma(Δ.x, bcv.y[end,j], Vy[end-1,j])
-        end
-    end
-     
     Dxx = (Vx[2:end,2:end-1] - Vx[1:end-1,2:end-1]) * invΔx             # Static Arrays ???
     Dyy = (Vy[:,2:end] - Vy[:,1:end-1]) * invΔy             
     Dkk = Dxx + Dyy
@@ -120,7 +74,6 @@ function Momentum_y(Vx, Vy, Pt, phases, materials, type, bcv, Δ)
     ε̇̄xx = 0.25*(ε̇xx[1:end-1,1:end-1] .+ ε̇xx[1:end-1,2:end-0] .+ ε̇xx[2:end-0,1:end-1] .+ ε̇xx[2:end,2:end])
     ε̇̄yy = 0.25*(ε̇yy[1:end-1,1:end-1] .+ ε̇yy[1:end-1,2:end-0] .+ ε̇yy[2:end-0,1:end-1] .+ ε̇yy[2:end,2:end])
   
-
     ε̇II_c = sqrt.(1/2*(ε̇xx[2:2,:].^2 .+ ε̇yy[2:2,:].^2) + ε̇̄xy.^2)
     ε̇II_v = sqrt.(1/2*(ε̇̄xx.^2 .+ ε̇̄yy.^2) + ε̇xy[1:end,2:2].^2)
     n_c   = materials.n[phases.c]
@@ -351,6 +304,38 @@ function AssembleContinuity2D!(K, V, P, phases, materials, num, pattern, type, B
     return nothing
 end
 
+function SetBCVx1!(Vx, typex, bcx, Δ)
+    for ii in axes(typex, 1)
+        if typex[ii,1] == :Dirichlet
+            Vx[ii,1] = fma(2, bcx[ii,1], -Vx[ii,2])
+        elseif typex[ii,1] == :Neumann
+            Vx[ii,1] = fma(Δ.y, bcx[ii,1], Vx[ii,2])
+        end
+
+        if typex[ii,end] == :Dirichlet
+            Vx[ii,end] = fma(2, bcx[ii,end], -Vx[ii,end-1])
+        elseif typex[ii,end] == :Neumann
+            Vx[ii,end] = fma(Δ.y, bcx[ii,end], Vx[ii,end-1])
+        end
+    end
+end
+
+function SetBCVy1!(Vy, typey, bcy, Δ)
+    for jj in axes(typey, 2)
+        if typey[1,jj] == :Dirichlet
+            Vy[1,jj] = fma(2, bcy[1,jj], -Vy[2,jj])
+        elseif typey[1,jj] == :Neumann
+            Vy[1,jj] = fma(Δ.y, bcy[1,jj], Vy[2,jj])
+        end
+
+        if typey[end,jj] == :Dirichlet
+            Vy[end,jj] = fma(2, bcy[end,jj], -Vy[end-1,jj])
+        elseif typey[end,jj] == :Neumann
+            Vy[end,jj] = fma(Δ.y, bcy[end,jj], Vy[end-1,jj])
+        end
+    end
+end
+
 @views function main(nc)
     #--------------------------------------------#
     # Resolution
@@ -372,13 +357,13 @@ end
         fill(0., (nc.x+2, nc.y+2)),
     )
     # -------- Vx -------- #
-    type.Vx[inx_Vx,iny_Vx] .= :in       
+    type.Vx[inx_Vx,iny_Vx]  .= :in       
     type.Vx[2,iny_Vx]       .= :Dir_conf 
     type.Vx[end-1,iny_Vx]   .= :Dir_conf 
     type.Vx[inx_Vx,2]       .= :Neumann
     type.Vx[inx_Vx,end-1]   .= :Neumann
     # -------- Vy -------- #
-    type.Vy[inx_Vy,iny_Vy] .= :in       
+    type.Vy[inx_Vy,iny_Vy]  .= :in       
     type.Vy[2,iny_Vy]       .= :Neumann
     type.Vy[end-1,iny_Vy]   .= :Neumann
     type.Vy[inx_Vy,2]       .= :Dir_conf 
@@ -419,7 +404,10 @@ end
     Δ  = (x=L.x/nc.x, y=L.y/nc.y)
     R  = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_c...))
     V  = (x=zeros(size_x...), y=zeros(size_y...))
-    η  = (x= ones(size_x...), y= ones(size_y...), p=ones(size_c...) )
+    η  = (c=ones(size_c...), v=ones(size_v...) )
+    ε̇  = (xx=ones(size_c...), yy=ones(size_c...), xy=ones(size_v...) )
+    τ  = (xx=ones(size_c...), yy=ones(size_c...), xy=ones(size_v...) )
+
     Pt = zeros(size_c...)
     xv = LinRange(-L.x/2, L.x/2, nc.x+1)
     yv = LinRange(-L.y/2, L.y/2, nc.y+1)
@@ -491,18 +479,95 @@ end
         𝐐ᵀ = [M.Pt.Vx M.Pt.Vy]
         𝐌 = [𝐊 𝐐; 𝐐ᵀ M.Pt.Pt]
 
-        𝐊diff =  𝐊 - 𝐊'
-        droptol!(𝐊diff, 1e-11)
-        display(𝐊diff)
+        # 𝐊diff =  𝐊 - 𝐊'
+        # droptol!(𝐊diff, 1e-11)
+        # display(𝐊diff)
         
         #--------------------------------------------#
         # Direct solver (TODO: need a better solver)
         dx = - 𝐌 \ r
 
-        #--------------------------------------------#
-        # Update solutions (TODO: need a line search here)
-        UpdateSolution!(V, Pt, dx, number, type, nc)
+        α     = LinRange(0.05, 1.0, 10)
+        Vi    = (x=zeros(size_x...), y=zeros(size_y...))
+        Pti   = zeros(size_c...)
+        Vi.x .= V.x 
+        Vi.y .= V.y 
+        Pti  .= Pt
+        rvec = zeros(length(α))
+        for i in eachindex(α)
+            V.x .= Vi.x 
+            V.y .= Vi.y
+            Pt  .= Pti
+            UpdateSolution!(V, Pt, α[i].*dx, number, type, nc)
+            ResidualContinuity2D!(R, V, Pt, phases, materials, number, type, BC, nc, Δ) 
+            ResidualMomentum2D_x!(R, V, Pt, phases, materials, number, type, BC, nc, Δ)
+            ResidualMomentum2D_y!(R, V, Pt, phases, materials, number, type, BC, nc, Δ)
+            rvec[i] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx) + norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy) + norm(R.p[inx_Pt,iny_Pt])/sqrt(nPt)   
+        end
+        _, imin = findmin(rvec)
+        V.x .= Vi.x 
+        V.y .= Vi.y
+        Pt  .= Pti
 
+        #--------------------------------------------#
+        # Update solutions
+        UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
+
+    end
+
+    # Strain rates
+    for j=2:size(ε̇.xx,2)-1, i=2:size(ε̇.xx,1)-1
+        Vx     = MMatrix{2,3}(      V.x[ii,jj] for ii in i:i+1,   jj in j:j+2)
+        Vy     = MMatrix{3,2}(      V.y[ii,jj] for ii in i:i+2,   jj in j:j+1)
+        bcx    = SMatrix{2,3}(    BC.Vx[ii,jj] for ii in i:i+1,   jj in j:j+2)
+        bcy    = SMatrix{3,2}(    BC.Vy[ii,jj] for ii in i:i+2,   jj in j:j+1)
+        typex  = SMatrix{2,3}(  type.Vx[ii,jj] for ii in i:i+1,   jj in j:j+2)
+        typey  = SMatrix{3,2}(  type.Vy[ii,jj] for ii in i:i+2,   jj in j:j+1)
+
+        SetBCVx1!(Vx, typex, bcx, Δ)
+        SetBCVy1!(Vy, typey, bcy, Δ)
+
+        ∂Vx∂x = (Vx[2:end,:] - Vx[1:end-1,:]) / Δ.x
+        ∂Vy∂y = (Vy[:,2:end] - Vy[:,1:end-1]) / Δ.y
+        ∂Vx∂y = (Vx[:,2:end] - Vx[:,1:end-1]) / Δ.y
+        ∂Vy∂x = (Vy[2:end,:] - Vy[1:end-1,:]) / Δ.x
+
+        divV  = ∂Vx∂x[:,2:end-1] + ∂Vy∂y[2:end-1,:]
+        ε̇xx   = ∂Vx∂x[:,2:end-1] - 1/3*divV
+        ε̇yy   = ∂Vy∂y[2:end-1,:] - 1/3*divV
+        ε̇xy   = 1/2*(∂Vx∂y + ∂Vy∂x)  
+        ε̇̄xy   = 0.25*(ε̇xy[1:end-1,1:end-1] .+ ε̇xy[1:end-1,2:end-0] .+ ε̇xy[2:end-0,1:end-1] .+ ε̇xy[2:end,2:end])
+        ε̇II_c = sqrt.(1/2*(ε̇xx.^2 .+ ε̇yy.^2) + ε̇̄xy.^2)
+        n_c   = materials.n[phases.c]
+        η0_c  = materials.η0[phases.c]
+        η.c[i,j] =  (η0_c .* ε̇II_c.^(1 ./ n_c .- 1.0 ))[1]
+    end
+
+    for j=1:size(ε̇.xy,2), i=1:size(ε̇.xy,1)
+        Vx     = MMatrix{3,2}(      V.x[ii,jj] for ii in i:i+2,   jj in j+1:j+2)
+        Vy     = MMatrix{2,3}(      V.y[ii,jj] for ii in i+1:i+2, jj in j:j+2  )
+        bcx    = SMatrix{3,2}(    BC.Vx[ii,jj] for ii in i:i+2,   jj in j+1:j+2)
+        bcy    = SMatrix{2,3}(    BC.Vy[ii,jj] for ii in i+1:i+2, jj in j:j+2  )
+        typex  = SMatrix{3,2}(  type.Vx[ii,jj] for ii in i:i+2,   jj in j+1:j+2)
+        typey  = SMatrix{2,3}(  type.Vy[ii,jj] for ii in i+1:i+2, jj in j:j+2  )
+        ∂Vx∂x = (Vx[2:end,:] - Vx[1:end-1,:]) / Δ.x
+        ∂Vy∂y = (Vy[:,2:end] - Vy[:,1:end-1]) / Δ.y
+        ∂Vx∂y = (Vx[:,2:end] - Vx[:,1:end-1]) / Δ.y
+        ∂Vy∂x = (Vy[2:end,:] - Vy[1:end-1,:]) / Δ.x
+
+        SetBCVx1!(Vx, typex, bcx, Δ)
+        SetBCVy1!(Vy, typey, bcy, Δ)
+
+        divV  = ∂Vx∂x + ∂Vy∂y
+        ε̇xx   = ∂Vx∂x - 1/3*divV
+        ε̇yy   = ∂Vy∂y - 1/3*divV
+        ε̇xy   = 1/2*(∂Vx∂y[2:end-1,:] + ∂Vy∂x[:,2:end-1]) 
+        ε̇̄xx   = 0.25*(ε̇xx[1:end-1,1:end-1] .+ ε̇xx[1:end-1,2:end-0] .+ ε̇xx[2:end-0,1:end-1] .+ ε̇xx[2:end,2:end])
+        ε̇̄yy   = 0.25*(ε̇yy[1:end-1,1:end-1] .+ ε̇yy[1:end-1,2:end-0] .+ ε̇yy[2:end-0,1:end-1] .+ ε̇yy[2:end,2:end])
+        ε̇II_v = sqrt.(1/2*(ε̇̄xx.^2 .+ ε̇̄yy.^2) + ε̇xy.^2)
+        n_v   = materials.n[phases.v]
+        η0_v  = materials.η0[phases.v]
+        η.v[i,j] =  (η0_v .* ε̇II_v.^(1 ./ n_v .- 1.0 ))[1]
     end
 
     #--------------------------------------------#
@@ -513,8 +578,10 @@ end
     p4 = plot!(1:niter, log10.(err.x[1:niter]), label="Vx")
     p4 = plot!(1:niter, log10.(err.y[1:niter]), label="Vy")
     p4 = plot!(1:niter, log10.(err.p[1:niter]), label="Pt")
-    display(plot(p1, p2, p3, p4))
+    p5 = heatmap(xc, yc,  η.c[inx_Pt,iny_Pt]', aspect_ratio=1, xlim=extrema(xc), title="ηc")
+    p6 = heatmap(xv, yv,  η.v', aspect_ratio=1, xlim=extrema(xv), title="ηv")
+    display(plot(p1, p2, p3, p4, p5, p6, layout=(3,2)))
     
 end
 
-main((x = 12, y = 11))
+main((x = 50, y = 51))
