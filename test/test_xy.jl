@@ -103,7 +103,7 @@ function TestShearStrainRate(D_BC)
     # Resolution
     nc = (x = 10, y = 10)
 
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_p = Ranges_Stokes(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges_Stokes(nc)
 
     #--------------------------------------------#
     # Boundary conditions
@@ -121,8 +121,8 @@ function TestShearStrainRate(D_BC)
 
     # -------- Vx -------- #
     type.Vx[inx_Vx,iny_Vx] .= :in       
-    type.Vx[2,iny_Vx]       .= :constant 
-    type.Vx[end-1,iny_Vx]   .= :constant 
+    type.Vx[2,iny_Vx]       .= :Dir_conf 
+    type.Vx[end-1,iny_Vx]   .= :Dir_conf 
     type.Vx[inx_Vx,2]       .= :Neumann
     type.Vx[inx_Vx,end-1]   .= :Neumann
     type.Vx[inx_Vx,2]       .= :Dirichlet
@@ -133,8 +133,8 @@ function TestShearStrainRate(D_BC)
     type.Vy[end-1,iny_Vy]   .= :Neumann
     # type.Vy[2,iny_Vy]       .= :Dirichlet
     # type.Vy[end-1,iny_Vy]   .= :Dirichlet
-    type.Vy[inx_Vy,2]       .= :constant 
-    type.Vy[inx_Vy,end-1]   .= :constant 
+    type.Vy[inx_Vy,2]       .= :Dir_conf 
+    type.Vy[inx_Vy,end-1]   .= :Dir_conf 
     # -------- Pt -------- #
     type.Pt[2:end-1,2:end-1] .= :in
 

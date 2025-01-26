@@ -23,6 +23,7 @@ module StokesFSG
     using StaticArrays, ExtendableSparse, StaticArrays, Enzyme
     include("StokesFSG.jl")
     export FSG_Array, Fields, Ranges, Numbering!#, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx!, SetBCVy!
+    export AllocateSparseMatrix, Patterns
     export AssembleContinuity2D_1!, AssembleContinuity2D_2!, ResidualContinuity2D_1!, ResidualContinuity2D_2!
     export SetRHS!, UpdateSolution!, SetRHSSG1!, UpdateSolutionSG1!, SetRHSSG2!, UpdateSolutionSG2!
 end

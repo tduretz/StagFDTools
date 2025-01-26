@@ -26,6 +26,82 @@ function Base.getindex(x::Fields, i::Int64)
     i == 3 && return x.Pt
 end
 
+function Patterns()
+
+    # Stencil extent for each block matrix
+    VV = FSG_Array( 
+        FSG_Array(@SMatrix([0 1 0; 1 1 1; 0 1 0]), @SMatrix([1 1; 1 1])),
+        FSG_Array(@SMatrix([1 1; 1 1]), @SMatrix([0 1 0; 1 1 1; 0 1 0]))
+    )
+    VP = FSG_Array( 
+        FSG_Array(@SMatrix([1; 1]), @SMatrix([1  1])),
+        FSG_Array(@SMatrix([1  1]), @SMatrix([1; 1]))
+    )
+    PV = FSG_Array( 
+        FSG_Array(@SMatrix([1; 1]), @SMatrix([1  1])),
+        FSG_Array(@SMatrix([1  1]), @SMatrix([1; 1]))
+    )
+    PP = FSG_Array(@SMatrix([1]),   @SMatrix([1]))
+
+    pattern = Fields(
+        Fields(VV, VV, VP), 
+        Fields(VV, VV, VP),
+        Fields(PV, PV, PP),
+    )
+    return pattern
+end
+
+function AllocateSparseMatrix(number)
+
+    nVx   = [maximum(number.Vx[1]) maximum(number.Vx[2])]
+    nVy   = [maximum(number.Vy[1]) maximum(number.Vy[2])]
+    nPt   = [maximum(number.Pt[1]) maximum(number.Pt[2])]
+
+    VxVx = FSG_Array( 
+        FSG_Array(ExtendableSparseMatrix(nVx[1], nVx[1]), ExtendableSparseMatrix(nVx[1], nVx[2])),
+        FSG_Array(ExtendableSparseMatrix(nVx[2], nVx[1]), ExtendableSparseMatrix(nVx[2], nVx[2])),
+    )
+    VxVy = FSG_Array( 
+        FSG_Array(ExtendableSparseMatrix(nVx[1], nVy[1]), ExtendableSparseMatrix(nVx[1], nVy[2])),
+        FSG_Array(ExtendableSparseMatrix(nVx[2], nVy[1]), ExtendableSparseMatrix(nVx[2], nVy[2])),
+    )
+    VyVx = FSG_Array( 
+        FSG_Array(ExtendableSparseMatrix(nVy[1], nVx[1]), ExtendableSparseMatrix(nVy[1], nVx[2])),
+        FSG_Array(ExtendableSparseMatrix(nVy[2], nVx[1]), ExtendableSparseMatrix(nVy[2], nVx[2])),
+    )
+    VyVy = FSG_Array( 
+        FSG_Array(ExtendableSparseMatrix(nVy[1], nVy[1]), ExtendableSparseMatrix(nVy[1], nVy[2])),
+        FSG_Array(ExtendableSparseMatrix(nVy[2], nVy[1]), ExtendableSparseMatrix(nVy[2], nVy[2])),
+    )
+    VxP = FSG_Array( 
+        FSG_Array(ExtendableSparseMatrix(nVx[1], nPt[1]), ExtendableSparseMatrix(nVx[1], nPt[2])),
+        FSG_Array(ExtendableSparseMatrix(nVx[2], nPt[1]), ExtendableSparseMatrix(nVx[2], nPt[2])),
+    )
+    VyP = FSG_Array( 
+        FSG_Array(ExtendableSparseMatrix(nVy[1], nPt[1]), ExtendableSparseMatrix(nVy[1], nPt[2])),
+        FSG_Array(ExtendableSparseMatrix(nVy[2], nPt[1]), ExtendableSparseMatrix(nVy[2], nPt[2])),
+    )
+    PVx = FSG_Array( 
+        FSG_Array(ExtendableSparseMatrix(nPt[1], nVx[1]), ExtendableSparseMatrix(nPt[1], nVx[2])),
+        FSG_Array(ExtendableSparseMatrix(nPt[2], nVx[1]), ExtendableSparseMatrix(nPt[2], nVx[2])),
+    )
+    PVy = FSG_Array( 
+        FSG_Array(ExtendableSparseMatrix(nPt[1], nVy[1]), ExtendableSparseMatrix(nPt[1], nVy[2])),
+        FSG_Array(ExtendableSparseMatrix(nPt[2], nVy[1]), ExtendableSparseMatrix(nPt[2], nVy[2])),
+    )
+    PP = FSG_Array( 
+        FSG_Array(ExtendableSparseMatrix(nPt[1], nPt[1]), ExtendableSparseMatrix(nPt[1], nPt[2])),
+        FSG_Array(ExtendableSparseMatrix(nPt[2], nPt[1]), ExtendableSparseMatrix(nPt[2], nPt[2])),
+    )
+
+    M = Fields(
+        Fields(VxVx, VxVy, VxP), 
+        Fields(VyVx, VyVy, VyP),
+        Fields(PVx, PVy, PP),
+    )
+    return M
+end
+
 function SetRHSSG1!(r, R, number, type, nc)
 
     nVx   = [maximum(number.Vx[1]) maximum(number.Vx[2])]
@@ -275,13 +351,13 @@ function Numbering!(N, type, nc)
 
     # Loop through inner nodes of the mesh
     for j=2:size(type.Vx[1],2)-1, i=2:size(type.Vx[1],1)-1
-        if type.Vx[1][i,j] == :constant || (type.Vx[1][i,j] == :periodic && i==size(type.Vx[1],1)-1)
+        if type.Vx[1][i,j] == :Dir_conf || (type.Vx[1][i,j] == :periodic && i==size(type.Vx[1],1)-1)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof_x += 1
             N.Vx[1][i,j] = ndof_x  
         end
-        if type.Vy[1][i,j] == :constant || (type.Vy[1][i,j] == :periodic && i==size(type.Vx[1],1)-1)
+        if type.Vy[1][i,j] == :Dir_conf || (type.Vy[1][i,j] == :periodic && i==size(type.Vx[1],1)-1)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof_y += 1
@@ -312,13 +388,13 @@ function Numbering!(N, type, nc)
 
     # Loop through inner nodes of the mesh
     for j=2:size(type.Vx[2],2)-1, i=2:size(type.Vx[2],1)-1
-        if type.Vx[2][i,j] == :constant || (type.Vx[2][i,j] != :periodic && j==size(type.Vx[2],2)-1)
+        if type.Vx[2][i,j] == :Dir_conf || (type.Vx[2][i,j] == :periodic && j>2)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof_x += 1
             N.Vx[2][i,j] = ndof_x
         end
-        if type.Vy[2][i,j] == :constant || (type.Vy[2][i,j] != :periodic && j==size(type.Vy[2],2)-1)
+        if type.Vy[2][i,j] == :Dir_conf || (type.Vy[2][i,j] != :periodic && j==size(type.Vy[2],2)-1)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof_y += 1
@@ -361,7 +437,7 @@ function Numbering!(N, type, nc)
 
     # Loop through inner nodes of the mesh
     for j=1:size(type.Pt[2],2), i=1:size(type.Pt[2],1)
-        if type.Pt[2][i,j] == :constant || (type.Pt[2][i,j] == :periodic && (i==size(type.Pt[2],1) || j==size(type.Pt[2],2)) )
+        if type.Pt[2][i,j] == :Dir_conf || (type.Pt[2][i,j] == :periodic && (i==size(type.Pt[2],1) || j==size(type.Pt[2],2)) )
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof += 1
@@ -384,24 +460,24 @@ end
 function Continuity(Vx, V̄x, Vy, V̄y, Pt, P̄t, phase, materials, tx, t̄x, ty, t̄y, bc_val, Δ)
     invΔx    = 1 / Δ.x
     invΔy    = 1 / Δ.y
-    if tx[1,1] == :Neumann_normal # West
+    if tx[1,1] == :Neu_norm_half # West
         Vx[1,1] = Vx[2,1] - Δ.x * bc_val.D[1,1]
-    elseif tx[1,1] == :Dirichlet_normal
+    elseif tx[1,1] == :Dir_norm_half
         Vx[1,1] = 2*bc_val.x.W[1] - Vx[2,1]
     end
-    if tx[2,1] == :Neumann_normal # East
+    if tx[2,1] == :Neu_norm_half # East
         Vx[2,1] = Vx[1,1] + Δ.x * bc_val.D[1,1]
-    elseif tx[2,1] == :Dirichlet_normal
+    elseif tx[2,1] == :Dir_norm_half
         Vx[2,1] = 2*bc_val.x.E[1] - Vx[1,1]
     end
-    if ty[1,1] == :Neumann_normal # South
+    if ty[1,1] == :Neu_norm_half # South
         Vy[1,1] = Vy[1,2] - Δ.y * bc_val.D[2,2]
-    elseif ty[1,1] == :Dirichlet_normal
+    elseif ty[1,1] == :Dir_norm_half
         Vy[1,1] = 2*bc_val.y.S[1] - Vy[1,2]
     end
-    if ty[1,2] == :Neumann_normal # North
+    if ty[1,2] == :Neu_norm_half # North
         Vy[1,2] = Vy[1,1] + Δ.y * bc_val.D[2,2]
-    elseif ty[1,2] == :Dirichlet_normal
+    elseif ty[1,2] == :Dir_norm_half
         Vy[1,2] = 2*bc_val.y.N[1] - Vy[1,1]
     end
     η  =  materials.η0[phase[1]]

@@ -12,7 +12,7 @@ function Base.getindex(x::Fields, i::Int64)
 end
 
 function Ranges(nc)     
-    return (inx_Vx = 2:nc.x+2, iny_Vx = 3:nc.y+2, inx_Vy = 3:nc.x+2, iny_Vy = 2:nc.y+2, inx_Pt = 2:nc.x+1, iny_Pt = 2:nc.y+1, size_x = (nc.x+3, nc.y+4), size_y = (nc.x+4, nc.y+3), size_p = (nc.x+2, nc.y+2), size_v = (nc.x+1, nc.y+1))
+    return (inx_Vx = 2:nc.x+2, iny_Vx = 3:nc.y+2, inx_Vy = 3:nc.x+2, iny_Vy = 2:nc.y+2, inx_Pt = 2:nc.x+1, iny_Pt = 2:nc.y+1, size_x = (nc.x+3, nc.y+4), size_y = (nc.x+4, nc.y+3), size_c = (nc.x+2, nc.y+2), size_v = (nc.x+1, nc.y+1))
 end
 
 @views function SparsityPattern!(K, num, pattern, nc) 
@@ -254,7 +254,7 @@ function Numbering!(N, type, nc)
     shift  = (periodic_west) ? 1 : 0 
     # Loop through inner nodes of the mesh
     for j=3:nc.y+4-2, i=2:nc.x+3-1
-        if type.Vx[i,j] == :constant || (type.Vx[i,j] != :periodic && i==nc.x+3-1)
+        if type.Vx[i,j] == :Dir_conf || (type.Vx[i,j] != :periodic && i==nc.x+3-1)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof+=1
@@ -287,7 +287,7 @@ function Numbering!(N, type, nc)
     shift = periodic_south ? 1 : 0
     # Loop through inner nodes of the mesh
     for j=2:nc.y+3-1, i=3:nc.x+4-2
-        if type.Vy[i,j] == :constant || (type.Vy[i,j] != :periodic && j==nc.y+3-1)
+        if type.Vy[i,j] == :Dir_conf || (type.Vy[i,j] != :periodic && j==nc.y+3-1)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof+=1
@@ -344,7 +344,7 @@ end
 #     shift  = (periodic_west) ? 1 : 0 
 #     # Loop through inner nodes of the mesh
 #     for j=3:nc.y+4-2, i=2:nc.x+3-1
-#         if type.Vx[i,j] == :constant || (type.Vx[i,j] != :periodic && i==nc.x+3-1)
+#         if type.Vx[i,j] == :Dir_conf || (type.Vx[i,j] != :periodic && i==nc.x+3-1)
 #             # Avoid nodes with constant velocity or redundant periodic nodes
 #         else
 #             ndof+=1
@@ -377,7 +377,7 @@ end
 #     shift = periodic_south ? 1 : 0
 #     # Loop through inner nodes of the mesh
 #     for j=2:nc.y+3-1, i=3:nc.x+4-2
-#         if type.Vy[i,j] == :constant || (type.Vy[i,j] != :periodic && j==nc.y+3-1)
+#         if type.Vy[i,j] == :Dir_conf || (type.Vy[i,j] != :periodic && j==nc.y+3-1)
 #             # Avoid nodes with constant velocity or redundant periodic nodes
 #         else
 #             ndof+=1

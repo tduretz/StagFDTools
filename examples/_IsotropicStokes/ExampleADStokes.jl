@@ -363,7 +363,7 @@ let
     # Resolution
     nc = (x = 30, y = 32)
 
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_p = Ranges_Stokes(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges_Stokes(nc)
 
     #--------------------------------------------#
     # Boundary conditions
@@ -381,8 +381,8 @@ let
     )
     # -------- Vx -------- #
     type.Vx[inx_Vx,iny_Vx] .= :in       
-    type.Vx[2,iny_Vx]       .= :constant 
-    type.Vx[end-1,iny_Vx]   .= :constant 
+    type.Vx[2,iny_Vx]       .= :Dir_conf 
+    type.Vx[end-1,iny_Vx]   .= :Dir_conf 
     type.Vx[inx_Vx,2]       .= :Neumann
     type.Vx[inx_Vx,end-1]   .= :Neumann
     BC.Vx[2,iny_Vx]         .= 0.0
@@ -393,8 +393,8 @@ let
     type.Vy[inx_Vy,iny_Vy] .= :in       
     type.Vy[2,iny_Vy]       .= :Neumann
     type.Vy[end-1,iny_Vy]   .= :Neumann
-    type.Vy[inx_Vy,2]       .= :constant 
-    type.Vy[inx_Vy,end-1]   .= :constant 
+    type.Vy[inx_Vy,2]       .= :Dir_conf 
+    type.Vy[inx_Vy,end-1]   .= :Dir_conf 
     BC.Vy[2,iny_Vy]         .= 0.0
     BC.Vy[end-1,iny_Vy]     .= 0.0
     BC.Vy[inx_Vy,2]         .= 0.0
@@ -407,7 +407,7 @@ let
     number = Numbering(
         fill(0, size_x),
         fill(0, size_y),
-        fill(0, size_p),
+        fill(0, size_c),
     )
     Numbering_Stokes!(number, type, nc)
 
@@ -433,11 +433,11 @@ let
     # Intialise field
     L   = (x=10.0, y=10.0)
     Δ   = (x=L.x/nc.x, y=L.y/nc.y)
-    R   = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_p...))
+    R   = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_c...))
     V   = (x=zeros(size_x...), y=zeros(size_y...))
-    η   = (x= ones(size_x...), y= ones(size_y...), p=ones(size_p...) )
-    Rp  = zeros(size_p...)
-    Pt  = zeros(size_p...)
+    η   = (x= ones(size_x...), y= ones(size_y...), p=ones(size_c...) )
+    Rp  = zeros(size_c...)
+    Pt  = zeros(size_c...)
     xv  = LinRange(-L.x/2, L.x/2, nc.x+1)
     yv  = LinRange(-L.y/2, L.y/2, nc.y+1)
     xc  = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)

@@ -364,7 +364,7 @@ let
     # Resolution
     nc = (x = 30, y = 32)
 
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_p = Ranges_Stokes(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges_Stokes(nc)
 
     #--------------------------------------------#
     # Boundary conditions
@@ -382,8 +382,8 @@ let
     )
     # -------- Vx -------- #
     type.Vx[inx_Vx,iny_Vx] .= :in       
-    type.Vx[2,iny_Vx]       .= :constant 
-    type.Vx[end-1,iny_Vx]   .= :constant 
+    type.Vx[2,iny_Vx]       .= :Dir_conf 
+    type.Vx[end-1,iny_Vx]   .= :Dir_conf 
     type.Vx[inx_Vx,2]       .= :Neumann
     type.Vx[inx_Vx,end-1]   .= :Neumann
     BC.Vx[2,iny_Vx]         .= 0.0
@@ -394,8 +394,8 @@ let
     type.Vy[inx_Vy,iny_Vy] .= :in       
     type.Vy[2,iny_Vy]       .= :Neumann
     type.Vy[end-1,iny_Vy]   .= :Neumann
-    type.Vy[inx_Vy,2]       .= :constant 
-    type.Vy[inx_Vy,end-1]   .= :constant 
+    type.Vy[inx_Vy,2]       .= :Dir_conf 
+    type.Vy[inx_Vy,end-1]   .= :Dir_conf 
     BC.Vy[2,iny_Vy]         .= 0.0
     BC.Vy[end-1,iny_Vy]     .= 0.0
     BC.Vy[inx_Vy,2]         .= 0.0
@@ -408,7 +408,7 @@ let
     number = Numbering(
         fill(0, size_x),
         fill(0, size_y),
-        fill(0, size_p),
+        fill(0, size_c),
     )
     Numbering_Stokes!(number, type, nc)
 
@@ -434,11 +434,11 @@ let
     # Intialise field
     L   = (x=10.0, y=10.0)
     Δ   = (x=L.x/nc.x, y=L.y/nc.y)
-    R   = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_p...))
+    R   = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_c...))
     V   = (x=zeros(size_x...), y=zeros(size_y...))
-    η   = (x= ones(size_x...), y= ones(size_y...), p=ones(size_p...) )
-    Rp  = zeros(size_p...)
-    Pt  = zeros(size_p...)
+    η   = (x= ones(size_x...), y= ones(size_y...), p=ones(size_c...) )
+    Rp  = zeros(size_c...)
+    Pt  = zeros(size_c...)
     xv  = LinRange(-L.x/2, L.x/2, nc.x+1)
     yv  = LinRange(-L.y/2, L.y/2, nc.y+1)
     xc  = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
@@ -510,21 +510,21 @@ let
     #--------------------------------------------#
 
     Dinv   = (x=zeros(size_x...), y=zeros(size_y...))
-    Dinv_p = zeros(size_p...)
+    Dinv_p = zeros(size_c...)
     UpdateSolution_Stokes!(Dinv, Dinv_p, diag(D_PC_inv), number, type, nc)
 
     #--------------------------------------------#
     n = nVx + nVy + nPt
 
     dV   = (x=zeros(size_x...), y=zeros(size_y...))
-    dPt  = zeros(size_p...)
+    dPt  = zeros(size_c...)
 
     Ap   = (x=zeros(size_x...), y=zeros(size_y...))
-    Ap_p = zeros(size_p...)
+    Ap_p = zeros(size_c...)
     z    = (x=zeros(size_x...), y=zeros(size_y...))
-    z_p  = zeros(size_p...)
+    z_p  = zeros(size_c...)
     p    = (x=zeros(size_x...), y=zeros(size_y...))
-    p_p  = zeros(size_p...)
+    p_p  = zeros(size_c...)
 
     R.x .*= -1
     R.y .*= -1
@@ -652,7 +652,7 @@ end
 
 # @views function (@main)(nc)
 
-#     size_x, size_y, size_p, size_xy = (nc.x+3, nc.y+4), (nc.x+4, nc.y+3), (nc.x+2, nc.y+2), (nc.x+1, nc.y+1)
+#     size_x, size_y, size_c, size_xy = (nc.x+3, nc.y+4), (nc.x+4, nc.y+3), (nc.x+2, nc.y+2), (nc.x+1, nc.y+1)
 #     inx_Vx, iny_Vx = 2:nc.x+2, 3:nc.y+2
 #     inx_Vy, iny_Vy = 3:nc.x+2, 2:nc.y+2
 #     inx_Pt, iny_Pt = 2:nc.x+1, 2:nc.y+1
@@ -661,13 +661,13 @@ end
 #     # Intialise field
 #     L   = (x=10.0, y=10.0)
 #     Δ   = (x=L.x/nc.x, y=L.y/nc.y)
-#     R   = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_p...))
+#     R   = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_c...))
 #     V   = (x=zeros(size_x...), y=zeros(size_y...))
-#     ε̇   = (xx=zeros(size_p...), yy=zeros(size_p...), kk=zeros(size_p...), xy=zeros(size_xy...))
-#     τ   = (xx=zeros(size_p...), yy=zeros(size_p...), xy=zeros(size_xy...))
-#     η   = (x= ones(size_x...), y= ones(size_y...), p=ones(size_p...), xy=ones(size_xy...) )
-#     Rp  = zeros(size_p...)
-#     Pt  = zeros(size_p...)
+#     ε̇   = (xx=zeros(size_c...), yy=zeros(size_c...), kk=zeros(size_c...), xy=zeros(size_xy...))
+#     τ   = (xx=zeros(size_c...), yy=zeros(size_c...), xy=zeros(size_xy...))
+#     η   = (x= ones(size_x...), y= ones(size_y...), p=ones(size_c...), xy=ones(size_xy...) )
+#     Rp  = zeros(size_c...)
+#     Pt  = zeros(size_c...)
 #     xv  = LinRange(-L.x/2, L.x/2, nc.x+1)
 #     yv  = LinRange(-L.y/2, L.y/2, nc.y+1)
 #     xc  = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
@@ -698,7 +698,7 @@ end
 #     η.xy .= 0.25.*(η.y[2:end-2,2:end-1].+η.y[3:end-1,2:end-1].+η.x[2:end-1,2:end-2].+η.x[2:end-1,3:end-1])
 
 #     # Diagonal preconditioner
-#     D    = (x=ones(size_x...), y=ones(size_y...), p=ones(size_p...))
+#     D    = (x=ones(size_x...), y=ones(size_y...), p=ones(size_c...))
 #     dx, dy = Δ.x, Δ.y
 #     etaW, etaE = η.p[1:end-1,2:end-1], η.p[2:end-0,2:end-1]
 #     etaS, etaN = η.xy[:,1:end-1], η.xy[:,2:end-0]
@@ -716,10 +716,10 @@ end
 #     Residual!(R, Rp, V, Pt, ε̇, τ, η, Δ, inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt)
 
 #     # Arrays for solver 
-#     dV   = (x=zeros(size_x...), y=zeros(size_y...)); dPt  = zeros(size_p...)
-#     Ap   = (x=zeros(size_x...), y=zeros(size_y...)); Ap_p = zeros(size_p...)
-#     z    = (x=zeros(size_x...), y=zeros(size_y...)); z_p  = zeros(size_p...)
-#     p    = (x=zeros(size_x...), y=zeros(size_y...)); p_p  = zeros(size_p...)
+#     dV   = (x=zeros(size_x...), y=zeros(size_y...)); dPt  = zeros(size_c...)
+#     Ap   = (x=zeros(size_x...), y=zeros(size_y...)); Ap_p = zeros(size_c...)
+#     z    = (x=zeros(size_x...), y=zeros(size_y...)); z_p  = zeros(size_c...)
+#     p    = (x=zeros(size_x...), y=zeros(size_y...)); p_p  = zeros(size_c...)
     
 #     # Initial residual and preconditioned residual
 #     z.x  .= (1 ./D.x).*R.x; z.y  .= (1 ./D.y).*R.y; z_p   .= (1 ./D.p).*Rp

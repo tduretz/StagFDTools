@@ -1,27 +1,7 @@
-using StagFDTools, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays
+using StagFDTools.Stokes, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
-import GLMakie
-
-struct NumberingV <: AbstractPattern
-    Vx
-    Vy
-    Pt
-end
-
-struct Numbering{Tx,Ty,Tp}
-    Vx::Tx
-    Vy::Ty
-    Pt::Tp
-end
-
-function Base.getindex(x::Numbering, i::Int64)
-    @assert 0 < i < 4 
-    i == 1 && return x.Vx
-    i == 2 && return x.Vy
-    i == 3 && return x.Pt
-end
 
 function Momentum_x(Vx, Vy, Pt, phases, materials, type, bcv, Δ)
     
@@ -361,30 +341,30 @@ function AssembleContinuity2D!(K, V, P, phases, materials, num, pattern, type, B
     return nothing
 end
 
-@views function (@main)(nc)
+@views function main(nc)
     #--------------------------------------------#
     # Resolution
 
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_p = Ranges_Stokes(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges(nc)
 
     #--------------------------------------------#
     # Boundary conditions
 
     # Define node types and set BC flags
-    type = Numbering(
+    type = Fields(
         fill(:out, (nc.x+3, nc.y+4)),
         fill(:out, (nc.x+4, nc.y+3)),
         fill(:out, (nc.x+2, nc.y+2)),
     )
-    BC = Numbering(
+    BC = Fields(
         fill(0., (nc.x+3, nc.y+4)),
         fill(0., (nc.x+4, nc.y+3)),
         fill(0., (nc.x+2, nc.y+2)),
     )
     # -------- Vx -------- #
     type.Vx[inx_Vx,iny_Vx] .= :in       
-    type.Vx[2,iny_Vx]       .= :constant 
-    type.Vx[end-1,iny_Vx]   .= :constant 
+    type.Vx[2,iny_Vx]       .= :Dir_conf 
+    type.Vx[end-1,iny_Vx]   .= :Dir_conf 
     type.Vx[inx_Vx,2]       .= :Neumann
     type.Vx[inx_Vx,end-1]   .= :Neumann
     BC.Vx[2,iny_Vx]         .= 0.0
@@ -395,8 +375,8 @@ end
     type.Vy[inx_Vy,iny_Vy] .= :in       
     type.Vy[2,iny_Vy]       .= :Neumann
     type.Vy[end-1,iny_Vy]   .= :Neumann
-    type.Vy[inx_Vy,2]       .= :constant 
-    type.Vy[inx_Vy,end-1]   .= :constant 
+    type.Vy[inx_Vy,2]       .= :Dir_conf 
+    type.Vy[inx_Vy,end-1]   .= :Dir_conf 
     BC.Vy[2,iny_Vy]         .= 0.0
     BC.Vy[end-1,iny_Vy]     .= 0.0
     BC.Vy[inx_Vy,2]         .= 0.0
@@ -406,39 +386,39 @@ end
 
     #--------------------------------------------#
     # Equation numbering
-    number = Numbering(
+    number = Fields(
         fill(0, size_x),
         fill(0, size_y),
-        fill(0, size_p),
+        fill(0, size_c),
     )
-    Numbering_Stokes!(number, type, nc)
+    Numbering!(number, type, nc)
 
     #--------------------------------------------#
     # Stencil extent for each block matrix
-    pattern = Numbering(
-        Numbering(@SMatrix([1 1 1; 1 1 1; 1 1 1]),                 @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([0 1 0; 0 1 0])), 
-        Numbering(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]),  @SMatrix([1 1 1; 1 1 1; 1 1 1]),                @SMatrix([0 0; 1 1; 0 0])), 
-        Numbering(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]))
+    pattern = Fields(
+        Fields(@SMatrix([1 1 1; 1 1 1; 1 1 1]),                 @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([0 1 0; 0 1 0])), 
+        Fields(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]),  @SMatrix([1 1 1; 1 1 1; 1 1 1]),                @SMatrix([0 0; 1 1; 0 0])), 
+        Fields(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]))
     )
 
     # Sparse matrix assembly
     nVx   = maximum(number.Vx)
     nVy   = maximum(number.Vy)
     nPt   = maximum(number.Pt)
-    M = Numbering(
-        Numbering(ExtendableSparseMatrix(nVx, nVx), ExtendableSparseMatrix(nVx, nVy), ExtendableSparseMatrix(nVx, nPt)), 
-        Numbering(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt)), 
-        Numbering(ExtendableSparseMatrix(nPt, nVx), ExtendableSparseMatrix(nPt, nVy), ExtendableSparseMatrix(nPt, nPt))
+    M = Fields(
+        Fields(ExtendableSparseMatrix(nVx, nVx), ExtendableSparseMatrix(nVx, nVy), ExtendableSparseMatrix(nVx, nPt)), 
+        Fields(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt)), 
+        Fields(ExtendableSparseMatrix(nPt, nVx), ExtendableSparseMatrix(nPt, nVy), ExtendableSparseMatrix(nPt, nPt))
     )
 
     #--------------------------------------------#
     # Intialise field
     L  = (x=1.0, y=1.0)
     Δ  = (x=L.x/nc.x, y=L.y/nc.y)
-    R  = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_p...))
+    R  = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_c...))
     V  = (x=zeros(size_x...), y=zeros(size_y...))
-    η  = (x= ones(size_x...), y= ones(size_y...), p=ones(size_p...) )
-    Pt = zeros(size_p...)
+    η  = (x= ones(size_x...), y= ones(size_y...), p=ones(size_c...) )
+    Pt = zeros(size_c...)
     xv = LinRange(-L.x/2, L.x/2, nc.x+1)
     yv = LinRange(-L.y/2, L.y/2, nc.y+1)
     xc = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
@@ -496,7 +476,7 @@ end
         #--------------------------------------------#
         # Set global residual vector
         r = zeros(nVx + nVy + nPt)
-        SetRHS_Stokes!(r, R, number, type, nc)
+        SetRHS!(r, R, number, type, nc)
 
         #--------------------------------------------#
         # Assembly
@@ -505,18 +485,22 @@ end
         AssembleMomentum2D_y!(M, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ)
 
         # Stokes operator as block matrices
-        K  = [M.Vx.Vx M.Vx.Vy; M.Vy.Vx M.Vy.Vy]
-        Q  = [M.Vx.Pt; M.Vy.Pt]
-        Qᵀ = [M.Pt.Vx M.Pt.Vy]
-        𝑀 = [K Q; Qᵀ M.Pt.Pt]
+        𝐊  = [M.Vx.Vx M.Vx.Vy; M.Vy.Vx M.Vy.Vy]
+        𝐐  = [M.Vx.Pt; M.Vy.Pt]
+        𝐐ᵀ = [M.Pt.Vx M.Pt.Vy]
+        𝐌 = [𝐊 𝐐; 𝐐ᵀ M.Pt.Pt]
+
+        𝐊diff =  𝐊 - 𝐊'
+        droptol!(𝐊diff, 1e-11)
+        display(𝐊diff)
         
         #--------------------------------------------#
         # Direct solver (TODO: need a better solver)
-        dx = - 𝑀 \ r
+        dx = - 𝐌 \ r
 
         #--------------------------------------------#
         # Update solutions (TODO: need a line search here)
-        UpdateSolution_Stokes!(V, Pt, dx, number, type, nc)
+        UpdateSolution!(V, Pt, dx, number, type, nc)
 
     end
 

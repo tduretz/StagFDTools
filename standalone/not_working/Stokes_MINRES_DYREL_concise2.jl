@@ -18,18 +18,18 @@ end
     
 # @views function (@main)(nc)
 
-#     size_x, size_y, size_p, size_xy = (nc.x+1, nc.y+2), (nc.x+2, nc.y+1), (nc.x, nc.y), (nc.x+1, nc.y+1)
+#     size_x, size_y, size_c, size_xy = (nc.x+1, nc.y+2), (nc.x+2, nc.y+1), (nc.x, nc.y), (nc.x+1, nc.y+1)
 
 #     # Intialise field
 #     L   = (x=10.0, y=10.0)
 #     Δ   = (x=L.x/nc.x, y=L.y/nc.y)
-#     R   = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_p...))
+#     R   = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_c...))
 #     V   = (x=zeros(size_x...), y=zeros(size_y...))
-#     ε̇   = (xx=zeros(size_p...), yy=zeros(size_p...), kk=zeros(size_p...), xy=zeros(size_xy...))
-#     τ   = (xx=zeros(size_p...), yy=zeros(size_p...), xy=zeros(size_xy...))
-#     η   = (x= ones(size_x...), y= ones(size_y...), p=ones(size_p...), xy=zeros(size_xy...) )
-#     Rp  = zeros(size_p...)
-#     Pt  = zeros(size_p...)
+#     ε̇   = (xx=zeros(size_c...), yy=zeros(size_c...), kk=zeros(size_c...), xy=zeros(size_xy...))
+#     τ   = (xx=zeros(size_c...), yy=zeros(size_c...), xy=zeros(size_xy...))
+#     η   = (x= ones(size_x...), y= ones(size_y...), p=ones(size_c...), xy=zeros(size_xy...) )
+#     Rp  = zeros(size_c...)
+#     Pt  = zeros(size_c...)
 #     xv  = LinRange(-L.x/2, L.x/2, nc.x+1)
 #     yv  = LinRange(-L.y/2, L.y/2, nc.y+1)
 #     xc  = LinRange(-L.x/2-Δ.x/2, L.x/2+Δ.x/2, nc.x+2)
@@ -56,7 +56,7 @@ end
 #     η.xy .= 0.25.*(η.y[1:end-1,:].+η.y[2:end-0,:].+η.x[:,1:end-1].+η.x[:,2:end-0])
 
 #     # Diagonal preconditioner
-#     D    = (x=ones(size_x...), y=ones(size_y...), p=ones(size_p...))
+#     D    = (x=ones(size_x...), y=ones(size_y...), p=ones(size_c...))
 #     dx, dy = Δ.x, Δ.y
 #     etaW, etaE = η.p[1:end-1,:], η.p[2:end-0,:]
 #     etaS, etaN = η.xy[2:end-1,1:end-1], η.xy[2:end-1,2:end-0]
@@ -74,8 +74,8 @@ end
 #     Residual!(R, Rp, V, Pt, ε̇, τ, η, Δ)
 
 #     # Arrays for solver 
-#     A∂V∂τ   = (x=zeros(size_x...), y=zeros(size_y...)); A∂P∂τ = zeros(size_p...)
-#     ∂V∂τ = (x=zeros(size_x...), y=zeros(size_y...)); ∂P∂τ  = zeros(size_p...)
+#     A∂V∂τ   = (x=zeros(size_x...), y=zeros(size_y...)); A∂P∂τ = zeros(size_c...)
+#     ∂V∂τ = (x=zeros(size_x...), y=zeros(size_y...)); ∂P∂τ  = zeros(size_c...)
     
 #     # Initial residual and preconditioned residual
 #     ∂V∂τ.x  .= (1 ./D.x).*R.x;  ∂V∂τ.y .= (1 ./D.y).*R.y;  ∂P∂τ   .= (1 ./D.p).*Rp
@@ -145,24 +145,24 @@ end
 
 @views function (@main)(nc)
 
-    size_x, size_y, size_p, size_xy = (nc.x+1, nc.y+2), (nc.x+2, nc.y+1), (nc.x, nc.y), (nc.x+1, nc.y+1)
+    size_x, size_y, size_c, size_xy = (nc.x+1, nc.y+2), (nc.x+2, nc.y+1), (nc.x, nc.y), (nc.x+1, nc.y+1)
 
     # Intialise field
     L   = (x=10.0, y=10.0)
     Δ   = (x=L.x/nc.x, y=L.y/nc.y)
-    R   = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_p...))
-    R0  = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_p...))
-    R1  = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_p...))
+    R   = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_c...))
+    R0  = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_c...))
+    R1  = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_c...))
 
     V   = (x=zeros(size_x...), y=zeros(size_y...))
-    ε̇   = (xx=zeros(size_p...), yy=zeros(size_p...), kk=zeros(size_p...), xy=zeros(size_xy...))
-    τ   = (xx=zeros(size_p...), yy=zeros(size_p...), xy=zeros(size_xy...))
-    η   = (x= ones(size_x...), y= ones(size_y...), p=ones(size_p...), xy=zeros(size_xy...) )
-    Rp  = zeros(size_p...)
-    Rp0 = zeros(size_p...)
-    Rp1 = zeros(size_p...)
+    ε̇   = (xx=zeros(size_c...), yy=zeros(size_c...), kk=zeros(size_c...), xy=zeros(size_xy...))
+    τ   = (xx=zeros(size_c...), yy=zeros(size_c...), xy=zeros(size_xy...))
+    η   = (x= ones(size_x...), y= ones(size_y...), p=ones(size_c...), xy=zeros(size_xy...) )
+    Rp  = zeros(size_c...)
+    Rp0 = zeros(size_c...)
+    Rp1 = zeros(size_c...)
 
-    P   = zeros(size_p...)
+    P   = zeros(size_c...)
     xv  = LinRange(-L.x/2, L.x/2, nc.x+1)
     yv  = LinRange(-L.y/2, L.y/2, nc.y+1)
     xc  = LinRange(-L.x/2-Δ.x/2, L.x/2+Δ.x/2, nc.x+2)
@@ -189,8 +189,8 @@ end
     η.xy .= 0.25.*(η.y[1:end-1,:].+η.y[2:end-0,:].+η.x[:,1:end-1].+η.x[:,2:end-0])
 
     # Diagonal preconditioner
-    D    = (x=ones(size_x...), y=ones(size_y...), p=ones(size_p...))
-    G    = (x=ones(size_x...), y=ones(size_y...), p=ones(size_p...))
+    D    = (x=ones(size_x...), y=ones(size_y...), p=ones(size_c...))
+    G    = (x=ones(size_x...), y=ones(size_y...), p=ones(size_c...))
     dx, dy = Δ.x, Δ.y
     etaW, etaE = η.p[1:end-1,:], η.p[2:end-0,:]
     etaS, etaN = η.xy[2:end-1,1:end-1], η.xy[2:end-1,2:end-0]
@@ -213,8 +213,8 @@ end
     Residual!(R, Rp, V, P, ε̇, τ, η, Δ)
 
     # Arrays for solver 
-    AV̇   = (x=zeros(size_x...), y=zeros(size_y...)); AṖ = zeros(size_p...)
-    V̇ = (x=zeros(size_x...), y=zeros(size_y...)); Ṗ  = zeros(size_p...)
+    AV̇   = (x=zeros(size_x...), y=zeros(size_y...)); AṖ = zeros(size_c...)
+    V̇ = (x=zeros(size_x...), y=zeros(size_y...)); Ṗ  = zeros(size_c...)
     
     # Initial residual and preconditioned residual
     V̇.x  .= (1 ./D.x).*R.x;  V̇.y .= (1 ./D.y).*R.y;  Ṗ   .= (1 ./D.p).*Rp

@@ -524,7 +524,7 @@ function NumberingTwoPhases!(N, type, nc)
     shift  = (periodic_west) ? 1 : 0 
     # Loop through inner nodes of the mesh
     for j=3:nc.y+4-2, i=2:nc.x+3-1
-        if type.Vx[i,j] == :constant || (type.Vx[i,j] != :periodic && i==nc.x+3-1)
+        if type.Vx[i,j] == :Dir_conf || (type.Vx[i,j] != :periodic && i==nc.x+3-1)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof+=1
@@ -557,7 +557,7 @@ function NumberingTwoPhases!(N, type, nc)
     shift = periodic_south ? 1 : 0
     # Loop through inner nodes of the mesh
     for j=2:nc.y+3-1, i=3:nc.x+4-2
-        if type.Vy[i,j] == :constant || (type.Vy[i,j] != :periodic && j==nc.y+3-1)
+        if type.Vy[i,j] == :Dir_conf || (type.Vy[i,j] != :periodic && j==nc.y+3-1)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof+=1
@@ -691,7 +691,7 @@ end
     
     # Resolution
 
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_p = Ranges_Stokes(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges_Stokes(nc)
     
     # Define node types and set BC flags
     type = Numbering(
@@ -708,8 +708,8 @@ end
     )
     # -------- Vx -------- #
     type.Vx[inx_Vx,iny_Vx] .= :in       
-    type.Vx[2,iny_Vx]       .= :constant 
-    type.Vx[end-1,iny_Vx]   .= :constant 
+    type.Vx[2,iny_Vx]       .= :Dir_conf 
+    type.Vx[end-1,iny_Vx]   .= :Dir_conf 
     type.Vx[inx_Vx,2]       .= :Neumann
     type.Vx[inx_Vx,end-1]   .= :Neumann
     BC.Vx[2,iny_Vx]         .= 0.0
@@ -720,8 +720,8 @@ end
     type.Vy[inx_Vy,iny_Vy] .= :in       
     type.Vy[2,iny_Vy]       .= :Neumann
     type.Vy[end-1,iny_Vy]   .= :Neumann
-    type.Vy[inx_Vy,2]       .= :constant 
-    type.Vy[inx_Vy,end-1]   .= :constant 
+    type.Vy[inx_Vy,2]       .= :Dir_conf 
+    type.Vy[inx_Vy,end-1]   .= :Dir_conf 
     BC.Vy[2,iny_Vy]         .= 0.0
     BC.Vy[end-1,iny_Vy]     .= 0.0
     BC.Vy[inx_Vy,2]         .= 0.0
@@ -768,13 +768,13 @@ end
     # Intialise field
     L   = (x=10.0, y=10.0)
     Δ   = (x=L.x/nc.x, y=L.y/nc.y)
-    R   = (x=zeros(size_x...), y=zeros(size_y...), pt=zeros(size_p...), pf=zeros(size_p...))
+    R   = (x=zeros(size_x...), y=zeros(size_y...), pt=zeros(size_c...), pf=zeros(size_c...))
     V   = (x=zeros(size_x...), y=zeros(size_y...))
-    η   = (x= ones(size_x...), y= ones(size_y...), p=ones(size_p...) )
-    ηϕ  = ones(size_p...) 
-    ϕ   = ones(size_p...) 
+    η   = (x= ones(size_x...), y= ones(size_y...), p=ones(size_c...) )
+    ηϕ  = ones(size_c...) 
+    ϕ   = ones(size_c...) 
     kμf = (x= ones(size_x...), y= ones(size_y...))
-    P   = (t=zeros(size_p...), f=zeros(size_p...))
+    P   = (t=zeros(size_c...), f=zeros(size_c...))
     xv  = LinRange(-L.x/2, L.x/2, nc.x+1)
     yv  = LinRange(-L.y/2, L.y/2, nc.y+1)
     xc  = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)

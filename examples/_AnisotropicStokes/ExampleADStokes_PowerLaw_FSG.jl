@@ -1,11 +1,13 @@
 using StagFDTools, StagFDTools.StokesFSG
-using ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays
+using ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 
-const rheology = :anisotropic
-# const rheology = :powerlaw
+max_all(R) = max(maximum(R.x[1]), maximum(R.x[2]), maximum(R.y[1]), maximum(R.y[2]), maximum(R.p[1]), maximum(R.p[2]) )
+
+# const rheology = :anisotropic
+const rheology = :powerlaw
 
 function ViscosityTensor(η0, δ, n, engineering)
     two   = engineering ? 2 : 1
@@ -16,7 +18,7 @@ function ViscosityTensor(η0, δ, n, engineering)
     Norm_dir   = norm(n)
     n ./= Norm_dir
 
-    # once we know the n we compute anisotropy matrix
+    # once we know then we compute anisotropy matrix
     a0 = 2 * n[1]^2 * n[2]^2
     a1 = n[1] * n[2] * (-n[1]^2 + n[2]^2)
 
@@ -34,55 +36,99 @@ function Momentum_x(Vx, V̄x, Vy, V̄y, Pt, P̄t, phase, p̄hase, materials, tx,
     invΔx    = 1 / Δ.x
     invΔy    = 1 / Δ.y
 
+    # # SW
+    # if ty[1,1] == :Neu_norm_half
+    #     Vy[1,1] = Vy[1,2] - Δ.y*bc_val.D[2,2]
+    # elseif ty[1,1] == :Dir_norm_half
+    #     Vy[1,1] = 2*bc_val.y.N[1] - Vy[1,2]
+    # end
+
+    # # SE
+    # if ty[2,1] == :Neu_norm_half
+    #     Vy[2,1] = Vy[2,2] - Δ.y*bc_val.D[2,2]
+    # elseif ty[2,1] == :Dir_norm_half
+    #     Vy[2,1] = 2*bc_val.y.N[2] - Vy[2,2]
+    # end
+
+    # # NW
+    # if ty[1,2] == :Neu_norm_half
+    #     Vy[1,2] = Vy[1,1] + Δ.y*bc_val.D[2,2]
+    # elseif ty[1,2] == :Dir_norm_half
+    #     Vy[1,2] = 2*bc_val.y.N[1] - Vy[1,1]
+    # end
+
+    # # NE
+    # if ty[2,2] == :Neu_norm_half
+    #     Vy[2,2] = Vy[2,1] + Δ.y*bc_val.D[2,2]
+    # elseif ty[2,2] == :Dir_norm_half
+    #     Vy[2,2] = 2*bc_val.y.N[2] - Vy[2,1]
+    # end
+
+
+
     # TODO: add BC for shear stress on sides
     ############################################
-    if tx[2,1] == :Neumann_tangent  # South
-        Vx[2,1] = Vx[2,2] - Δ.y*bc_val.D[1,2] 
-    elseif tx[2,1] == :Dirichlet_tangent
+    if tx[2,1] == :Neu_tang_half  # South
+        Vx[2,1] = Vx[2,2] #- Δ.y*bc_val.D[1,2] 
+    elseif tx[2,1] == :Dir_tang_half
         Vx[2,1] = 2*bc_val.x.S[1] - Vx[2,2]
+    elseif tx[2,1] ==:Neu_tang_conf
+        # 2*bc_val.D[1,2] = ∂Vx∂yN + (Vx[2,2] - Vx[2,1])/Δ.y
+        ∂Vx∂yN  = (Vx[2,3] - Vx[2,2])/Δ.y
+        # Vx[2,1] = (∂Vx∂yN - 2*bc_val.D[1,2])*Δ.y + Vx[2,2]
+        # 2*bc_val.D[1,2] = ∂Vx∂yN + (Vx[2,2] - Vx[2,1])/Δ.y
+        # (2*bc_val.D[1,2] - ∂Vx∂yN)*Δ.y =  Vx[2,2] - Vx[2,1]
+        Vx[2,1] = Vx[2,2] - (2*bc_val.D[1,2] - ∂Vx∂yN)*Δ.y
     end
 
-    if tx[1,2] == :Neumann_normal # West
+    if tx[1,2] == :Neu_norm_half # West
         Vx[1,2] = Vx[2,2] - Δ.x*bc_val.D[1,1]
-    elseif tx[1,2] == :Dirichlet_normal
+    elseif tx[1,2] == :Dir_norm_half
         Vx[1,2] = 2*bc_val.x.W[1] - Vx[2,2]
     end
 
-    if tx[3,2] == :Neumann_normal # East
+    if tx[3,2] == :Neu_norm_half # East
         Vx[3,2] = Vx[2,2] + Δ.x*bc_val.D[1,1]
-    elseif tx[3,2] == :Dirichlet_normal
+    elseif tx[3,2] == :Dir_norm_half
         Vx[3,2] = 2*bc_val.x.E[1] - Vx[2,2]
     end
 
-    if tx[2,3] == :Neumann_tangent # North
-        Vx[2,3] = Vx[2,2] + Δ.y*bc_val.D[1,2]
-    elseif tx[2,3] == :Dirichlet_tangent 
+    if tx[2,3] == :Neu_tang_half # North
+        Vx[2,3] = Vx[2,2] #+ Δ.y*bc_val.D[1,2]
+    elseif tx[2,3] == :Dir_tang_half 
         Vx[2,3] = 2*bc_val.x.N[1] - Vx[2,2]
+    elseif tx[2,3] ==:Neu_tang_conf
+        ∂Vx∂yS  = (Vx[2,2] - Vx[2,1])/Δ.y
+        Vx[2,3] = (2*bc_val.D[1,2] - ∂Vx∂yS)*Δ.y + Vx[2,2]
+        # 2*bc_val.D[1,2] = ∂Vx∂yS + (Vx[2,3] - Vx[2,2])/Δ.y
+        # (2*bc_val.D[1,2] - ∂Vx∂yS)*Δ.y =  Vx[2,3] - Vx[2,2]
+        # Vx[2,3] = (2*bc_val.D[1,2] - ∂Vx∂yS)*Δ.y + Vx[2,2]
+
     end
 
     ############################################
 
-    if t̄y[2,1] == :Neumann_normal # South
+    if t̄y[2,1] == :Neu_norm_half # South
         V̄y[2,1] = V̄y[2,2] - Δ.y*bc_val.D[2,2] 
-    elseif t̄y[2,1] == :Dirichlet_normal
+    elseif t̄y[2,1] == :Dir_norm_half
         V̄y[2,1] = 2*bc_val.y.S[1] - V̄y[2,2]
     end
 
-    if t̄y[1,2] == :Neumann_tangent # West
+    if t̄y[1,2] == :Neu_tang_half # West
         V̄y[1,2] = V̄y[2,2] - Δ.x*bc_val.D[2,1]
-    elseif t̄y[1,2] == :Dirichlet_tangent
+    elseif t̄y[1,2] == :Dir_tang_half
         V̄y[1,2] = 2*bc_val.y.W[1] - V̄y[2,2]
     end
 
-    if t̄y[3,2] == :Neumann_tangent # East
+    if t̄y[3,2] == :Neu_tang_half # East
         V̄y[3,2] = V̄y[2,2] + Δ.x*bc_val.D[2,1]
-    elseif t̄y[3,2] == :Dirichlet_tangent
+    elseif t̄y[3,2] == :Dir_tang_half
         V̄y[3,2] = 2*bc_val.y.E[1] - V̄y[2,2]
     end
 
-    if t̄y[2,3] == :Neumann_normal # North
+    if t̄y[2,3] == :Neu_norm_half # North
         V̄y[2,3] = V̄y[2,2] + Δ.y*bc_val.D[2,2]
-    elseif t̄y[2,3] == :Dirichlet_normal 
+    elseif t̄y[2,3] == :Dir_norm_half 
         V̄y[2,3] = 2*bc_val.y.N[1] - V̄y[2,2]
     end
 
@@ -99,6 +145,20 @@ function Momentum_x(Vx, V̄x, Vy, V̄y, Pt, P̄t, phase, p̄hase, materials, tx,
     D̄kk = D̄xx + D̄yy[2:end-1,:]
     D̄xy = (V̄x[:,2:end] - V̄x[:,1:end-1]) * invΔy 
     D̄yx = (V̄y[2:end,:] - V̄y[1:end-1,:]) * invΔx 
+
+    # if tx[2,3] == :Neu_tang_half
+    #     println("Neu_tang_half")
+    #     # println(Dxy)
+    #     println(0.5*(Dxy[2,2] + Dxy[2,1]) )
+    # end
+
+    # if tx[2,3] == :Neu_tang_conf
+    #     println("Neu_tang_conf")
+    #     # printxy(Dxy)
+    #     println(Dxy[2,2], Dxy[2,1] )
+    #     println(0.5*(Dxy[2,2] + Dxy[2,1]) )
+    # end
+    # if tx[2,3] == :Neu_tang_conf
 
     ε̇xx = Dxx[:,2:end-1] - 1/3*Dkk
     ε̇yy = Dyy - 1/3*Dkk
@@ -143,53 +203,53 @@ function Momentum_y(Vx, V̄x, Vy, V̄y, Pt, P̄t, phase, p̄hase, materials, tx,
    
     # TODO: add BC for shear stress on sides
     ############################################
-    if ty[2,1] == :Neumann_normal # South
+    if ty[2,1] == :Neu_norm_half # South
         Vy[2,1] = Vy[2,2] - Δ.y*bc_val.D[2,2]
-    elseif ty[2,1] == :Dirichlet_normal
+    elseif ty[2,1] == :Dir_norm_half
         Vy[2,1] = 2*bc_val.y.S[1] - Vy[2,2]
     end
 
-    if ty[1,2] == :Neumann_tangent # West
+    if ty[1,2] == :Neu_tang_half # West
         Vy[1,2] = Vy[2,2] - Δ.x*bc_val.D[2,1] 
-    elseif ty[1,2] == :Dirichlet_tangent
+    elseif ty[1,2] == :Dir_tang_half
         Vy[1,2] =  2*bc_val.y.W[1] - Vy[2,2] 
     end
 
-    if ty[3,2] == :Neumann_tangent # East
+    if ty[3,2] == :Neu_tang_half # East
         Vy[3,2] = Vy[2,2] + Δ.x*bc_val.D[2,1] 
-    elseif ty[3,2] == :Dirichlet_tangent
+    elseif ty[3,2] == :Dir_tang_half
         Vy[3,2] = 2*bc_val.y.E[1] - Vy[2,2] 
     end
   
-    if ty[2,end] == :Neumann_normal # North
+    if ty[2,end] == :Neu_norm_half # North
         Vy[2,end] = Vy[2,end-1] + Δ.y*bc_val.D[2,2] 
-    elseif ty[2,end] == :Dirichlet_normal 
+    elseif ty[2,end] == :Dir_norm_half 
         Vy[2,end] = 2*bc_val.y.N[1] - Vy[2,end-1]
     end
 
     ############################################
 
-    if t̄x[2,1] == :Neumann_tangent # Shouth
+    if t̄x[2,1] == :Neu_tang_half # Shouth
         V̄x[2,1] = V̄x[2,2] - Δ.y*bc_val.D[1,2] 
-    elseif t̄x[2,1] == :Dirichlet_tangent
+    elseif t̄x[2,1] == :Dir_tang_half
         V̄x[2,1] = 2*bc_val.x.S[1] - V̄x[2,2]
     end
 
-    if t̄x[1,2] == :Neumann_normal # West
+    if t̄x[1,2] == :Neu_norm_half # West
         V̄x[1,2] = V̄x[2,2] - Δ.x*bc_val.D[1,1] 
-    elseif t̄x[1,2] == :Dirichlet_normal
+    elseif t̄x[1,2] == :Dir_norm_half
         V̄x[1,2] =  2*bc_val.x.W[1] - V̄x[2,2] 
     end
 
-    if t̄x[3,2] == :Neumann_normal # East
+    if t̄x[3,2] == :Neu_norm_half # East
         V̄x[3,2] = V̄x[2,2] + Δ.x*bc_val.D[1,1] 
-    elseif t̄x[3,2] == :Dirichlet_normal
+    elseif t̄x[3,2] == :Dir_norm_half
         V̄x[3,2] = 2*bc_val.x.E[1] - V̄x[2,2] 
     end
 
-    if t̄x[2,3] == :Neumann_tangent # North
+    if t̄x[2,3] == :Neu_tang_half # North
         V̄x[2,3] = V̄x[2,2] + Δ.y*bc_val.D[1,2] 
-    elseif t̄x[2,3] == :Dirichlet_tangent 
+    elseif t̄x[2,3] == :Dir_tang_half 
         V̄x[2,3] = 2*bc_val.x.N[1] - V̄x[2,2]
     end
 
@@ -532,6 +592,8 @@ function AssembleMomentum2D_2!(K, V, Pt, phases, materials, num, pattern, types,
             for jj in axes(Local_xx,2), ii in axes(Local_xx,1)
                 if (Local_xx[ii,jj]>0)
                     K.Vx.Vx[2][2][ieq_x, Local_xx[ii,jj]] = ∂Rx∂Vx2[ii,jj] 
+                end
+                if (Local_xy[ii,jj]>0)
                     K.Vx.Vy[2][2][ieq_x, Local_xy[ii,jj]] = ∂Rx∂Vy2[ii,jj] 
                 end
             end  
@@ -582,6 +644,8 @@ function AssembleMomentum2D_2!(K, V, Pt, phases, materials, num, pattern, types,
             for jj in axes(Local_yy,2), ii in axes(Local_yy,1)
                 if (Local_yy[ii,jj]>0)
                     K.Vy.Vy[2][2][ieq_y, Local_yy[ii,jj]] = ∂Ry∂Vy2[ii,jj] 
+                end
+                if (Local_yx[ii,jj]>0)
                     K.Vy.Vx[2][2][ieq_y, Local_yx[ii,jj]] = ∂Ry∂Vx2[ii,jj] 
                 end
             end
@@ -639,36 +703,41 @@ function main(nc)
         FSG_Array( fill(:out, size_P[1]), fill(:out, size_P[2]) ),
     )
 
-    # -------- V grid 1 -------- #
-    type.Vx[1][inx_V[1],iny_V[1]] .= :in       
-    type.Vx[1][2,iny_V[1]]        .= :constant 
-    type.Vx[1][end-1,iny_V[1]]    .= :constant 
-    type.Vx[1][inx_V[1],1]        .= :Neumann_tangent
-    type.Vx[1][inx_V[1],end]      .= :Neumann_tangent
-    type.Vy[1][inx_V[1],iny_V[1]] .= :in       
-    type.Vy[1][2,iny_V[1]]        .= :constant 
-    type.Vy[1][end-1,iny_V[1]]    .= :constant 
-    type.Vy[1][inx_V[1],1]        .= :Neumann_normal
-    type.Vy[1][inx_V[1],end]      .= :Neumann_normal
-    # -------- V grid 2 -------- #
+    # ----- Inside ----- #
+    type.Vx[1][inx_V[1],iny_V[1]] .= :in
     type.Vx[2][inx_V[2],iny_V[2]] .= :in       
-    type.Vx[2][1,iny_V[2]]        .= :Neumann_normal
-    type.Vx[2][end,iny_V[2]]      .= :Neumann_normal
-    type.Vx[2][inx_V[2],2]        .= :constant 
-    type.Vx[2][inx_V[2],end-1]    .= :constant 
-    type.Vy[2][inx_V[2],iny_V[2]] .= :in       
-    type.Vy[2][1,iny_V[2]]        .= :Neumann_tangent
-    type.Vy[2][end,iny_V[2]]      .= :Neumann_tangent
-    type.Vy[2][inx_V[2],2]        .= :constant 
-    type.Vy[2][inx_V[2],end-1]    .= :constant 
+    type.Vy[1][inx_V[1],iny_V[1]] .= :in
+    type.Vy[2][inx_V[2],iny_V[2]] .= :in  
+    # ----- West ----- #   
+    type.Vx[1][2,iny_V[1]]        .= :Dir_conf 
+    type.Vx[2][1,iny_V[2]]        .= :Dir_norm_half
+    type.Vy[1][2,iny_V[1]]        .= :Dir_conf 
+    type.Vy[2][1,iny_V[2]]        .= :Dir_tang_half
+    # ----- East ----- # 
+    type.Vx[1][end-1,iny_V[1]]    .= :Dir_conf 
+    type.Vx[2][end-0,iny_V[2]]    .= :Dir_norm_half
+    type.Vy[1][end-1,iny_V[1]]    .= :Dir_conf 
+    type.Vy[2][end-0,iny_V[2]]    .= :Dir_tang_half
+    # ----- South ----- #
+    type.Vx[1][inx_V[1],1]        .= :Dir_tang_half
+    # type.Vx[1][inx_V[1],1]        .= :Neu_tang_half
+    type.Vx[2][inx_V[2],2]        .= :Dir_conf
+    # type.Vx[2][inx_V[2],1]        .= :Neu_tang_conf
+    
+    type.Vy[1][inx_V[1],1]        .= :Dir_norm_half
+    type.Vy[2][inx_V[2],2]        .= :Dir_conf 
+    # ----- North ----- #
+    # type.Vx[1][inx_V[1],end]      .= :Dir_tang_half
+    type.Vx[1][inx_V[1],end]      .= :Neu_tang_half
+    # type.Vx[2][inx_V[2],end-1]    .= :Dir_conf 
+    type.Vx[2][inx_V[2],end-0]    .= :Neu_tang_conf 
+
+    type.Vy[1][inx_V[1],end]      .= :Dir_norm_half
+    type.Vy[2][inx_V[2],end-1]    .= :Dir_conf 
     # -------- Pt -------- #
     type.Pt[1][inx_P[1],iny_P[1]] .= :in
-    # type.Pt[2]                    .= :in
-    # type.Pt[2][inx_P[2],iny_P[2]] .= :in
-
-    type.Pt[2]                    .= :constant
+    type.Pt[2]                    .= :Dir_conf
     type.Pt[2][2:end-1,2:end-1]   .= :in
-
 
     #--------------------------------------------#
     # Equation numbering
@@ -679,76 +748,17 @@ function main(nc)
     )
     Numbering!(number, type, nc)
 
-    #--------------------------------------------#
+    # #--------------------------------------------#
     # Stencil extent for each block matrix
-    VV = FSG_Array( 
-        FSG_Array(@SMatrix([0 1 0; 1 1 1; 0 1 0]), @SMatrix([1 1; 1 1])),
-        FSG_Array(@SMatrix([1 1; 1 1]), @SMatrix([0 1 0; 1 1 1; 0 1 0]))
-    )
-    VP = FSG_Array( 
-        FSG_Array(@SMatrix([1; 1]), @SMatrix([1  1])),
-        FSG_Array(@SMatrix([1  1]), @SMatrix([1; 1]))
-    )
-    PV = FSG_Array( 
-        FSG_Array(@SMatrix([1; 1]), @SMatrix([1  1])),
-        FSG_Array(@SMatrix([1  1]), @SMatrix([1; 1]))
-    )
-    PP = FSG_Array(@SMatrix([1]),   @SMatrix([1]))
-
-    pattern = Fields(
-        Fields(VV, VV, VP), 
-        Fields(VV, VV, VP),
-        Fields(PV, PV, PP),
-    )
+    pattern = Patterns()
 
     ################################
+    nVx   = [maximum(number.Vx[1]) maximum(number.Vx[2])]
+    nVy   = [maximum(number.Vy[1]) maximum(number.Vy[2])]
+    nPt   = [maximum(number.Pt[1]) maximum(number.Pt[2])]
+
     # Sparse matrix assembly
-    @show nVx   = [maximum(number.Vx[1]) maximum(number.Vx[2])]
-    @show nVy   = [maximum(number.Vy[1]) maximum(number.Vy[2])]
-    @show nPt   = [maximum(number.Pt[1]) maximum(number.Pt[2])]
-
-    VxVx = FSG_Array( 
-        FSG_Array(ExtendableSparseMatrix(nVx[1], nVx[1]), ExtendableSparseMatrix(nVx[1], nVx[2])),
-        FSG_Array(ExtendableSparseMatrix(nVx[2], nVx[1]), ExtendableSparseMatrix(nVx[2], nVx[2])),
-    )
-    VxVy = FSG_Array( 
-        FSG_Array(ExtendableSparseMatrix(nVx[1], nVy[1]), ExtendableSparseMatrix(nVx[1], nVy[2])),
-        FSG_Array(ExtendableSparseMatrix(nVx[2], nVy[1]), ExtendableSparseMatrix(nVx[2], nVy[2])),
-    )
-    VyVx = FSG_Array( 
-        FSG_Array(ExtendableSparseMatrix(nVy[1], nVx[1]), ExtendableSparseMatrix(nVy[1], nVx[2])),
-        FSG_Array(ExtendableSparseMatrix(nVy[2], nVx[1]), ExtendableSparseMatrix(nVy[2], nVx[2])),
-    )
-    VyVy = FSG_Array( 
-        FSG_Array(ExtendableSparseMatrix(nVy[1], nVy[1]), ExtendableSparseMatrix(nVy[1], nVy[2])),
-        FSG_Array(ExtendableSparseMatrix(nVy[2], nVy[1]), ExtendableSparseMatrix(nVy[2], nVy[2])),
-    )
-    VxP = FSG_Array( 
-        FSG_Array(ExtendableSparseMatrix(nVx[1], nPt[1]), ExtendableSparseMatrix(nVx[1], nPt[2])),
-        FSG_Array(ExtendableSparseMatrix(nVx[2], nPt[1]), ExtendableSparseMatrix(nVx[2], nPt[2])),
-    )
-    VyP = FSG_Array( 
-        FSG_Array(ExtendableSparseMatrix(nVy[1], nPt[1]), ExtendableSparseMatrix(nVy[1], nPt[2])),
-        FSG_Array(ExtendableSparseMatrix(nVy[2], nPt[1]), ExtendableSparseMatrix(nVy[2], nPt[2])),
-    )
-    PVx = FSG_Array( 
-        FSG_Array(ExtendableSparseMatrix(nPt[1], nVx[1]), ExtendableSparseMatrix(nPt[1], nVx[2])),
-        FSG_Array(ExtendableSparseMatrix(nPt[2], nVx[1]), ExtendableSparseMatrix(nPt[2], nVx[2])),
-    )
-    PVy = FSG_Array( 
-        FSG_Array(ExtendableSparseMatrix(nPt[1], nVy[1]), ExtendableSparseMatrix(nPt[1], nVy[2])),
-        FSG_Array(ExtendableSparseMatrix(nPt[2], nVy[1]), ExtendableSparseMatrix(nPt[2], nVy[2])),
-    )
-    PP = FSG_Array( 
-        FSG_Array(ExtendableSparseMatrix(nPt[1], nPt[1]), ExtendableSparseMatrix(nPt[1], nPt[2])),
-        FSG_Array(ExtendableSparseMatrix(nPt[2], nPt[1]), ExtendableSparseMatrix(nPt[2], nPt[2])),
-    )
-
-    M = Fields(
-        Fields(VxVx, VxVy, VxP), 
-        Fields(VyVx, VyVy, VyP),
-        Fields(PVx, PVy, PP),
-    )
+    M = AllocateSparseMatrix(number)
 
     # Intialise field
     L   = (x=1.0, y=1.0)
@@ -756,21 +766,21 @@ function main(nc)
     R   = (x = FSG_Array(zeros(size_V[1]...), zeros(size_V[2]...)), 
            y = FSG_Array(zeros(size_V[1]...), zeros(size_V[2]...)),
            p = FSG_Array(zeros(size_P[1]...), zeros(size_P[2]...)))
-    V   = (x = FSG_Array(ones(size_V[1]...), ones(size_V[2]...)), 
-           y = FSG_Array(ones(size_V[1]...), ones(size_V[2]...)))
-    Pt  = FSG_Array(ones(size_P[1]...), ones(size_P[2]...))
+    V   = (x = FSG_Array(zeros(size_V[1]...), zeros(size_V[2]...)), 
+           y = FSG_Array(zeros(size_V[1]...), zeros(size_V[2]...)))
+    Pt  = FSG_Array(zeros(size_P[1]...), zeros(size_P[2]...))
     phases = FSG_Array(ones(Int64, size_P[1]...), ones(Int64, size_P[2]...))
 
-
-    θ  = 30
+    # Materials
+    θ  = -00
     N  = [sind(θ) cosd(θ)]
     η0 = [1e0 1e2]
-    δ  = [10 1]
+    δ  = [2 1]
     D1 = ViscosityTensor(η0[1], δ[1], N, false)
     D2 = ViscosityTensor(η0[2], δ[2], N, false)
 
     materials = ( 
-        n  = [2.0 1.0],
+        n  = [20 1.0],
         η0 = [1e0 1e2],
         D  = [D1, D2], 
     )
@@ -778,6 +788,8 @@ function main(nc)
     # Pure Shear
     D_BC = [-1  0;
              0  1]
+    # D_BC = [0  1;
+    #         0  0]
     xv  = LinRange(-L.x/2, L.x/2, nc.x+1)
     yv  = LinRange(-L.y/2, L.y/2, nc.y+1)
     xc  = LinRange(-L.x/2-Δ.x/2, L.x/2+Δ.x/2, nc.x+2)
@@ -822,27 +834,24 @@ function main(nc)
     )
 
     # Newton solver
-    niter = 10
+    niter_nl = 2
+    niter_l  = 10
+    ϵ_nl     = 1e-6
+    ϵ_l      = 1e-10
+    ηb       = 1e3
 
     err = Fields(
-        FSG_Array( zeros(niter), zeros(niter) ),
-        FSG_Array( zeros(niter), zeros(niter) ),
-        FSG_Array( zeros(niter), zeros(niter) ),
+        FSG_Array( zeros(niter_nl), zeros(niter_nl) ),
+        FSG_Array( zeros(niter_nl), zeros(niter_nl) ),
+        FSG_Array( zeros(niter_nl), zeros(niter_nl) ),
     )
     
-    for iter=1:niter
+    for iter=1:niter_nl
         @info "iteration $(iter)"
         ResidualContinuity2D_1!(R, V, Pt, phases, materials, number, type, BC, nc, Δ) 
         ResidualContinuity2D_2!(R, V, Pt, phases, materials, number, type, BC, nc, Δ) 
         ResidualMomentum2D_1!(R, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ) 
         ResidualMomentum2D_2!(R, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ) 
-
-        err.Vx[1][iter] = norm(R.x[1][inx_V[1],iny_V[1]])/sqrt(nVx[1])
-        err.Vy[1][iter] = norm(R.y[1][inx_V[2],iny_V[2]])/sqrt(nVy[1])
-        err.Pt[1][iter] = norm(R.p[1][inx_P[1],iny_P[1]])/sqrt(nPt[1])
-        err.Vx[2][iter] = norm(R.x[2][inx_V[2],iny_V[2]])/sqrt(nVx[2])
-        err.Vy[2][iter] = norm(R.y[2][inx_V[1],iny_V[1]])/sqrt(nVy[2])
-        err.Pt[2][iter] = norm(R.p[2][inx_P[2],iny_P[2]])/sqrt(nPt[2])
 
         @show norm(R.x[1])
         @show norm(R.x[2])
@@ -850,6 +859,15 @@ function main(nc)
         @show norm(R.y[2])
         @show norm(R.p[1])
         @show norm(R.p[2])
+
+        max_all(R) < ϵ_nl ? break : nothing 
+
+        err.Vx[1][iter] = norm(R.x[1][inx_V[1],iny_V[1]])/sqrt(nVx[1])
+        err.Vy[1][iter] = norm(R.y[1][inx_V[2],iny_V[2]])/sqrt(nVy[1])
+        err.Pt[1][iter] = norm(R.p[1][inx_P[1],iny_P[1]])/sqrt(nPt[1])
+        err.Vx[2][iter] = norm(R.x[2][inx_V[2],iny_V[2]])/sqrt(nVx[2])
+        err.Vy[2][iter] = norm(R.y[2][inx_V[1],iny_V[1]])/sqrt(nVy[2])
+        err.Pt[2][iter] = norm(R.p[2][inx_P[2],iny_P[2]])/sqrt(nPt[2])
 
         AssembleMomentum2D_1!(M, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ) 
         AssembleMomentum2D_2!(M, V, Pt, phases, materials, number, pattern, type, BC, nc, Δ) 
@@ -873,24 +891,52 @@ function main(nc)
             M.Pt.Pt[2][1] M.Pt.Pt[2][2];] 
         𝐌 = [𝐊 𝐐; 𝐐ᵀ 𝐏]
 
-        display(𝐊)
         𝐊diff =  𝐊 - 𝐊'
         droptol!(𝐊diff, 1e-11)
         display(𝐊diff)
-        # @show 𝐊diff[end,:]
-        # @show 𝐊diff[:,end]
+        @show 𝐊diff[2,:]
+        @show 𝐊diff[:,2]
+        @show norm(𝐊diff)
 
-        # display(𝐌)
-        # 𝐌diff =  𝐌 - 𝐌'
-        # dropzeros!(𝐌diff)
-        # display(𝐌diff)
+        # display( M.Vx.Vy[1][1] - M.Vy.Vx[1][1]')
 
         # Set global residual vector
-        r = zeros(sum(nVx) + sum(nVy) + sum(nPt))
+        r  = zeros(sum(nVx) + sum(nVy) + sum(nPt))
+        dx = zeros(sum(nVx) + sum(nVy) + sum(nPt))
+
         SetRHS!(r, R, number, type, nc)
 
-        dx = - 𝐌 \ r
-        # cholesky(𝐊)
+        # dx = - 𝐌 \ r
+
+        𝐏inv = -ηb .* I(size(𝐏,1)) 
+        𝐊sc   = 𝐊 .- 𝐐*(𝐏inv*𝐐ᵀ)
+        # 𝐊fact = cholesky(Hermitian(𝐊sc), check=false)
+        𝐊fact = lu(𝐊sc)
+
+        u     = zeros(size(𝐊,1))
+        ru    = zeros(size(𝐊,1))
+        fusc  = zeros(size(𝐊,1))
+        p     = zeros(size(𝐐,2))
+        rp    = zeros(size(𝐐,2))
+        fu    = -r[1:size(𝐊,1)]
+        fp    = -r[size(𝐊,1)+1:end]
+        # Iterations
+        for rit=1:niter_l           
+            ru   .= fu .- 𝐊*u  .- 𝐐*p
+            rp   .= fp .- 𝐐ᵀ*u .- 𝐏*p
+            nrmu = norm(ru)
+            nrmp = norm(rp)
+            @printf("  --> Powell-Hestenes Iteration %02d\n  Momentum res.   = %2.2e\n  Continuity res. = %2.2e\n", rit, nrmu/sqrt(length(ru)), nrmp/sqrt(length(rp)))
+            if nrmu/sqrt(length(ru)) < ϵ_l && nrmp/sqrt(length(rp)) < ϵ_l
+                break
+            end
+            fusc .= fu  .- 𝐐*(𝐏inv*fp .+ p)
+            u    .= 𝐊fact\fusc
+            p   .+= 𝐏inv*(fp .- 𝐐ᵀ*u .- 𝐏*p)
+        end
+        
+        dx[1:size(𝐊,1)]     .= u
+        dx[size(𝐊,1)+1:end] .= p
         
         UpdateSolution!(V, Pt, dx, number, type, nc)
 
@@ -907,11 +953,9 @@ function main(nc)
         # 𝐌 = [𝐊 𝐐; 𝐐ᵀ 𝐏]
 
         # display(𝐊)
-        # display(𝐊 - 𝐊')
-        # display(𝐌)
-        # 𝐌diff =  𝐌 - 𝐌'
-        # dropzeros!(𝐌diff)
-        # display(𝐌diff)
+        # 𝐊diff =  𝐊 - 𝐊'
+        # droptol!(𝐊diff, 1e-11)
+        # display(𝐊diff)   
 
         # # Set global residual vector
         # r = zeros(sum(nVx[1]) + sum(nVy[2]) + sum(nPt[1]))
@@ -923,7 +967,7 @@ function main(nc)
         # UpdateSolutionSG1!(V, Pt, dx, number, type, nc)
         # ############# TEST SG1
 
-        # ############# TEST SG2
+        ############# TEST SG2
         # 𝐊  = [M.Vx.Vx[2][2] M.Vx.Vy[2][1]; 
         #       M.Vy.Vx[1][2] M.Vy.Vy[1][1] 
         #       ]
@@ -936,11 +980,9 @@ function main(nc)
         # 𝐌 = [𝐊 𝐐; 𝐐ᵀ 𝐏]
 
         # display(𝐊)
-        # display(𝐊 - 𝐊')
-        # display(𝐌)
-        # 𝐌diff =  𝐌 - 𝐌'
-        # dropzeros!(𝐌diff)
-        # display(𝐌diff)
+        # 𝐊diff =  𝐊 - 𝐊'
+        # droptol!(𝐊diff, 1e-11)
+        # display(𝐊diff)        
 
         # # Set global residual vector
         # r = zeros(sum(nVx[2]) + sum(nVy[1]) + sum(nPt[2]))
@@ -959,22 +1001,27 @@ function main(nc)
     p2 = heatmap(xc[inx_V[2]], yv, V.y[2][inx_V[2],iny_V[2]]', aspect_ratio=1, xlim=extrema(xc))
     p3 = heatmap(xc[inx_P[1]], yc[iny_P[1]],  Pt[1][inx_P[1],iny_P[1]]' .- mean(Pt[1][inx_P[1],iny_P[1]]'), aspect_ratio=1, xlim=extrema(xc), clims=(-3.2,3.2))
     p4 = plot(xlabel="Iterations", ylabel="log₁₀ error")
-    p4 = plot!(1:niter, log10.(err.Vx[1][1:niter]), label="Vx")
-    p4 = plot!(1:niter, log10.(err.Vy[1][1:niter]), label="Vy")
-    p4 = plot!(1:niter, log10.(err.Pt[1][1:niter]), label="Pt")
+    p4 = plot!(1:niter_nl, log10.(err.Vx[1][1:niter_nl]), label="Vx")
+    p4 = plot!(1:niter_nl, log10.(err.Vy[2][1:niter_nl]), label="Vy")
+    p4 = plot!(1:niter_nl, log10.(err.Pt[1][1:niter_nl]), label="Pt")
     display(plot(p1, p2, p3, p4))
 
     # Data on SG2
     p1 = heatmap(xc[inx_V[2]], yv, V.x[2][inx_V[2],iny_V[2]]', aspect_ratio=1, xlim=extrema(xc))
     p2 = heatmap(xv, yc[iny_V[1]], V.y[1][inx_V[1],iny_V[1]]', aspect_ratio=1, xlim=extrema(xc))
-    p3 = heatmap(xv, yv,  Pt[2]', aspect_ratio=1, xlim=extrema(xc), clims=(-3.2,3.2))
+    p3 = heatmap(xv[2:end-1], yv[2:end-1],  Pt[2][2:end-1,2:end-1]' .- mean(Pt[2][inx_P[1],iny_P[1]]'), aspect_ratio=1, xlim=extrema(xc), clims=(-3.2,3.2))
     p4 = plot(xlabel="Iterations", ylabel="log₁₀ error")
-    p4 = plot!(1:niter, log10.(err.Vx[2][1:niter]), label="Vx")
-    p4 = plot!(1:niter, log10.(err.Vy[2][1:niter]), label="Vy")
-    p4 = plot!(1:niter, log10.(err.Pt[2][1:niter]), label="Pt")
+    p4 = plot!(1:niter_nl, log10.(err.Vx[2][1:niter_nl]), label="Vx")
+    p4 = plot!(1:niter_nl, log10.(err.Vy[1][1:niter_nl]), label="Vy")
+    p4 = plot!(1:niter_nl, log10.(err.Pt[2][1:niter_nl]), label="Pt")
     display(plot(p1, p2, p3, p4))
+
+    printxy(type.Vx[2])
+
+    printxy(number.Vx[2])
 
     #--------------------------------------------#
 end
 
-main((x=100, y=100))
+main((x=40, y=40)) 
+
