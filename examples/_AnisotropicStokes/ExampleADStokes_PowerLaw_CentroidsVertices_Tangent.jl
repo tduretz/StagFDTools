@@ -118,11 +118,14 @@ function TangentOperator!(𝐷, 𝐷_ctl, ε̇, V, Pt, type, BC, materials, phas
         
         # Tangent operator used for Newton Linearisation
         jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, Rheology!, ε̇vec, Const(materials), Const(phases.c[i,j]))
-        𝐷_ctl.c[i,j] .= jac.derivs[1]
         
+        # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
+        𝐷_ctl.c[i,j][:,1] .= jac.derivs[1][1][1]
+        𝐷_ctl.c[i,j][:,2] .= jac.derivs[1][2][1]
+        𝐷_ctl.c[i,j][:,3] .= jac.derivs[1][3][1]
+
         # Tangent operator used for Picard Linearisation
-        η = PowerLaw(ε̇vec, materials, phases.c[i,j])
-        𝐷.c[i,j] .= diagm(2*η*ones(3))
+        𝐷.c[i,j] .= diagm(2*jac.val[2]*ones(3))
     end
 
     # Loop over vertices
@@ -152,11 +155,14 @@ function TangentOperator!(𝐷, 𝐷_ctl, ε̇, V, Pt, type, BC, materials, phas
         
         # Tangent operator used for Newton Linearisation
         jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, Rheology!, ε̇vec, Const(materials), Const(phases.v[i,j]))
-        𝐷_ctl.v[i,j] .= jac.derivs[1]
+
+        # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
+        𝐷_ctl.v[i,j][:,1] .= jac.derivs[1][1][1]
+        𝐷_ctl.v[i,j][:,2] .= jac.derivs[1][2][1]
+        𝐷_ctl.v[i,j][:,3] .= jac.derivs[1][3][1]
 
         # Tangent operator used for Picard Linearisation
-        η = PowerLaw(ε̇vec, materials, phases.v[i,j])
-        𝐷.v[i,j] .= diagm(2*η*ones(3))
+        𝐷.v[i,j] .= diagm(2*jac.val[2]*ones(3))
     end
 end
 
@@ -423,7 +429,7 @@ function Rheology!(ε̇, materials, phases)
     τ   = @SVector([2 * η * ε̇[1],
                     2 * η * ε̇[2],
                     2 * η * ε̇[3]])
-    return τ
+    return τ, η
 end
 
 
