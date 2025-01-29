@@ -109,7 +109,7 @@ function TangentOperator!(𝐷, 𝐷_ctl, ε̇, V, Pt, type, BC, materials, phas
         Dxy = (Vx[:,2:end] - Vx[:,1:end-1]) / Δ.y
         Dyx = (Vy[2:end,:] - Vy[1:end-1,:]) / Δ.x
 
-        Dkk  = Dxx[:,2:end-1] + Dyy[2:end-1,:]
+        Dkk   = Dxx[:,2:end-1] + Dyy[2:end-1,:]
         ε̇xx   = Dxx[:,2:end-1] - 1/3*Dkk
         ε̇yy   = Dyy[2:end-1,:] - 1/3*Dkk
         ε̇xy   = 1/2*(Dxy + Dyx)  
