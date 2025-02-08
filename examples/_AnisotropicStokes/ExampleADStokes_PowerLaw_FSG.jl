@@ -6,8 +6,8 @@ using Enzyme  # AD backends you want to use
 
 max_all(R) = max(maximum(R.x[1]), maximum(R.x[2]), maximum(R.y[1]), maximum(R.y[2]), maximum(R.p[1]), maximum(R.p[2]) )
 
-# const rheology = :anisotropic
-const rheology = :powerlaw
+const rheology = :anisotropic
+# const rheology = :powerlaw
 
 function ViscosityTensor(η0, δ, n, engineering)
     two   = engineering ? 2 : 1
@@ -737,7 +737,7 @@ function main(nc)
     # -------- Pt -------- #
     type.Pt[1][inx_P[1],iny_P[1]] .= :in
     type.Pt[2]                    .= :Dir_conf
-    type.Pt[2][2:end-1,2:end-1]   .= :in
+    type.Pt[2][2:end-1,2:end-0]   .= :in
 
     #--------------------------------------------#
     # Equation numbering
@@ -772,10 +772,10 @@ function main(nc)
     phases = FSG_Array(ones(Int64, size_P[1]...), ones(Int64, size_P[2]...))
 
     # Materials
-    θ  = -00
+    θ  = 10
     N  = [sind(θ) cosd(θ)]
     η0 = [1e0 1e2]
-    δ  = [2 1]
+    δ  = [1.5 1]
     D1 = ViscosityTensor(η0[1], δ[1], N, false)
     D2 = ViscosityTensor(η0[2], δ[2], N, false)
 
@@ -1009,7 +1009,7 @@ function main(nc)
     # Data on SG2
     p1 = heatmap(xc[inx_V[2]], yv, V.x[2][inx_V[2],iny_V[2]]', aspect_ratio=1, xlim=extrema(xc))
     p2 = heatmap(xv, yc[iny_V[1]], V.y[1][inx_V[1],iny_V[1]]', aspect_ratio=1, xlim=extrema(xc))
-    p3 = heatmap(xv[2:end-1], yv[2:end-1],  Pt[2][2:end-1,2:end-1]' .- mean(Pt[2][inx_P[1],iny_P[1]]'), aspect_ratio=1, xlim=extrema(xc), clims=(-3.2,3.2))
+    p3 = heatmap(xv[2:end-1], yv[2:end-0],  Pt[2][2:end-1,2:end-0]' .- mean(Pt[2][inx_P[1],iny_P[1]]'), aspect_ratio=1, xlim=extrema(xc), clims=(-3.2,3.2))
     p4 = plot(xlabel="Iterations", ylabel="log₁₀ error")
     p4 = plot!(1:niter_nl, log10.(err.Vx[2][1:niter_nl]), label="Vx")
     p4 = plot!(1:niter_nl, log10.(err.Vy[1][1:niter_nl]), label="Vy")
@@ -1023,5 +1023,5 @@ function main(nc)
     #--------------------------------------------#
 end
 
-main((x=40, y=40)) 
+main((x=100, y=100)) 
 

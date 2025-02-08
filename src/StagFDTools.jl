@@ -1,12 +1,15 @@
 module StagFDTools
 
-using StaticArrays, ExtendableSparse, StaticArrays
+using StaticArrays, ExtendableSparse, StaticArrays, Printf, LinearAlgebra
 
 include("operators.jl")
 export inn, inn_x, inn_y, av, harm, ∂x, ∂y, ∂kk
 
 include("Utils.jl")
 export printxy
+
+include("Solvers.jl")
+export DecoupledSolver
 
 module Poisson
     using StaticArrays, ExtendableSparse, StaticArrays
