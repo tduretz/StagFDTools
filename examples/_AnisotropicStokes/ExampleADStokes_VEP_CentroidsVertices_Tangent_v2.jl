@@ -4,6 +4,47 @@ using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 using TimerOutputs
 
+# Local iterations return the consistent tangent operator
+
+function StrainRateTrial(τ_trial, ε̇, τ0, G, Δt, B, n)
+    τII_trial = sqrt(0.5*(τ_trial[1]^2 + τ_trial[2]^2) + τ_trial[3]^2)    #sqrt(([1/2; 1/2; 1].*τ_trial)'*τ_trial)
+    ε̇_el      = (τ_trial .- τ0) ./(2*G.*Δt)
+    ε̇II_vis   = B.*τII_trial.^n 
+    ε̇_vis     = ε̇II_vis .* (τ_trial./τII_trial)
+    ε̇_trial   = ε̇_el + ε̇_vis
+    return ε̇_trial
+end
+
+function RheologyLocalIterations(ε̇, τ0, materials, phases, Δ)
+
+    niter = 10
+
+    n    = materials.n[phases]
+    η0   = materials.η0[phases]
+    G    = materials.G[phases]
+    B    = (2*η0)^(-n)
+
+    # Guess
+    ε̇II     = sqrt(([1/2; 1/2; 1].*ε̇)'*ε̇)
+    ηv      = η0^(-1/n) * ε̇II^(1/n-1)
+    η_eff   = inv( 1/ηv + 1/(G*Δ.t) )
+    τ_trial = MVector( 2*η_eff*( ε̇ .+ τ0 ./(2*G.*Δ.t) ) )
+
+    # Ideally preallocate
+    J⁻¹     = 0.
+
+    # Local Newton
+    for iter=1:niter
+        r         = ε̇ - StrainRateTrial(τ_trial, ε̇, τ0, G, Δ.t, B, n) 
+        J         = Enzyme.jacobian(Enzyme.Forward, StrainRateTrial, τ_trial, ε̇, τ0, G, Δ.t, B, n)
+        J⁻¹       = inv(J[1])
+        τ_trial .+=  J⁻¹*r
+        # @show iter, norm(r)
+        norm(r)<1e-10 && break
+    end
+    return τ_trial, J⁻¹
+end
+
 function PowerLaw(ε̇, materials, phases, Δ)
     ε̇II  = sqrt.(1/2*(ε̇[1].^2 .+ ε̇[2].^2) + ε̇[3].^2)
     P    = ε̇[4]
@@ -70,23 +111,38 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, type,
         τ̄xy0  = SVector{1}( 0.25*(τxy0[1:end-1,1:end-1] .+ τxy0[1:end-1,2:end-0] .+ τxy0[2:end-0,1:end-1] .+ τxy0[2:end,2:end]) )
         ε̇vec  = @SVector([ε̇xx[1]+τ0.xx[i,j]/(2*G[1]*Δ.t), ε̇yy[1]+τ0.yy[i,j]/(2*G[1]*Δ.t), ε̇̄xy[1]+τ̄xy0[1]/(2*G[1]*Δ.t), Pt[i,j]])
         
-        # Tangent operator used for Newton Linearisation
-        jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, Rheology!, ε̇vec, Const(materials), Const(phases.c[i,j]), Const(Δ))
+        # # Tangent operator used for Newton Linearisation
+        # jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, Rheology!, ε̇vec, Const(materials), Const(phases.c[i,j]), Const(Δ))
         
-        # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
-        𝐷_ctl.c[i,j][:,1] .= jac.derivs[1][1][1]
-        𝐷_ctl.c[i,j][:,2] .= jac.derivs[1][2][1]
-        𝐷_ctl.c[i,j][:,3] .= jac.derivs[1][3][1]
-        𝐷_ctl.c[i,j][:,4] .= jac.derivs[1][4][1]
+        # # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
+        # 𝐷_ctl.c[i,j][:,1] .= jac.derivs[1][1][1]
+        # 𝐷_ctl.c[i,j][:,2] .= jac.derivs[1][2][1]
+        # 𝐷_ctl.c[i,j][:,3] .= jac.derivs[1][3][1]
+        # 𝐷_ctl.c[i,j][:,4] .= jac.derivs[1][4][1]
 
-        # Tangent operator used for Picard Linearisation
-        𝐷.c[i,j] .= diagm(2*jac.val[2]*ones(4))
+        # # Tangent operator used for Picard Linearisation
+        # 𝐷.c[i,j] .= diagm(2*jac.val[2]*ones(4))
 
-        # Update stress
-        τ.xx[i,j] = jac.val[1][1]
-        τ.yy[i,j] = jac.val[1][2]
-        λ̇.c[i,j]  = jac.val[3]
-        η.c[i,j]  = jac.val[2]
+        # # Update stress
+        # τ.xx[i,j] = jac.val[1][1]
+        # τ.yy[i,j] = jac.val[1][2]
+        # λ̇.c[i,j]  = jac.val[3]
+        # η.c[i,j]  = jac.val[2]
+
+        ε̇_     = @SVector([ε̇xx[1], ε̇yy[1], ε̇̄xy[1]])
+        τ0_    = @SVector([τ0.xx[i,j], τ0.yy[i,j], τ̄xy0[1]])
+        τ_corr, J⁻¹ = RheologyLocalIterations(ε̇_, τ0_, materials, phases.c[i,j], Δ)
+
+        η_eff = sqrt(([1/2; 1/2; 1].*τ_corr)'*τ_corr)/(2*sqrt(([1/2; 1/2; 1].*ε̇vec[1:3])'*ε̇vec[1:3]))
+
+        𝐷.c[i,j][1,1] = 2*η_eff
+        𝐷.c[i,j][2,2] = 2*η_eff
+        𝐷.c[i,j][3,3] = 2*η_eff
+
+        τ.xx[i,j]              = τ_corr[1]
+        τ.yy[i,j]              = τ_corr[2]
+        𝐷_ctl.c[i,j][1:3,1:3] .= J⁻¹
+        
     end
 
     # Loop over vertices
@@ -123,22 +179,35 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, type,
         P̄     = SVector{1}( 0.25*(   P[1:end-1,1:end-1] .+    P[1:end-1,2:end-0] .+    P[2:end-0,1:end-1] .+    P[2:end,2:end]) ) 
         ε̇vec  = @SVector([ε̇̄xx[1]+τ̄xx0[1]/(2*G[1]*Δ.t), ε̇̄yy[1]+τ̄yy0[1]/(2*G[1]*Δ.t), ε̇xy[1]+τ0.xy[i,j]/(2*G[1]*Δ.t), P̄[1]])
         
-        # Tangent operator used for Newton Linearisation
-        jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, Rheology!, ε̇vec, Const(materials), Const(phases.v[i,j]), Const(Δ))
+        # # Tangent operator used for Newton Linearisation
+        # jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, Rheology!, ε̇vec, Const(materials), Const(phases.v[i,j]), Const(Δ))
 
-        # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
-        𝐷_ctl.v[i,j][:,1] .= jac.derivs[1][1][1]
-        𝐷_ctl.v[i,j][:,2] .= jac.derivs[1][2][1]
-        𝐷_ctl.v[i,j][:,3] .= jac.derivs[1][3][1]
-        𝐷_ctl.v[i,j][:,4] .= jac.derivs[1][4][1]
+        # # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
+        # 𝐷_ctl.v[i,j][:,1] .= jac.derivs[1][1][1]
+        # 𝐷_ctl.v[i,j][:,2] .= jac.derivs[1][2][1]
+        # 𝐷_ctl.v[i,j][:,3] .= jac.derivs[1][3][1]
+        # 𝐷_ctl.v[i,j][:,4] .= jac.derivs[1][4][1]
 
-        # Tangent operator used for Picard Linearisation
-        𝐷.v[i,j] .= diagm(2*jac.val[2]*ones(4))
+        # # Tangent operator used for Picard Linearisation
+        # 𝐷.v[i,j] .= diagm(2*jac.val[2]*ones(4))
 
-        # Update stress
-        τ.xy[i,j] = jac.val[1][3]
-        λ̇.v[i,j]  = jac.val[3]
-        η.v[i,j]  = jac.val[2]
+        # # Update stress
+        # τ.xy[i,j] = jac.val[1][3]
+        # λ̇.v[i,j]  = jac.val[3]
+        # η.v[i,j]  = jac.val[2]
+
+        ε̇_     = @SVector([ε̇̄xx[1], ε̇̄yy[1], ε̇xy[1]])
+        τ0_    = @SVector([τ̄xx0[1], τ̄yy0[1], τ0.xy[i,j]])
+        τ_corr, J⁻¹ = RheologyLocalIterations(ε̇_, τ0_, materials, phases.v[i,j], Δ)
+
+        η_eff = sqrt(([1/2; 1/2; 1].*τ_corr)'*τ_corr)/(2*sqrt(([1/2; 1/2; 1].*ε̇vec[1:3])'*ε̇vec[1:3]))
+
+        𝐷.v[i,j][1,1] = 2*η_eff
+        𝐷.v[i,j][2,2] = 2*η_eff
+        𝐷.v[i,j][3,3] = 2*η_eff
+
+        τ.xy[i,j]              = τ_corr[3]
+        𝐷_ctl.v[i,j][1:3,1:3] .= J⁻¹
     end
 end
 
@@ -644,10 +713,10 @@ end
     phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...))  # phase on velocity points
 
     materials = ( 
-        n   = [1.0 1.0],
+        n   = [15.0 1.0],
         η0  = [1e2 1e-1], 
         G   = [1e1 1e1],
-        C   = [150 150],
+        C   = [150e6 150e6],
         ϕ   = [30. 30.],
         ηvp = [1e0 1e0],
     )
@@ -679,10 +748,10 @@ end
     #--------------------------------------------#
 
     # Time steps
-    nt    = 17
+    nt    = 20
 
     # Newton solver
-    niter = 20
+    niter = 10
     ϵ_nl  = 1e-8
 
     # Line search
@@ -789,14 +858,14 @@ end
 
         τxyc = 0.25 .* (τ.xy[1:end-1,1:end-1] .+ τ.xy[2:end-0,1:end-1].+ τ.xy[1:end-1,2:end-0] .+ τ.xy[2:end-0,2:end-0])
         τII = sqrt.( 0.5.*(τ.xx[2:end-1,2:end-1].^2 + τ.yy[2:end-1,2:end-1].^2) .+ τxyc.^2 )
-        # p1 = heatmap(xc, yv, abs.(R.y[inx_Vy,iny_Vy])', aspect_ratio=1, xlim=extrema(xc), title="Vy")
+        # p1 = heatmap(xc, yv, abs.(V.y[inx_Vy,iny_Vy])', aspect_ratio=1, xlim=extrema(xc), title="Vy")
         p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
         p2 = heatmap(xc, yc,  Pt[inx_Pt,iny_Pt]' .- mean(Pt[inx_Pt,iny_Pt]), aspect_ratio=1, xlim=extrema(xc), title="Pt")
         p3 = heatmap(xc, yc,  τII', aspect_ratio=1, xlim=extrema(xc), title="τII")
         p4 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright)
         p4 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
         p4 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
-        p4 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
+        # p4 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
         p5 = heatmap(xc, yc,  (λ̇.c[inx_Pt,iny_Pt] .> 0.)', aspect_ratio=1, xlim=extrema(xc), title="ηc")
         p6 = heatmap(xv, yv,  (λ̇.v .> 0.)', aspect_ratio=1, xlim=extrema(xv), title="ηv")
         display(plot(p1, p2, p3, p4, layout=(3,2)))
