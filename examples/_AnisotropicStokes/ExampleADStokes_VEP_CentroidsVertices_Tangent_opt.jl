@@ -39,42 +39,6 @@ function Rheology!(ε̇, materials, phases, Δ)
     return τ, η, λ̇
 end
 
-function SetBCVx1(Vx, typex, bcx, Δ)
-
-    MVx = MMatrix(Vx)
-    for ii in axes(typex, 1)
-        if typex[ii,1] == :Dirichlet
-            MVx[ii,1] = fma(2, bcx[ii,1], -Vx[ii,2])
-        elseif typex[ii,1] == :Neumann
-            MVx[ii,1] = fma(Δ.y, bcx[ii,1], Vx[ii,2])
-        end
-
-        if typex[ii,end] == :Dirichlet
-            MVx[ii,end] = fma(2, bcx[ii,end], -Vx[ii,end-1])
-        elseif typex[ii,end] == :Neumann
-            MVx[ii,end] = fma(Δ.y, bcx[ii,end], Vx[ii,end-1])
-        end
-    end
-    return SMatrix(MVx)
-end
-
-function SetBCVy1(Vy, typey, bcy, Δ)
-    MVy = MMatrix(Vy)
-    for jj in axes(typey, 2)
-        if typey[1,jj] == :Dirichlet
-            MVy[1,jj] = fma(2, bcy[1,jj], -Vy[2,jj])
-        elseif typey[1,jj] == :Neumann
-            MVy[1,jj] = fma(Δ.y, bcy[1,jj], Vy[2,jj])
-        end
-
-        if typey[end,jj] == :Dirichlet
-            MVy[end,jj] = fma(2, bcy[end,jj], -Vy[end-1,jj])
-        elseif typey[end,jj] == :Neumann
-            MVy[end,jj] = fma(Δ.y, bcy[end,jj], Vy[end-1,jj])
-        end
-    end
-    return SMatrix(MVy)
-end
 
 function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, type, BC, materials, phases, Δ)
 
@@ -181,8 +145,6 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, type,
     end
 end
 
-# @b TangentOperator!($(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, type, BC, materials, phases, Δ)...)
-
 function Momentum_x_Generic(Vx, Vy, Pt, τ0, 𝐷, phases, materials, type, bcv, Δ)
     
     invΔx, invΔy = 1 / Δ.x, 1 / Δ.y
@@ -192,36 +154,107 @@ function Momentum_x_Generic(Vx, Vy, Pt, τ0, 𝐷, phases, materials, type, bcv,
     SetBCVy1!(Vy, type.y, bcv.y, Δ)
 
     # Velocity gradient
-    Dxx = SMatrix{2,3}( (Vx[2:end,:]       - Vx[1:end-1,:]      ) * invΔx )           
-    Dyy = SMatrix{2,3}( (Vy[2:end-1,2:end] - Vy[2:end-1,1:end-1]) * invΔy )            
-    Dxy = SMatrix{3,2}( (Vx[:,2:end]       - Vx[:,1:end-1]      ) * invΔy ) 
-    Dyx = SMatrix{3,2}( (Vy[2:end,2:end-1] - Vy[1:end-1,2:end-1]) * invΔx ) 
+    # Dxx = SMatrix{2,3}( (Vx[2:end,:]       - Vx[1:end-1,:]      ) * invΔx )           
+    # Dyy = SMatrix{2,3}( (Vy[2:end-1,2:end] - Vy[2:end-1,1:end-1]) * invΔy )            
+    # Dxy = SMatrix{3,2}( (Vx[:,2:end]       - Vx[:,1:end-1]      ) * invΔy ) 
+    # Dyx = SMatrix{3,2}( (Vy[2:end,2:end-1] - Vy[1:end-1,2:end-1]) * invΔx ) 
 
+    Dxx = ∂x(Vx) * invΔx
+    Dyy = ∂y_inn(Vy) * invΔy
+    Dxy = ∂y(Vx) * invΔy
+    Dyx = ∂x_inn(Vy) * invΔx
+    
     # Strain rate
-    ε̇kk = SMatrix{2,3}( Dxx + Dyy           ) 
-    ε̇xx = SMatrix{2,3}( Dxx - 1/3*ε̇kk       ) 
-    ε̇yy = SMatrix{2,3}( Dyy - 1/3*ε̇kk       )
-    ε̇xy = SMatrix{3,2}( 1/2 * ( Dxy + Dyx ) )
+    ε̇kk = @. Dxx + Dyy
+    ε̇xx = @. Dxx - 1/3*ε̇kk
+    ε̇yy = @. Dyy - 1/3*ε̇kk
+    ε̇xy = @. 1/2 * ( Dxy + Dyx )
 
     # Average vertex to centroid
-    ε̇̄xy  = SVector{2}( 0.25*(ε̇xy[1:end-1,1:end-1] .+ ε̇xy[1:end-1,2:end-0] .+ ε̇xy[2:end-0,1:end-1] .+ ε̇xy[2:end,2:end]) )
+    ε̇̄xy  = av(ε̇xy)
     # Average centroid to vertex
-    ε̇̄xx  = SVector{2}( 0.25*(ε̇xx[1:end-1,1:end-1] .+ ε̇xx[1:end-1,2:end-0] .+ ε̇xx[2:end-0,1:end-1] .+ ε̇xx[2:end,2:end]) )
-    ε̇̄yy  = SVector{2}( 0.25*(ε̇yy[1:end-1,1:end-1] .+ ε̇yy[1:end-1,2:end-0] .+ ε̇yy[2:end-0,1:end-1] .+ ε̇yy[2:end,2:end]) )
-    P̄t   = SVector{2}( 0.25*( Pt[1:end-1,1:end-1] .+  Pt[1:end-1,2:end-0] .+  Pt[2:end-0,1:end-1] .+  Pt[2:end,2:end]) )
-    τ̄0xx = SVector{2}( 0.25*(τ0.xx[1:end-1,1:end-1] .+ τ0.xx[1:end-1,2:end-0] .+ τ0.xx[2:end-0,1:end-1] .+ τ0.xx[2:end,2:end]) )
-    τ̄0yy = SVector{2}( 0.25*(τ0.yy[1:end-1,1:end-1] .+ τ0.yy[1:end-1,2:end-0] .+ τ0.yy[2:end-0,1:end-1] .+ τ0.yy[2:end,2:end]) )
-    τ̄0xy = SVector{2}( 0.25*(τ0.xy[1:end-1,1:end-1] .+ τ0.xy[1:end-1,2:end-0] .+ τ0.xy[2:end-0,1:end-1] .+ τ0.xy[2:end,2:end]) )
+    ε̇̄xx  = av(ε̇xx)
+    ε̇̄yy  = av(ε̇yy)
+    P̄t   = av(Pt)
+    τ̄0xx = av(τ0.xx)
+    τ̄0yy = av(τ0.yy)
+    τ̄0xy = av(τ0.xy)
 
     # Effective strain rate
-    Gc  = SVector{2}( materials.G[phases.c] )
-    Gv  = SVector{2}( materials.G[phases.v] )
-    ϵ̇xx = SVector{2}( ε̇xx[:,2] .+ τ0.xx[:,2] ./ (2*Gc.*Δ.t) )
-    ϵ̇yy = SVector{2}( ε̇yy[:,2] .+ τ0.yy[:,2] ./ (2*Gc.*Δ.t) )
-    ϵ̇̄xy = SVector{2}( ε̇̄xy[:]   .+ τ̄0xy[:]    ./ (2*Gc.*Δ.t) )
-    ϵ̇̄xx = SVector{2}( ε̇̄xx[:]   .+ τ̄0xx[:]    ./ (2*Gv.*Δ.t) )
-    ϵ̇̄yy = SVector{2}( ε̇̄yy[:]   .+ τ̄0yy[:]    ./ (2*Gv.*Δ.t) )
-    ϵ̇xy = SVector{2}( ε̇xy[2,:] .+ τ0.xy[2,:] ./ (2*Gv.*Δ.t) )
+    Gc  = materials.G[phases.c]
+    Gv  = materials.G[phases.v]
+    tmpc = @. inv(2 * Gc * Δ.t)
+    tmpv = @. inv(2 * Gv * Δ.t)
+    ϵ̇xx = @. ε̇xx[:,2] + τ0.xx[:,2] * tmpc
+    ϵ̇yy = @. ε̇yy[:,2] + τ0.yy[:,2] * tmpc
+    ϵ̇̄xy = @. ε̇̄xy[:]   + τ̄0xy[:]    * tmpc
+    ϵ̇̄xx = @. ε̇̄xx[:]   + τ̄0xx[:]    * tmpv
+    ϵ̇̄yy = @. ε̇̄yy[:]   + τ̄0yy[:]    * tmpv
+    ϵ̇xy = @. ε̇xy[2,:] + τ0.xy[2,:] * tmpv
+
+    # Stress
+    τxx = @MVector zeros(2)
+    τxy = @MVector zeros(2)
+    for i=1:2
+        τxx[i] = 𝐷.c[i][1,1] .* ϵ̇xx[i] + 𝐷.c[i][1,2] .* ϵ̇yy[i] + 𝐷.c[i][1,3] .* ϵ̇̄xy[i] + 𝐷.c[i][1,4] * Pt[i,2]
+        τxy[i] = 𝐷.v[i][3,1] .* ϵ̇̄xx[i] + 𝐷.v[i][3,2] .* ϵ̇̄yy[i] + 𝐷.v[i][3,3] .* ϵ̇xy[i] + 𝐷.v[i][3,4] * P̄t[i]
+    end
+
+    # Residual
+    fx  = ( τxx[2]  - τxx[1] ) * invΔx
+    fx += ( τxy[2]  - τxy[1] ) * invΔy
+    fx -= ( Pt[2,2] - Pt[1,2]) * invΔx
+    # fx *= -1 * Δ.x * Δ.y
+
+    return fx
+end
+
+function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, τ0, 𝐷, phases, materials, type, bcv, Δ)
+    
+    invΔx, invΔy = 1 / Δ.x, 1 / Δ.y
+
+    # BC
+    Vx = SetBCVx1(Vx_loc, type.x, bcv.x, Δ)
+    Vy = SetBCVy1(Vy_loc, type.y, bcv.y, Δ)
+
+    # Velocity gradient
+    # Dxx = SMatrix{2,3}( (Vx[2:end,:]       - Vx[1:end-1,:]      ) * invΔx )           
+    # Dyy = SMatrix{2,3}( (Vy[2:end-1,2:end] - Vy[2:end-1,1:end-1]) * invΔy )            
+    # Dxy = SMatrix{3,2}( (Vx[:,2:end]       - Vx[:,1:end-1]      ) * invΔy ) 
+    # Dyx = SMatrix{3,2}( (Vy[2:end,2:end-1] - Vy[1:end-1,2:end-1]) * invΔx ) 
+
+    Dxx = ∂x(Vx) * invΔx
+    Dyy = ∂y_inn(Vy) * invΔy
+    Dxy = ∂y(Vx) * invΔy
+    Dyx = ∂x_inn(Vy) * invΔx
+
+    # Strain rate
+    ε̇kk = @. Dxx + Dyy
+    ε̇xx = @. Dxx - 1/3*ε̇kk
+    ε̇yy = @. Dyy - 1/3*ε̇kk
+    ε̇xy = @. 1/2 * ( Dxy + Dyx )
+
+    # Average vertex to centroid
+    ε̇̄xy  = av(ε̇xy)
+    # Average centroid to vertex
+    ε̇̄xx  = av(ε̇xx)
+    ε̇̄yy  = av(ε̇yy)
+    P̄t   = av(Pt)
+    τ̄0xx = av(τ0.xx)
+    τ̄0yy = av(τ0.yy)
+    τ̄0xy = av(τ0.xy)
+
+    # Effective strain rate
+    Gc  = materials.G[phases.c]
+    Gv  = materials.G[phases.v]
+    tmpc = @. inv(2 * Gc * Δ.t)
+    tmpv = @. inv(2 * Gv * Δ.t)
+    ϵ̇xx = @. ε̇xx[:,2] + τ0.xx[:,2] * tmpc
+    ϵ̇yy = @. ε̇yy[:,2] + τ0.yy[:,2] * tmpc
+    ϵ̇̄xy = @. ε̇̄xy[:]   + τ̄0xy[:]    * tmpc
+    ϵ̇̄xx = @. ε̇̄xx[:]   + τ̄0xx[:]    * tmpv
+    ϵ̇̄yy = @. ε̇̄yy[:]   + τ̄0yy[:]    * tmpv
+    ϵ̇xy = @. ε̇xy[2,:] + τ0.xy[2,:] * tmpv
 
     # Stress
     τxx = @MVector zeros(2)
@@ -249,36 +282,43 @@ function Momentum_y_Generic(Vx, Vy, Pt, τ0, 𝐷, phases, materials, type, bcv,
     SetBCVy1!(Vy, type.y, bcv.y, Δ)
 
     # Velocity gradient
-    Dxx = SMatrix{3,2}( (Vx[2:end,2:end-1] - Vx[1:end-1,2:end-1]) * invΔx )             # Static Arrays ???
-    Dyy = SMatrix{3,2}( (Vy[:,2:end]       - Vy[:,1:end-1]      ) * invΔy )             
-    Dxy = SMatrix{2,3}( (Vx[2:end-1,2:end] - Vx[2:end-1,1:end-1]) * invΔy ) 
-    Dyx = SMatrix{2,3}( (Vy[2:end,:]       - Vy[1:end-1,:]      ) * invΔx ) 
+    # Dxx = SMatrix{3,2}( (Vx[2:end,2:end-1] - Vx[1:end-1,2:end-1]) * invΔx )             # Static Arrays ???
+    # Dyy = SMatrix{3,2}( (Vy[:,2:end]       - Vy[:,1:end-1]      ) * invΔy )             
+    # Dxy = SMatrix{2,3}( (Vx[2:end-1,2:end] - Vx[2:end-1,1:end-1]) * invΔy ) 
+    # Dyx = SMatrix{2,3}( (Vy[2:end,:]       - Vy[1:end-1,:]      ) * invΔx ) 
+
+    Dxx = ∂x_inn(Vx) * invΔx
+    Dyy = ∂y(Vy) * invΔy
+    Dxy = ∂y_inn(Vx) * invΔy
+    Dyx = ∂x(Vy) * invΔx
 
     # Strain rate
-    ε̇kk = SMatrix{3,2}( Dxx + Dyy           )
-    ε̇xx = SMatrix{3,2}( Dxx - 1/3*ε̇kk       )
-    ε̇yy = SMatrix{3,2}( Dyy - 1/3*ε̇kk       )
-    ε̇xy = SMatrix{2,3}( 1/2 * ( Dxy + Dyx ) )
+    ε̇kk = @. Dxx + Dyy
+    ε̇xx = @. Dxx - 1/3*ε̇kk      
+    ε̇yy = @. Dyy - 1/3*ε̇kk      
+    ε̇xy = @. 1/2 * (Dxy + Dyx)
 
     # Average vertex to centroid
-    ε̇̄xy  = SVector{2}( 0.25*(ε̇xy[1:end-1,1:end-1] .+ ε̇xy[1:end-1,2:end-0] .+ ε̇xy[2:end-0,1:end-1] .+ ε̇xy[2:end,2:end])         )
+    ε̇̄xy  = av(ε̇xy)
     # Average centroid to vertex
-    ε̇̄xx  = SVector{2}( 0.25*(ε̇xx[1:end-1,1:end-1] .+ ε̇xx[1:end-1,2:end-0] .+ ε̇xx[2:end-0,1:end-1] .+ ε̇xx[2:end,2:end])         )
-    ε̇̄yy  = SVector{2}( 0.25*(ε̇yy[1:end-1,1:end-1] .+ ε̇yy[1:end-1,2:end-0] .+ ε̇yy[2:end-0,1:end-1] .+ ε̇yy[2:end,2:end])         )
-    P̄t   = SVector{2}( 0.25*( Pt[1:end-1,1:end-1] .+  Pt[1:end-1,2:end-0] .+  Pt[2:end-0,1:end-1] .+  Pt[2:end,2:end])         )
-    τ̄0xx = SVector{2}( 0.25*(τ0.xx[1:end-1,1:end-1] .+ τ0.xx[1:end-1,2:end-0] .+ τ0.xx[2:end-0,1:end-1] .+ τ0.xx[2:end,2:end]) )
-    τ̄0yy = SVector{2}( 0.25*(τ0.yy[1:end-1,1:end-1] .+ τ0.yy[1:end-1,2:end-0] .+ τ0.yy[2:end-0,1:end-1] .+ τ0.yy[2:end,2:end]) )
-    τ̄0xy = SVector{2}( 0.25*(τ0.xy[1:end-1,1:end-1] .+ τ0.xy[1:end-1,2:end-0] .+ τ0.xy[2:end-0,1:end-1] .+ τ0.xy[2:end,2:end]) )
+    ε̇̄xx  = av(ε̇xx)
+    ε̇̄yy  = av(ε̇yy)
+    P̄t   = av( Pt)
+    τ̄0xx = av(τ0.xx)
+    τ̄0yy = av(τ0.yy)
+    τ̄0xy = av(τ0.xy)
     
     # Effective strain rate
     Gc  = SVector{2}( materials.G[phases.c] )
     Gv  = SVector{2}( materials.G[phases.v] )
-    ϵ̇xx = SVector{2}( ε̇xx[2,:] .+ τ0.xx[2,:] ./ (2*Gc.*Δ.t) )
-    ϵ̇yy = SVector{2}( ε̇yy[2,:] .+ τ0.yy[2,:] ./ (2*Gc.*Δ.t) )
-    ϵ̇̄xy = SVector{2}( ε̇̄xy[:]   .+ τ̄0xy[:]    ./ (2*Gc.*Δ.t) )
-    ϵ̇̄xx = SVector{2}( ε̇̄xx[:]   .+ τ̄0xx[:]    ./ (2*Gv.*Δ.t) )
-    ϵ̇̄yy = SVector{2}( ε̇̄yy[:]   .+ τ̄0yy[:]    ./ (2*Gv.*Δ.t) )
-    ϵ̇xy = SVector{2}( ε̇xy[:,2] .+ τ0.xy[:,2] ./ (2*Gv.*Δ.t) )
+    tmpc = @. inv(2 * Gc * Δ.t)
+    tmpv = @. inv(2 * Gv * Δ.t)
+    ϵ̇xx = @.  ε̇xx[2,:] + τ0.xx[2,:] / tmpc
+    ϵ̇yy = @.  ε̇yy[2,:] + τ0.yy[2,:] / tmpc
+    ϵ̇̄xy = @.  ε̇̄xy[:]   + τ̄0xy[:]    / tmpc
+    ϵ̇̄xx = @.  ε̇̄xx[:]   + τ̄0xx[:]    / tmpv
+    ϵ̇̄yy = @.  ε̇̄yy[:]   + τ̄0yy[:]    / tmpv
+    ϵ̇xy = @.  ε̇xy[:,2] + τ0.xy[:,2] / tmpv
 
     # Stress
     τyy = @MVector zeros(2)
@@ -297,6 +337,71 @@ function Momentum_y_Generic(Vx, Vy, Pt, τ0, 𝐷, phases, materials, type, bcv,
     return fy
 end
 
+function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, τ0, 𝐷, phases, materials, type, bcv, Δ)
+    
+    invΔx, invΔy = 1 / Δ.x, 1 / Δ.y
+
+    # BC
+    Vx = SetBCVx1(Vx_loc, type.x, bcv.x, Δ)
+    Vy = SetBCVy1(Vy_loc, type.y, bcv.y, Δ)
+
+    # Velocity gradient
+    # Dxx = SMatrix{3,2}( (Vx[2:end,2:end-1] - Vx[1:end-1,2:end-1]) * invΔx )             # Static Arrays ???
+    # Dyy = SMatrix{3,2}( (Vy[:,2:end]       - Vy[:,1:end-1]      ) * invΔy )             
+    # Dxy = SMatrix{2,3}( (Vx[2:end-1,2:end] - Vx[2:end-1,1:end-1]) * invΔy ) 
+    # Dyx = SMatrix{2,3}( (Vy[2:end,:]       - Vy[1:end-1,:]      ) * invΔx ) 
+
+    Dxx = ∂x_inn(Vx) * invΔx
+    Dyy = ∂y(Vy) * invΔy
+    Dxy = ∂y_inn(Vx) * invΔy
+    Dyx = ∂x(Vy) * invΔx
+
+    # Strain rate
+    ε̇kk = @. Dxx + Dyy
+    ε̇xx = @. Dxx - 1/3*ε̇kk      
+    ε̇yy = @. Dyy - 1/3*ε̇kk      
+    ε̇xy = @. 1/2 * (Dxy + Dyx)
+
+    # Average vertex to centroid
+    ε̇̄xy  = av(ε̇xy)
+    # Average centroid to vertex
+    ε̇̄xx  = av(ε̇xx)
+    ε̇̄yy  = av(ε̇yy)
+    P̄t   = av( Pt)
+    τ̄0xx = av(τ0.xx)
+    τ̄0yy = av(τ0.yy)
+    τ̄0xy = av(τ0.xy)
+    
+    # Effective strain rate
+    Gc  = SVector{2}( materials.G[phases.c])
+    Gv  = SVector{2}( materials.G[phases.v])
+    tmpc = (2*Gc.*Δ.t)
+    tmpv = (2*Gv.*Δ.t)
+    ϵ̇xx = @. ε̇xx[2,:] + τ0.xx[2,:] / tmpc
+    ϵ̇yy = @. ε̇yy[2,:] + τ0.yy[2,:] / tmpc
+    ϵ̇̄xy = @. ε̇̄xy[:]   + τ̄0xy[:]    / tmpc
+    ϵ̇̄xx = @. ε̇̄xx[:]   + τ̄0xx[:]    / tmpv
+    ϵ̇̄yy = @. ε̇̄yy[:]   + τ̄0yy[:]    / tmpv
+    ϵ̇xy = @. ε̇xy[:,2] + τ0.xy[:,2] / tmpv
+
+    # Stress
+    τyy = @MVector zeros(2)
+    τxy = @MVector zeros(2)
+    for i=1:2
+        τyy[i] = 𝐷.c[i][2,1] .* ϵ̇xx[i] + 𝐷.c[i][2,2] .* ϵ̇yy[i] + 𝐷.c[i][2,3] .* ϵ̇̄xy[i] + 𝐷.c[i][2,4] .* Pt[2,i]
+        τxy[i] = 𝐷.v[i][3,1] .* ϵ̇̄xx[i] + 𝐷.v[i][3,2] .* ϵ̇̄yy[i] + 𝐷.v[i][3,3] .* ϵ̇xy[i] + 𝐷.v[i][3,4] .* P̄t[i]
+    end
+
+    # Residual
+    fy  = ( τyy[2]  -  τyy[1] ) * invΔy
+    fy += ( τxy[2]  -  τxy[1] ) * invΔx
+    fy -= ( Pt[2,2] -  Pt[2,1]) * invΔy
+    # fy *= -1 * Δ.x * Δ.y
+    
+    return fy
+end
+
+
 function Continuity(Vx, Vy, Pt, D, type_loc, bcv_loc, Δ)
     invΔx    = 1 / Δ.x
     invΔy    = 1 / Δ.y
@@ -308,8 +413,8 @@ function ResidualMomentum2D_x!(R, V, P, τ0, 𝐷, phases, materials, number, ty
     shift    = (x=1, y=2)
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x+1
         if type.Vx[i,j] == :in
-            Vx_loc     = MMatrix{3,3}(      V.x[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-            Vy_loc     = MMatrix{4,4}(      V.y[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
+            Vx_loc     = SMatrix{3,3}(      V.x[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            Vy_loc     = SMatrix{4,4}(      V.y[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
             bcx_loc    = SMatrix{3,3}(    BC.Vx[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             bcy_loc    = SMatrix{4,4}(    BC.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
             typex_loc  = SMatrix{3,3}(  type.Vx[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
@@ -329,7 +434,7 @@ function ResidualMomentum2D_x!(R, V, P, τ0, 𝐷, phases, materials, number, ty
             D          = (c=Dc, v=Dv)
             τ0_loc     = (xx=τxx0, yy=τyy0, xy=τxy0)
     
-            R.x[i,j]   = Momentum_x_Generic(Vx_loc, Vy_loc, P_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δ)
+            R.x[i,j]   = SMomentum_x_Generic(Vx_loc, Vy_loc, P_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δ)
         end
     end
     return nothing
@@ -372,14 +477,14 @@ function AssembleMomentum2D_x!(K, V, P, τ0, λ̇, 𝐷, phases, materials, num,
             ∂R∂Pt .= 0.
             autodiff(Enzyme.Reverse, Momentum_x_Generic, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(τ0_loc), Const(D), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
             # Vx --- Vx
-            Local = num.Vx[i-1:i+1,j-1:j+1] .* pattern[1][1]
+            Local = SMatrix{3,3}(num.Vx[ii, jj] for ii in i-1:i+1, jj in j-1:j+1) .* pattern[1][1]
             for jj in axes(Local,2), ii in axes(Local,1)
                 if (Local[ii,jj]>0) && num.Vx[i,j]>0
                     K[1][1][num.Vx[i,j], Local[ii,jj]] = ∂R∂Vx[ii,jj] 
                 end
             end
             # Vx --- Vy
-            Local = num.Vy[i-1:i+2,j-2:j+1] .* pattern[1][2]
+            Local = SMatrix{4,4}(num.Vy[ii, jj] for ii in i-1:i+2, jj in j-2:j+1) .* pattern[1][2]
             for jj in axes(Local,2), ii in axes(Local,1)
                 if (Local[ii,jj]>0) && num.Vx[i,j]>0
                     K[1][2][num.Vx[i,j], Local[ii,jj]] = ∂R∂Vy[ii,jj]  
@@ -397,7 +502,7 @@ function AssembleMomentum2D_x!(K, V, P, τ0, λ̇, 𝐷, phases, materials, num,
             #     end
             # end
 
-            Local = num.Pt[i-1:i,j-2:j] .* pattern[1][3]
+            Local = SMatrix{2,3}(num.Pt[ii, jj] for ii in i-1:i, jj in j-2:j) .* pattern[1][3]
             for jj in axes(Local,2), ii in axes(Local,1)
                 if (Local[ii,jj]>0) && num.Vx[i,j]>0
                     K[1][3][num.Vx[i,j], Local[ii,jj]] = ∂R∂Pt[ii,jj]  
@@ -412,15 +517,15 @@ function ResidualMomentum2D_y!(R, V, P, τ0, 𝐷, phases, materials, number, ty
     shift    = (x=2, y=1)
     for j in 1+shift.y:nc.y+shift.y+1, i in 1+shift.x:nc.x+shift.x
         if type.Vy[i,j] == :in
-            Vx_loc     = MMatrix{4,4}(      V.x[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
-            Vy_loc     = MMatrix{3,3}(      V.y[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            Vx_loc     = SMatrix{4,4}(      V.x[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
+            Vy_loc     = SMatrix{3,3}(      V.y[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             bcx_loc    = SMatrix{4,4}(    BC.Vx[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
             bcy_loc    = SMatrix{3,3}(    BC.Vy[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             typex_loc  = SMatrix{4,4}(  type.Vx[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
             typey_loc  = SMatrix{3,3}(  type.Vy[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             phc_loc    = SMatrix{1,2}( phases.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
             phv_loc    = SMatrix{2,1}( phases.v[ii,jj] for ii in i-2:i-1, jj in j-1:j-1) 
-            P_loc      = MMatrix{3,2}(        P[ii,jj] for ii in i-2:i,   jj in j-1:j  )
+            P_loc      = SMatrix{3,2}(        P[ii,jj] for ii in i-2:i,   jj in j-1:j  )
             τxx0       = SMatrix{3,2}(    τ0.xx[ii,jj] for ii in i-2:i,   jj in j-1:j  )
             τyy0       = SMatrix{3,2}(    τ0.yy[ii,jj] for ii in i-2:i,   jj in j-1:j  )
             τxy0       = SMatrix{2,3}(    τ0.xy[ii,jj] for ii in i-2:i-1,   jj in j-2:j)
@@ -433,7 +538,7 @@ function ResidualMomentum2D_y!(R, V, P, τ0, 𝐷, phases, materials, number, ty
             D          = (c=Dc, v=Dv)
             τ0_loc     = (xx=τxx0, yy=τyy0, xy=τxy0)
 
-            R.y[i,j]   = Momentum_y_Generic(Vx_loc, Vy_loc, P_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δ)
+            R.y[i,j]   = SMomentum_y_Generic(Vx_loc, Vy_loc, P_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δ)
         end
     end
     return nothing
@@ -472,19 +577,21 @@ function AssembleMomentum2D_y!(K, V, P, τ0, λ̇, 𝐷, phases, materials, num,
             D          = (c=Dc, v=Dv)
             τ0_loc     = (xx=τxx0, yy=τyy0, xy=τxy0)
 
-            ∂R∂Vx .= 0.
-            ∂R∂Vy .= 0.
-            ∂R∂Pt .= 0.
+            ∂R∂Vx .= 0.0
+            ∂R∂Vy .= 0.0
+            ∂R∂Pt .= 0.0
             autodiff(Enzyme.Reverse, Momentum_y_Generic, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(τ0_loc), Const(D), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
             # Vy --- Vx
-            Local = num.Vx[i-2:i+1,j-1:j+2] .* pattern[2][1]
+            # Local = num.Vx[i-2:i+1,j-1:j+2] .* pattern[2][1]
+            Local = SMatrix{4,4}(num.Vx[ii, jj] for ii in i-2:i+1, jj in j-1:j+2) .* pattern[2][1]
             for jj in axes(Local,2), ii in axes(Local,1)
                 if (Local[ii,jj]>0) && num.Vy[i,j]>0
                     K[2][1][num.Vy[i,j], Local[ii,jj]] = ∂R∂Vx[ii,jj] 
                 end
             end
             # Vy --- Vy
-            Local = num.Vy[i-1:i+1,j-1:j+1] .* pattern[2][2]
+            # Local = num.Vy[i-1:i+1,j-1:j+1] .* pattern[2][2]
+            Local = SMatrix{3,3}(num.Vy[ii, jj] for ii in i-1:i+1, jj in j-1:j+1) .* pattern[2][2]
             for jj in axes(Local,2), ii in axes(Local,1)
                 if (Local[ii,jj]>0) && num.Vy[i,j]>0
                     K[2][2][num.Vy[i,j], Local[ii,jj]] = ∂R∂Vy[ii,jj]  
@@ -502,12 +609,13 @@ function AssembleMomentum2D_y!(K, V, P, τ0, λ̇, 𝐷, phases, materials, num,
             #     end
             # end
 
-            Local = num.Pt[i-2:i,j-1:j] .* pattern[2][3]
+            # Local = num.Pt[i-2:i,j-1:j] .* pattern[2][3]
+            Local = SMatrix{3,2}(num.Pt[ii, jj] for ii in i-2:i, jj in j-1:j) .* pattern[2][3]
             for jj in axes(Local,2), ii in axes(Local,1)
                 if (Local[ii,jj]>0) && num.Vy[i,j]>0
                     K[2][3][num.Vy[i,j], Local[ii,jj]] = ∂R∂Pt[ii,jj]  
                 end
-            end       
+            end    
         end
     end
     return nothing
@@ -516,8 +624,8 @@ end
 function ResidualContinuity2D!(R, V, P, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
                 
     for j in 2:size(R.p,2)-1, i in 2:size(R.p,1)-1
-        Vx_loc     = MMatrix{3,2}(      V.x[ii,jj] for ii in i:i+2, jj in j:j+1)
-        Vy_loc     = MMatrix{2,3}(      V.y[ii,jj] for ii in i:i+1, jj in j:j+2)
+        Vx_loc     = SMatrix{3,2}(      V.x[ii,jj] for ii in i:i+2, jj in j:j+1)
+        Vy_loc     = SMatrix{2,3}(      V.y[ii,jj] for ii in i:i+1, jj in j:j+2)
         bcv_loc    = (;)
         type_loc   = (;)
         D          = (;)
@@ -561,7 +669,6 @@ function AssembleContinuity2D!(K, V, P, τ0, λ̇, 𝐷, phases, materials, num,
 end
 
 function SetBCVx1!(Vx, typex, bcx, Δ)
-
     for ii in axes(typex, 1)
         if typex[ii,1] == :Dirichlet
             Vx[ii,1] = fma(2, bcx[ii,1], -Vx[ii,2])
@@ -591,6 +698,43 @@ function SetBCVy1!(Vy, typey, bcy, Δ)
             Vy[end,jj] = fma(Δ.y, bcy[end,jj], Vy[end-1,jj])
         end
     end
+end
+
+function SetBCVx1(Vx, typex, bcx, Δ)
+
+    MVx = MMatrix(Vx)
+    for ii in axes(typex, 1)
+        if typex[ii,1] == :Dirichlet
+            MVx[ii,1] = fma(2, bcx[ii,1], -Vx[ii,2])
+        elseif typex[ii,1] == :Neumann
+            MVx[ii,1] = fma(Δ.y, bcx[ii,1], Vx[ii,2])
+        end
+
+        if typex[ii,end] == :Dirichlet
+            MVx[ii,end] = fma(2, bcx[ii,end], -Vx[ii,end-1])
+        elseif typex[ii,end] == :Neumann
+            MVx[ii,end] = fma(Δ.y, bcx[ii,end], Vx[ii,end-1])
+        end
+    end
+    return SMatrix(MVx)
+end
+
+function SetBCVy1(Vy, typey, bcy, Δ)
+    MVy = MMatrix(Vy)
+    for jj in axes(typey, 2)
+        if typey[1,jj] == :Dirichlet
+            MVy[1,jj] = fma(2, bcy[1,jj], -Vy[2,jj])
+        elseif typey[1,jj] == :Neumann
+            MVy[1,jj] = fma(Δ.y, bcy[1,jj], Vy[2,jj])
+        end
+
+        if typey[end,jj] == :Dirichlet
+            MVy[end,jj] = fma(2, bcy[end,jj], -Vy[end-1,jj])
+        elseif typey[end,jj] == :Neumann
+            MVy[end,jj] = fma(Δ.y, bcy[end,jj], Vy[end-1,jj])
+        end
+    end
+    return SMatrix(MVy)
 end
 
 
@@ -785,10 +929,10 @@ end
             
             #--------------------------------------------#
             # Direct-iterative solver
-            fu    = -r[1:size(𝐊,1)]
-            fp    = -r[size(𝐊,1)+1:end]
+            fu   = -r[1:size(𝐊,1)]
+            fp   = -r[size(𝐊,1)+1:end]
             u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu,  ηb=1e3, niter_l=10, ϵ_l=1e-11)
-            dx       = zeros(nVx + nVy + nPt)
+            dx   = zeros(nVx + nVy + nPt)
             dx[1:size(𝐊,1)]     .= u
             dx[size(𝐊,1)+1:end] .= p
 
@@ -853,11 +997,30 @@ end
     
 end
 
-nc = (x = 30, y = 30)
-main(nc)
+main((x = 30, y = 30))
 
-@b UpdateSolution!($(V, Pt, α[i].*dx, number, type, nc)...)
-@b TangentOperator!($(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, type, BC, materials, phases, Δ)...)
-@b ResidualContinuity2D!($(R, V, Pt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) ...)
-@b ResidualMomentum2D_x!($(R, V, Pt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)...)
-@b ResidualMomentum2D_y!($(R, V, Pt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)...)
+
+# ### NEW
+# ────────────────────────────────────────────────────────────────────────
+#                                Time                    Allocations      
+#                       ───────────────────────   ────────────────────────
+#   Tot / % measured:        1.42s /  15.1%            259MiB /  19.6%
+
+# Section       ncalls     time    %tot     avg     alloc    %tot      avg
+# ────────────────────────────────────────────────────────────────────────
+# Line search       26    118ms   54.9%  4.53ms   5.25MiB   10.3%   207KiB
+# Assembly          26   58.9ms   27.5%  2.26ms   45.4MiB   89.4%  1.75MiB
+# Residual          43   37.9ms   17.7%   881μs    120KiB    0.2%  2.78KiB
+
+# ### ORIGINAL
+# ────────────────────────────────────────────────────────────────────────
+#                                Time                    Allocations      
+#                       ───────────────────────   ────────────────────────
+#   Tot / % measured:        5.03s /  71.9%           5.10GiB /  96.0%
+
+# Section       ncalls     time    %tot     avg     alloc    %tot      avg
+# ────────────────────────────────────────────────────────────────────────
+# Line search       26    2.05s   56.6%  78.7ms   3.78GiB   77.1%   149MiB
+# Assembly          26    1.06s   29.3%  40.8ms    511MiB   10.2%  19.6MiB
+# Residual          43    509ms   14.1%  11.8ms    639MiB   12.7%  14.9MiB
+# ────────────────────────────────────────────────────────────────────────
