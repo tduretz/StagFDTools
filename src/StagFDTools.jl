@@ -3,7 +3,7 @@ module StagFDTools
 using StaticArrays, ExtendableSparse, StaticArrays, Printf, LinearAlgebra
 
 include("operators.jl")
-export inn, inn_x, inn_y, av, harm, ∂x, ∂y, ∂kk
+export inn, inn_x, inn_y, av, harm, ∂x, ∂y, ∂x_inn, ∂y_inn, ∂kk
 
 include("Utils.jl")
 export printxy
