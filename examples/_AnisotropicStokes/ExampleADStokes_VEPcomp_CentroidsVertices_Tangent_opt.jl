@@ -837,7 +837,7 @@ end
         C   = [150 150],
         ϕ   = [30. 30.],
         ηvp = [0.5 0.5],
-        β   = [1e-3 1e-3]
+        β   = [1e-0 1e-0]
     )
 
     # Initial configuration
@@ -867,7 +867,7 @@ end
     #--------------------------------------------#
 
     # Time steps
-    nt    = 1
+    nt    = 30
 
     # Newton solver
     niter = 20
@@ -931,7 +931,6 @@ end
             𝐏  = [M.Pt.Pt;] 
             
             #--------------------------------------------#
-            @show  𝐏
             # 𝐌 = [𝐊 𝐐; 𝐐ᵀ M.Pt.Pt]
             
             # #--------------------------------------------#
@@ -997,7 +996,7 @@ end
         p4 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
         p5 = heatmap(xc, yc,  (λ̇.c[inx_Pt,iny_Pt] .> 0.)', aspect_ratio=1, xlim=extrema(xc), title="ηc")
         p6 = heatmap(xv, yv,  (λ̇.v .> 0.)', aspect_ratio=1, xlim=extrema(xv), title="ηv")
-        display(plot(p3, p2, layout=(1,2)))
+        display(plot(p3, p2, p4, layout=(2,2)))
 
         # p2 = spy(M.Vx.Pt, title="x $(nnz(M.Vx.Pt))" )
         # p1 = spy(M.Vy.Pt, title="y $(nnz(M.Vy.Pt))" )
