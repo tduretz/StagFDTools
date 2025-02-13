@@ -26,6 +26,7 @@ function PowerLaw(ε̇, materials, phases, Δ)
         τII -= λ̇*ηvep
         # τII = C*cosd(ϕ) + P*sind(ϕ) + ηvp*λ̇
         ηvep = τII/(2*ε̇II)
+        (τII<0.0) && error("Plasticity without condom")
     end
     return ηvep, λ̇
 end
@@ -410,7 +411,7 @@ function Continuity(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δ)
     invΔy    = 1 / Δ.y
     invΔt    = 1 / Δ.t
     β = materials.β[phase]
-    return ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy) - β * (Pt - Pt0) * invΔt
+    return ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy) + β * (Pt - Pt0) * invΔt
 end
 
 function ResidualMomentum2D_x!(R, V, P, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
@@ -641,7 +642,7 @@ function AssembleContinuity2D!(K, V, P, Pt0, τ0, λ̇, 𝐷, phases, materials,
         
         ∂R∂Vx .= 0.
         ∂R∂Vy .= 0.
-        autodiff(Enzyme.Reverse, Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Const(P[i,j]), Const(Pt0[i,j]), Const(D), Const(phases), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+        autodiff(Enzyme.Reverse, Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Const(P[i,j]), Const(Pt0[i,j]), Const(D), Const(phases.c[i,j]), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
 
         # Pt --- Vx
         Local = num.Vx[i:i+1,j:j+2] .* pattern[3][1]
@@ -807,7 +808,7 @@ end
     ε̇       = (xx=zeros(size_c...), yy=zeros(size_c...), xy=zeros(size_v...) )
     τ0      = (xx=zeros(size_c...), yy=zeros(size_c...), xy=zeros(size_v...) )
     τ       = (xx=zeros(size_c...), yy=zeros(size_c...), xy=zeros(size_v...) )
-    Pt      = zeros(size_c...)
+    Pt      =  15 .* ones(size_c...)
     Pti     = zeros(size_c...)
     Pt0     = zeros(size_c...)
     Dc      =  [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)]
@@ -830,7 +831,7 @@ end
         C   = [150 150],
         ϕ   = [30. 30.],
         ηvp = [0.5 0.5],
-        β   = [1e-4 1e-4]
+        β   = [0e3 0e3]
     )
 
     # Initial configuration
@@ -860,7 +861,7 @@ end
     #--------------------------------------------#
 
     # Time steps
-    nt    = 30
+    nt    = 1
 
     # Newton solver
     niter = 20
@@ -924,6 +925,13 @@ end
             𝐏  = [M.Pt.Pt;] 
             
             #--------------------------------------------#
+            @show  𝐏
+            # 𝐌 = [𝐊 𝐐; 𝐐ᵀ M.Pt.Pt]
+            
+            # #--------------------------------------------#
+            # # Direct solver (TODO: need a better solver)
+            # dx = - 𝐌 \ r
+    
             # Direct-iterative solver
             fu   = -r[1:size(𝐊,1)]
             fp   = -r[size(𝐊,1)+1:end]
@@ -975,7 +983,7 @@ end
         ε̇II  = sqrt.( 0.5.*(ε̇.xx[2:end-1,2:end-1].^2 + ε̇.yy[2:end-1,2:end-1].^2) .+ ε̇xyc.^2 )
         # p1 = heatmap(xc, yv, abs.(R.y[inx_Vy,iny_Vy])', aspect_ratio=1, xlim=extrema(xc), title="Vy")
         p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
-        p2 = heatmap(xc, yc,  Pt[inx_Pt,iny_Pt]' .- mean(Pt[inx_Pt,iny_Pt]), aspect_ratio=1, xlim=extrema(xc), title="Pt")
+        p2 = heatmap(xc, yc,  Pt[inx_Pt,iny_Pt]', aspect_ratio=1, xlim=extrema(xc), title="Pt")
         p3 = heatmap(xc, yc,  log10.(ε̇II)', aspect_ratio=1, xlim=extrema(xc), title="ε̇II", c=:coolwarm)
         p4 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright)
         p4 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
@@ -983,7 +991,7 @@ end
         p4 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
         p5 = heatmap(xc, yc,  (λ̇.c[inx_Pt,iny_Pt] .> 0.)', aspect_ratio=1, xlim=extrema(xc), title="ηc")
         p6 = heatmap(xv, yv,  (λ̇.v .> 0.)', aspect_ratio=1, xlim=extrema(xv), title="ηv")
-        display(plot(p3, layout=(3,2)))
+        display(plot(p3, p2, layout=(1,2)))
 
         # p2 = spy(M.Vx.Pt, title="x $(nnz(M.Vx.Pt))" )
         # p1 = spy(M.Vy.Pt, title="y $(nnz(M.Vy.Pt))" )
@@ -995,7 +1003,7 @@ end
     
 end
 
-main((x = 30, y = 30))
+main((x = 10, y = 10))
 
 
 # ### NEW
