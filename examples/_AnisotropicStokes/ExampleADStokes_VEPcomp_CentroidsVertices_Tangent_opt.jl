@@ -405,10 +405,12 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, τ0, 𝐷, phases, materials, t
 end
 
 
-function Continuity(Vx, Vy, Pt, D, type_loc, bcv_loc, Δ)
+function Continuity(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δ)
     invΔx    = 1 / Δ.x
     invΔy    = 1 / Δ.y
-    return ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy)
+    invΔt    = 1 / Δ.t
+    β = materials.β[phase]
+    return ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy) - β * (Pt - Pt0) * invΔt
 end
 
 function ResidualMomentum2D_x!(R, V, P, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
@@ -612,7 +614,7 @@ function AssembleMomentum2D_y!(K, V, P, τ0, λ̇, 𝐷, phases, materials, num,
     return nothing
 end
 
-function ResidualContinuity2D!(R, V, P, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
+function ResidualContinuity2D!(R, V, P, Pt0, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
                 
     for j in 2:size(R.p,2)-1, i in 2:size(R.p,1)-1
         Vx_loc     = SMatrix{3,2}(      V.x[ii,jj] for ii in i:i+2, jj in j:j+1)
@@ -620,12 +622,12 @@ function ResidualContinuity2D!(R, V, P, τ0, 𝐷, phases, materials, number, ty
         bcv_loc    = (;)
         type_loc   = (;)
         D          = (;)
-        R.p[i,j]   = Continuity(Vx_loc, Vy_loc, P[i,j], D, type_loc, bcv_loc, Δ)
+        R.p[i,j]   = Continuity(Vx_loc, Vy_loc, P[i,j], Pt0[i,j], D, phases.c[i,j], materials, type_loc, bcv_loc, Δ)
     end
     return nothing
 end
 
-function AssembleContinuity2D!(K, V, P, τ0, λ̇, 𝐷, phases, materials, num, pattern, type, BC, nc, Δ) 
+function AssembleContinuity2D!(K, V, P, Pt0, τ0, λ̇, 𝐷, phases, materials, num, pattern, type, BC, nc, Δ) 
                 
     ∂R∂Vx = @MMatrix zeros(3,2)
     ∂R∂Vy = @MMatrix zeros(2,3)
@@ -639,7 +641,7 @@ function AssembleContinuity2D!(K, V, P, τ0, λ̇, 𝐷, phases, materials, num,
         
         ∂R∂Vx .= 0.
         ∂R∂Vy .= 0.
-        autodiff(Enzyme.Reverse, Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Const(P[i,j]), Const(D), Const(type_loc), Const(bcv_loc), Const(Δ))
+        autodiff(Enzyme.Reverse, Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Const(P[i,j]), Const(Pt0[i,j]), Const(D), Const(phases), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
 
         # Pt --- Vx
         Local = num.Vx[i:i+1,j:j+2] .* pattern[3][1]
@@ -807,6 +809,7 @@ end
     τ       = (xx=zeros(size_c...), yy=zeros(size_c...), xy=zeros(size_v...) )
     Pt      = zeros(size_c...)
     Pti     = zeros(size_c...)
+    Pt0     = zeros(size_c...)
     Dc      =  [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)]
     Dv      =  [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)]
     𝐷       = (c = Dc, v = Dv)
@@ -827,6 +830,7 @@ end
         C   = [150 150],
         ϕ   = [30. 30.],
         ηvp = [0.5 0.5],
+        β   = [1e-4 1e-4]
     )
 
     # Initial configuration
@@ -878,6 +882,7 @@ end
         τ0.xx .= τ.xx
         τ0.yy .= τ.yy
         τ0.xy .= τ.xy
+        Pt0   .= Pt
 
         for iter=1:niter
 
@@ -889,7 +894,7 @@ end
                 TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, type, BC, materials, phases, Δ)
                 @show extrema(λ̇.c)
                 @show extrema(λ̇.v)
-                ResidualContinuity2D!(R, V, Pt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
+                ResidualContinuity2D!(R, V, Pt, Pt0, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
                 ResidualMomentum2D_x!(R, V, Pt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
                 ResidualMomentum2D_y!(R, V, Pt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
             end
@@ -907,7 +912,7 @@ end
             #--------------------------------------------#
             # Assembly
             @timeit to "Assembly" begin
-                AssembleContinuity2D!(M, V, Pt, τ0, λ̇, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+                AssembleContinuity2D!(M, V, Pt, Pt0, τ0, λ̇, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
                 AssembleMomentum2D_x!(M, V, Pt, τ0, λ̇, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
                 AssembleMomentum2D_y!(M, V, Pt, τ0, λ̇, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
             end
@@ -937,7 +942,7 @@ end
                     Pt  .= Pti
                     UpdateSolution!(V, Pt, α[i].*dx, number, type, nc)
                     TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, type, BC, materials, phases, Δ)
-                    ResidualContinuity2D!(R, V, Pt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
+                    ResidualContinuity2D!(R, V, Pt, Pt0, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
                     ResidualMomentum2D_x!(R, V, Pt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
                     ResidualMomentum2D_y!(R, V, Pt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
                     rvec[i] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx) + norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy) + norm(R.p[inx_Pt,iny_Pt])/sqrt(nPt)   
@@ -990,7 +995,7 @@ end
     
 end
 
-main((x = 300, y = 300))
+main((x = 30, y = 30))
 
 
 # ### NEW
