@@ -1,5 +1,11 @@
+using SparseArrays
+
 function DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:chol,  ηb=1e3, niter_l=10, ϵ_l=1e-11)
-    𝐏inv  = -ηb .* I(size(𝐏,1))
+    if nnz(𝐏) == 0 # incompressible limit
+        𝐏inv  = -ηb .* I(size(𝐏,1))
+    else # compressible case
+        𝐏inv  = spdiagm(1.0 ./diag(𝐏))
+    end
     𝐊sc   = 𝐊 .- 𝐐*(𝐏inv*𝐐ᵀ)
     if fact == :chol
         𝐊fact = cholesky(Hermitian(𝐊sc), check=false)
