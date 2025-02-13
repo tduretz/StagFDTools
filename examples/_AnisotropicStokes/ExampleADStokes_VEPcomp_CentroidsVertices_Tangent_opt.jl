@@ -411,7 +411,7 @@ function Continuity(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δ)
     invΔy    = 1 / Δ.y
     invΔt    = 1 / Δ.t
     β = materials.β[phase]
-    return ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy) + β * (Pt - Pt0) * invΔt
+    return ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy) + β * (Pt[1] - Pt0) * invΔt
 end
 
 function ResidualMomentum2D_x!(R, V, P, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
@@ -632,17 +632,20 @@ function AssembleContinuity2D!(K, V, P, Pt0, τ0, λ̇, 𝐷, phases, materials,
                 
     ∂R∂Vx = @MMatrix zeros(3,2)
     ∂R∂Vy = @MMatrix zeros(2,3)
+    ∂R∂P = @MMatrix zeros(1,1)
 
     for j in 2:size(P, 2)-1, i in 2:size(P, 1)-1
         Vx_loc     = MMatrix{3,2}(      V.x[ii,jj] for ii in i:i+2, jj in j:j+1)
         Vy_loc     = MMatrix{2,3}(      V.y[ii,jj] for ii in i:i+1, jj in j:j+2)
+        P_loc      = MMatrix{1,1}(      P[ii,jj] for ii in i:i, jj in j:j)
         bcv_loc    = (;)
         type_loc   = (;)
         D          = (;)
         
         ∂R∂Vx .= 0.
         ∂R∂Vy .= 0.
-        autodiff(Enzyme.Reverse, Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Const(P[i,j]), Const(Pt0[i,j]), Const(D), Const(phases.c[i,j]), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+        ∂R∂P  .= 0.
+        autodiff(Enzyme.Reverse, Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂P), Const(Pt0[i,j]), Const(D), Const(phases.c[i,j]), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
 
         # Pt --- Vx
         Local = num.Vx[i:i+1,j:j+2] .* pattern[3][1]
@@ -658,6 +661,9 @@ function AssembleContinuity2D!(K, V, P, Pt0, τ0, λ̇, 𝐷, phases, materials,
                 K[3][2][num.Pt[i,j], Local[ii,jj]] = ∂R∂Vy[ii,jj] 
             end
         end
+
+        # Pt --- Pt
+        K[3][3][num.Pt[i,j], num.Pt[i,j]] = ∂R∂P[1,1]
     end
     return nothing
 end
@@ -831,7 +837,7 @@ end
         C   = [150 150],
         ϕ   = [30. 30.],
         ηvp = [0.5 0.5],
-        β   = [0e3 0e3]
+        β   = [1e-3 1e-3]
     )
 
     # Initial configuration
@@ -1003,7 +1009,7 @@ end
     
 end
 
-main((x = 10, y = 10))
+main((x = 30, y = 30))
 
 
 # ### NEW
