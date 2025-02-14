@@ -446,59 +446,75 @@ function AssembleMomentum2D_y!(K, V, P, P0, λ̇, τ0, 𝐷, phases, materials, 
     λ̇_loc  = @MMatrix zeros(1,2)
        
     shift    = (x=2, y=1)
+    K21= K[2][1]
+    K22= K[2][2]
+    K23= K[2][3]
+
     for j in 1+shift.y:nc.y+shift.y+1, i in 1+shift.x:nc.x+shift.x
 
-        if type.Vy[i,j] == :in
+        if type.Vy[i,j] === :in
 
-            Vx_loc    .= SMatrix{4,4}(      V.x[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
-            Vy_loc    .= SMatrix{3,3}(      V.y[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-            bcx_loc    = SMatrix{4,4}(    BC.Vx[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
-            bcy_loc    = SMatrix{3,3}(    BC.Vy[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-            typex_loc  = SMatrix{4,4}(  type.Vx[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
-            typey_loc  = SMatrix{3,3}(  type.Vy[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-            phc_loc    = SMatrix{1,2}( phases.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
-            phv_loc    = SMatrix{2,1}( phases.v[ii,jj] for ii in i-2:i-1, jj in j-1:j-1) 
-            P_loc     .= SMatrix{3,2}(        P[ii,jj] for ii in i-2:i,   jj in j-1:j  )
-            λ̇_loc     .= SMatrix{1,2}(      λ̇.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
-            
-            τxx0       = SMatrix{3,2}(    τ0.xx[ii,jj] for ii in i-2:i,   jj in j-1:j  )
-            τyy0       = SMatrix{3,2}(    τ0.yy[ii,jj] for ii in i-2:i,   jj in j-1:j  )
-            τxy0       = SMatrix{2,3}(    τ0.xy[ii,jj] for ii in i-2:i-1,   jj in j-2:j)
-
-
-            Dc         = SMatrix{1,2}(𝐷.c[ii,jj] for ii in i-1:i-1,   jj in j-1:j)
-            Dv         = SMatrix{2,1}(𝐷.v[ii,jj] for ii in i-2:i-1,   jj in j-1:j-1)
+            Vx_loc    .= @inline SMatrix{4,4}(@inbounds       V.x[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
+            Vy_loc    .= @inline SMatrix{3,3}(@inbounds       V.y[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            bcx_loc    = @inline SMatrix{4,4}(@inbounds     BC.Vx[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
+            bcy_loc    = @inline SMatrix{3,3}(@inbounds     BC.Vy[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            typex_loc  = @inline SMatrix{4,4}(@inbounds   type.Vx[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
+            typey_loc  = @inline SMatrix{3,3}(@inbounds   type.Vy[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            phc_loc    = @inline SMatrix{1,2}(@inbounds  phases.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
+            phv_loc    = @inline SMatrix{2,1}(@inbounds  phases.v[ii,jj] for ii in i-2:i-1, jj in j-1:j-1) 
+            P_loc     .= @inline SMatrix{3,2}(@inbounds         P[ii,jj] for ii in i-2:i,   jj in j-1:j  )
+            λ̇_loc     .= @inline SMatrix{1,2}(@inbounds       λ̇.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
+            τxx0       = @inline SMatrix{3,2}(@inbounds     τ0.xx[ii,jj] for ii in i-2:i,   jj in j-1:j  )
+            τyy0       = @inline SMatrix{3,2}(@inbounds     τ0.yy[ii,jj] for ii in i-2:i,   jj in j-1:j  )
+            τxy0       = @inline SMatrix{2,3}(@inbounds     τ0.xy[ii,jj] for ii in i-2:i-1,   jj in j-2:j)
+            Dc         = @inline SMatrix{1,2}(@inbounds 𝐷.c[ii,jj] for ii in i-1:i-1,   jj in j-1:j)
+            Dv         = @inline SMatrix{2,1}(@inbounds 𝐷.v[ii,jj] for ii in i-2:i-1,   jj in j-1:j-1)
             bcv_loc    = (x=bcx_loc, y=bcy_loc)
             type_loc   = (x=typex_loc, y=typey_loc)
             ph_loc     = (c=phc_loc, v=phv_loc)
             D          = (c=Dc, v=Dv)
             τ0_loc     = (xx=τxx0, yy=τyy0, xy=τxy0)
 
-            ∂R∂Vx .= 0.0
-            ∂R∂Vy .= 0.0
-            ∂R∂Pt .= 0.0
+            fill!(∂R∂Vx, 0.0)
+            fill!(∂R∂Vy, 0.0)
+            fill!(∂R∂Pt, 0.0)
             autodiff(Enzyme.Reverse, SMomentum_y_Generic, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(λ̇_loc), Const(τ0_loc), Const(D), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+            
+            num_Vy = @inbounds num.Vy[i,j]
+            bounds_Vy = num_Vy > 0
             # Vy --- Vx
-            Local = SMatrix{4,4}(num.Vx[ii, jj] for ii in i-2:i+1, jj in j-1:j+2) .* pattern[2][1]
-            for jj in axes(Local,2), ii in axes(Local,1)
-                if (Local[ii,jj]>0) && num.Vy[i,j]>0
-                    K[2][1][num.Vy[i,j], Local[ii,jj]] = ∂R∂Vx[ii,jj] 
-                end
-            end
+            Local1 = SMatrix{4,4}(num.Vx[ii, jj] for ii in i-2:i+1, jj in j-1:j+2) .* pattern[2][1]
+            # for jj in axes(Local1,2), ii in axes(Local1,1)
+            #     if (Local1[ii,jj]>0) && bounds_Vy
+            #         @inbounds K21[num_Vy, Local1[ii,jj]] = ∂R∂Vx[ii,jj] 
+            #     end
+            # end
             # Vy --- Vy
-            Local = SMatrix{3,3}(num.Vy[ii, jj] for ii in i-1:i+1, jj in j-1:j+1) .* pattern[2][2]
-            for jj in axes(Local,2), ii in axes(Local,1)
-                if (Local[ii,jj]>0) && num.Vy[i,j]>0
-                    K[2][2][num.Vy[i,j], Local[ii,jj]] = ∂R∂Vy[ii,jj]  
+            Local2 = SMatrix{3,3}(num.Vy[ii, jj] for ii in i-1:i+1, jj in j-1:j+1) .* pattern[2][2]
+            # for jj in axes(Local2,2), ii in axes(Local2,1)
+            #     if (Local2[ii,jj]>0) && bounds_Vy
+            #         @inbounds K22[num_Vy, Local2[ii,jj]] = ∂R∂Vy[ii,jj]  
+            #     end
+            # end
+            # Vy --- Pt
+            Local3 = SMatrix{3,2}(num.Pt[ii, jj] for ii in i-2:i, jj in j-1:j) .* pattern[2][3]
+            # for jj in axes(Local3,2), ii in axes(Local3,1)
+            #     if (Local3[ii,jj]>0) && bounds_Vy
+            #         @inbounds K23[num_Vy, Local3[ii,jj]] = ∂R∂Pt[ii,jj]  
+            #     end
+            # end     
+            Base.@nexprs 4 jj -> begin
+                Base.@nexprs 4 ii -> begin
+                    bounds_Vy && (Local1[ii,jj]>0) && 
+                        (@inbounds K21[num_Vy, Local1[ii,jj]] = ∂R∂Vx[ii,jj])
+                    
+                    bounds_Vy && ii<4 && jj<4 && (Local2[ii,jj]>0) &&
+                        (@inbounds K22[num_Vy, Local2[ii,jj]] = ∂R∂Vy[ii,jj])
+
+                    bounds_Vy && ii<4 && jj<3 && (Local3[ii,jj]>0) && 
+                        (@inbounds K23[num_Vy, Local3[ii,jj]] = ∂R∂Pt[ii,jj])
                 end
             end
-            # Vy --- Pt
-            Local = SMatrix{3,2}(num.Pt[ii, jj] for ii in i-2:i, jj in j-1:j) .* pattern[2][3]
-            for jj in axes(Local,2), ii in axes(Local,1)
-                if (Local[ii,jj]>0) && num.Vy[i,j]>0
-                    K[2][3][num.Vy[i,j], Local[ii,jj]] = ∂R∂Pt[ii,jj]  
-                end
-            end    
         end
     end
     return nothing
@@ -931,3 +947,6 @@ main(nc)
 # Assembly          26    1.06s   29.3%  40.8ms    511MiB   10.2%  19.6MiB
 # Residual          43    509ms   14.1%  11.8ms    639MiB   12.7%  14.9MiB
 # ────────────────────────────────────────────────────────────────────────
+
+ProfileCanvas.@profview AssembleMomentum2D_y!(M, V, Pt, Pt0, λ̇, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+@b AssembleMomentum2D_y!($(M, V, Pt, Pt0, λ̇, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)...)
