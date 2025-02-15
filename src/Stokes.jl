@@ -248,8 +248,8 @@ function Numbering!(N, type, nc)
     noisy = false
 
     ############ Numbering Vx ############
-    periodic_west  = sum(any(i->i==:periodic, type.Vx[2,:], dims=2)) > 0
-    periodic_south = sum(any(i->i==:periodic, type.Vx[:,2], dims=1)) > 0
+    periodic_west  = sum(any(i->i==:periodic, type.Vx[2,3:end-2], dims=2)) > 0
+    periodic_south = sum(any(i->i==:periodic, type.Vx[3:end-2,2], dims=1)) > 0
 
     shift  = (periodic_west) ? 1 : 0 
     # Loop through inner nodes of the mesh
@@ -282,8 +282,8 @@ function Numbering!(N, type, nc)
 
     ############ Numbering Vy ############
     ndof  = 0
-    periodic_west  = sum(any(i->i==:periodic, type.Vy[2,:], dims=2)) > 0
-    periodic_south = sum(any(i->i==:periodic, type.Vy[:,2], dims=1)) > 0
+    @show periodic_west  = sum(any(i->i==:periodic, type.Vy[2,3:end-2], dims=2)) > 0
+    @show periodic_south = sum(any(i->i==:periodic, type.Vy[3:end-2,2], dims=1)) > 0
     shift = periodic_south ? 1 : 0
     # Loop through inner nodes of the mesh
     for j=2:nc.y+3-1, i=3:nc.x+4-2
