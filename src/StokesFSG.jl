@@ -351,7 +351,7 @@ function Numbering!(N, type, nc)
 
     # Loop through inner nodes of the mesh
     for j=2:size(type.Vx[1],2)-1, i=2:size(type.Vx[1],1)-1
-        if type.Vx[1][i,j] == :Dirichlet_normal || (type.Vx[1][i,j] == :periodic && i==size(type.Vx[1],1)-1)
+        if type.Vx[1][i,j] === :Dirichlet_normal || (type.Vx[1][i,j] === :periodic && i==size(type.Vx[1],1)-1)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof_x += 1
