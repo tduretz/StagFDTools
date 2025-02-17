@@ -15,6 +15,7 @@ function PowerLaw(ε̇, materials, phases, Δ)
     ηvp  = materials.ηvp[phases]
     ψ    = materials.ψ[phases]    
     β    = materials.β[phases]
+    comp = materials.compressible
     η    =  (η0 .* ε̇II.^(1 ./ n .- 1.0 ))[1]
     ηvep = inv(1/η + 1/(G*Δ.t))
 
@@ -23,9 +24,9 @@ function PowerLaw(ε̇, materials, phases, Δ)
     F    = τII - C*cosd(ϕ) - P*sind(ϕ )- λ̇*ηvp
 
     if F > 1e-10
-        λ̇    = F / (ηvep + ηvp + Δ.t / β * sind(ϕ) * sind(ψ)) 
+        λ̇    = F / (ηvep + ηvp + comp*Δ.t/β*sind(ϕ)*sind(ψ)) 
         τII -= λ̇ * ηvep
-        P   += λ̇  * sind(ψ) * Δ.t / β
+        P   += comp * λ̇  * sind(ψ) * Δ.t / β
         # τII = C*cosd(ϕ) + P*sind(ϕ) + ηvp*λ̇
         ηvep = τII/(2*ε̇II)
         F    = τII - C*cosd(ϕ) - P*sind(ϕ )- λ̇*ηvp
@@ -168,6 +169,7 @@ end
 
     # Material parameters
     materials = ( 
+        compressible = false,
         n   = [1.0  1.0],
         η0  = [1e2  1e-1], 
         G   = [1e1  1e1],

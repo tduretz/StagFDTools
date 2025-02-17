@@ -166,9 +166,10 @@ function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, λ̇, τ0, 𝐷, phases, materi
     ϵ̇xy  = @. ε̇xy[2,:] + τ0.xy[2,:] * tmpv
 
     # Corrected pressure
-    β   = SVector{2, Float64}( materials.β[phases.c[:]] )
-    ψ   = SVector{2, Float64}( materials.ψ[phases.c[:]] )
-    Ptc = SVector{2, Float64}( @. Pt[:,2] + λ̇[:] * Δ.t / β * sind(ψ) )
+    comp = materials.compressible
+    β    = SVector{2, Float64}( materials.β[phases.c[:]] )
+    ψ    = SVector{2, Float64}( materials.ψ[phases.c[:]] )
+    Ptc  = SVector{2, Float64}( @. Pt[:,2] + comp * λ̇[:] * Δ.t / β * sind(ψ) )
 
     # Stress
     τxx = @MVector zeros(2)
@@ -230,9 +231,10 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, λ̇, τ0, 𝐷, phases, materi
     ϵ̇xy  = @. ε̇xy[:,2] + τ0.xy[:,2] / tmpv
 
     # Corrected pressure
-    β   = SVector{2, Float64}( materials.β[phases.c[:]] )
-    ψ   = SVector{2, Float64}( materials.ψ[phases.c[:]] )
-    Ptc = SVector{2, Float64}( @. Pt[2,:] + λ̇[:] * Δ.t / β * sind(ψ) )
+    comp = materials.compressible
+    β    = SVector{2, Float64}( materials.β[phases.c[:]] )
+    ψ    = SVector{2, Float64}( materials.ψ[phases.c[:]] )
+    Ptc  = SVector{2, Float64}( @. Pt[2,:] + comp * λ̇[:] * Δ.t / β * sind(ψ) )
 
     # Stress
     τyy = @MVector zeros(2)
@@ -253,11 +255,12 @@ end
 
 
 function Continuity(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δ)
-    invΔx    = 1 / Δ.x
-    invΔy    = 1 / Δ.y
-    invΔt    = 1 / Δ.t
-    β = materials.β[phase]
-    return ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy) + β * (Pt[1] - Pt0) * invΔt
+    invΔx = 1 / Δ.x
+    invΔy = 1 / Δ.y
+    invΔt = 1 / Δ.t
+    β     = materials.β[phase]
+    comp  = materials.compressible
+    return ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy) + comp * β * (Pt[1] - Pt0) * invΔt
 end
 
 function ResidualMomentum2D_x!(R, V, P, P0, λ̇, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
