@@ -383,7 +383,7 @@ end
                     ResidualMomentum2D_y!(R, V, Pt, Pt0, λ̇, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
                     rvec[i] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx) + norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy) + norm(R.p[inx_c,iny_c])/sqrt(nPt)   
                 end
-                _, imin = findmin(rvec)
+                imin = argmin(rvec)
                 V.x .= Vi.x 
                 V.y .= Vi.y
                 Pt  .= Pti
