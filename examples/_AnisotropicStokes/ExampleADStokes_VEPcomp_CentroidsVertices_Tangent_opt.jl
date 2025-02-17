@@ -659,6 +659,11 @@ end
     # Boundary conditions
 
     # Define node types and set BC flags
+    # D_BC = [-1 -0;
+    #          0  1]
+    D_BC = [-0 -1;
+             0  0]
+
     type = Fields(
         fill(:out, (nc.x+3, nc.y+4)),
         fill(:out, (nc.x+4, nc.y+3)),
@@ -671,16 +676,16 @@ end
     )
     # -------- Vx -------- #
     type.Vx[inx_Vx,iny_Vx]  .= :in       
-    type.Vx[2,iny_Vx]       .= :Dir_conf 
-    type.Vx[end-1,iny_Vx]   .= :Dir_conf 
+    type.Vx[2,iny_Vx]       .= :Dirichlet_normal 
+    type.Vx[end-1,iny_Vx]   .= :Dirichlet_normal 
     type.Vx[inx_Vx,2]       .= :Dirichlet
     type.Vx[inx_Vx,end-1]   .= :Dirichlet
     # -------- Vy -------- #
     type.Vy[inx_Vy,iny_Vy]  .= :in       
     type.Vy[2,iny_Vy]       .= :Dirichlet
     type.Vy[end-1,iny_Vy]   .= :Dirichlet
-    type.Vy[inx_Vy,2]       .= :Dir_conf 
-    type.Vy[inx_Vy,end-1]   .= :Dir_conf 
+    type.Vy[inx_Vy,2]       .= :Dirichlet_normal 
+    type.Vy[inx_Vy,end-1]   .= :Dirichlet_normal 
     # -------- Pt -------- #
     type.Pt[2:end-1,2:end-1] .= :in
 
@@ -754,8 +759,6 @@ end
     )
 
     # Initial configuration
-    D_BC = [-1  0;
-             0  1]
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
     V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
 
@@ -778,7 +781,7 @@ end
     #--------------------------------------------#
 
     # Time steps
-    nt    = 30
+    nt    = 1
 
     # Newton solver
     niter = 20
@@ -919,7 +922,7 @@ end
     
 end
 
-nc = (x = 100, y = 100)
+nc = (x = 10, y = 10)
 main(nc)
 
 
@@ -947,6 +950,6 @@ main(nc)
 # Assembly          26    1.06s   29.3%  40.8ms    511MiB   10.2%  19.6MiB
 # Residual          43    509ms   14.1%  11.8ms    639MiB   12.7%  14.9MiB
 # ────────────────────────────────────────────────────────────────────────
-
-ProfileCanvas.@profview AssembleMomentum2D_y!(M, V, Pt, Pt0, λ̇, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-@b AssembleMomentum2D_y!($(M, V, Pt, Pt0, λ̇, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)...)
+# using ProfileCanvas
+# ProfileCanvas.@profview AssembleMomentum2D_y!(M, V, Pt, Pt0, λ̇, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+# @benchmark AssembleMomentum2D_y!($(M, V, Pt, Pt0, λ̇, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)...)

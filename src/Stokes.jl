@@ -197,13 +197,13 @@ function SetRHS!(r, R, number, type, nc)
 
     nVx, nVy   = maximum(number.Vx), maximum(number.Vy)
 
-    for j=2:nc.y+3-1, i=3:nc.x+4-2
+    for j=2:nc.y+3-1, i=2:nc.x+3-1
         if type.Vx[i,j] == :in
             ind = number.Vx[i,j]
             r[ind] = R.x[i,j]
         end
     end
-    for j=3:nc.y+4-2, i=2:nc.x+3-1
+    for j=2:nc.y+3-1, i=2:nc.x+3-1
         if type.Vy[i,j] == :in
             ind = number.Vy[i,j] + nVx
             r[ind] = R.y[i,j]
@@ -221,24 +221,69 @@ function UpdateSolution!(V, Pt, dx, number, type, nc)
 
     nVx, nVy   = maximum(number.Vx), maximum(number.Vy)
 
-    for j=2:nc.y+3-1, i=3:nc.x+4-2
+    for j=1:size(V.x,2), i=1:size(V.x,1)
         if type.Vx[i,j] == :in
             ind = number.Vx[i,j]
-            V.x[i,j] += dx[ind] 
+            V.x[i,j] += dx[ind]
         end
     end
-    for j=3:nc.y+4-2, i=2:nc.x+3-1
+ 
+    for j=1:size(V.y,2), i=1:size(V.y,1)
         if type.Vy[i,j] == :in
             ind = number.Vy[i,j] + nVx
             V.y[i,j] += dx[ind]
         end
     end
-    for j=2:nc.y+1, i=2:nc.x+1
+    
+    for j=1:size(Pt,2), i=1:size(Pt,1)
         if type.Pt[i,j] == :in
             ind = number.Pt[i,j] + nVx + nVy
             Pt[i,j] += dx[ind]
         end
     end
+
+    # Set E/W periodicity
+    for j=2:nc.y+3-1
+        if type.Vx[nc.x+3-1,j] == :periodic
+            V.x[nc.x+3-1,j] = V.x[2,j]
+            V.x[nc.x+3-0,j] = V.x[3,j]
+            V.x[       1,j] = V.x[nc.x+3-2,j]
+        end
+        if type.Vy[nc.x+3,j] == :periodic
+            V.y[nc.x+3-0,j] = V.y[3,j]
+            V.y[nc.x+3+1,j] = V.y[4,j]
+            V.y[1,j]        = V.y[nc.x+3-2,j]
+            V.y[2,j]        = V.y[nc.x+3-1,j]
+        end
+        if j<=nc.y+2
+            if type.Pt[nc.x+2,j] == :periodic
+                Pt[nc.x+2,j] = Pt[2,j]
+                Pt[1,j]      = Pt[nc.x+1,j]
+            end
+        end
+    end 
+
+    # Set S/N periodicity
+    for i=2:nc.x+3-1
+        if type.Vx[i,nc.y+3] == :periodic
+            V.x[i,nc.y+3-0] = V.x[i,3]
+            V.x[i,nc.y+3+1] = V.x[i,4]
+            V.x[i,1]        = V.x[i,nc.y+3-2]
+            V.x[i,2]        = V.x[i,nc.y+3-1]
+        end
+        if type.Vy[i,nc.y+3-1] == :periodic
+            V.y[i,nc.y+3-1] = V.y[i,2]
+            V.y[i,nc.y+3-0] = V.y[i,3]
+            V.y[i,       1] = V.y[i,nc.y+3-2]
+        end
+        if i<=nc.x+2
+            if type.Pt[i,nc.y+2] == :periodic
+                Pt[i,nc.y+2] = Pt[i,2]
+                Pt[i,1]      = Pt[i,nc.y+1]
+            end
+        end
+    end
+
 end
 
 function Numbering!(N, type, nc)
@@ -248,13 +293,13 @@ function Numbering!(N, type, nc)
     noisy = false
 
     ############ Numbering Vx ############
-    periodic_west  = sum(any(i->i==:periodic, type.Vx[2,3:end-2], dims=2)) > 0
+    periodic_west  = sum(any(i->i==:periodic, type.Vx[1,3:end-2], dims=2)) > 0
     periodic_south = sum(any(i->i==:periodic, type.Vx[3:end-2,2], dims=1)) > 0
 
     shift  = (periodic_west) ? 1 : 0 
     # Loop through inner nodes of the mesh
     for j=3:nc.y+4-2, i=2:nc.x+3-1
-        if type.Vx[i,j] == :Dir_conf || (type.Vx[i,j] != :periodic && i==nc.x+3-1)
+        if type.Vx[i,j] == :Dirichlet_normal || (type.Vx[i,j] == :periodic && i==nc.x+3-1)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof+=1
@@ -264,7 +309,9 @@ function Numbering!(N, type, nc)
 
     # Copy equation indices for periodic cases
     if periodic_west
-        N.Vx[1,:] .= N.Vx[end-2,:]
+        N.Vx[1,:]     .= N.Vx[end-2,:]
+        N.Vx[end-1,:] .= N.Vx[2,:]
+        N.Vx[end,:]   .= N.Vx[3,:]
     end
 
     # Copy equation indices for periodic cases
@@ -282,12 +329,12 @@ function Numbering!(N, type, nc)
 
     ############ Numbering Vy ############
     ndof  = 0
-    @show periodic_west  = sum(any(i->i==:periodic, type.Vy[2,3:end-2], dims=2)) > 0
-    @show periodic_south = sum(any(i->i==:periodic, type.Vy[3:end-2,2], dims=1)) > 0
+    periodic_west  = sum(any(i->i==:periodic, type.Vy[2,3:end-2], dims=2)) > 0
+    periodic_south = sum(any(i->i==:periodic, type.Vy[3:end-2,1], dims=1)) > 0
     shift = periodic_south ? 1 : 0
     # Loop through inner nodes of the mesh
     for j=2:nc.y+3-1, i=3:nc.x+4-2
-        if type.Vy[i,j] == :Dir_conf || (type.Vy[i,j] != :periodic && j==nc.y+3-1)
+        if type.Vy[i,j] == :Dirichlet_normal || (type.Vy[i,j] == :periodic && j==nc.y+3-1)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof+=1
@@ -297,7 +344,9 @@ function Numbering!(N, type, nc)
 
     # Copy equation indices for periodic cases
     if periodic_south
-        N.Vy[:,1] .= N.Vy[:,end-2]
+        N.Vy[:,1]     .= N.Vy[:,end-2]
+        N.Vy[:,end-1] .= N.Vy[:,2]
+        N.Vy[:,end]   .= N.Vy[:,3]
     end
 
     # Copy equation indices for periodic cases
@@ -344,7 +393,7 @@ end
 #     shift  = (periodic_west) ? 1 : 0 
 #     # Loop through inner nodes of the mesh
 #     for j=3:nc.y+4-2, i=2:nc.x+3-1
-#         if type.Vx[i,j] == :Dir_conf || (type.Vx[i,j] != :periodic && i==nc.x+3-1)
+#         if type.Vx[i,j] == :Dirichlet_normal || (type.Vx[i,j] != :periodic && i==nc.x+3-1)
 #             # Avoid nodes with constant velocity or redundant periodic nodes
 #         else
 #             ndof+=1
@@ -377,7 +426,7 @@ end
 #     shift = periodic_south ? 1 : 0
 #     # Loop through inner nodes of the mesh
 #     for j=2:nc.y+3-1, i=3:nc.x+4-2
-#         if type.Vy[i,j] == :Dir_conf || (type.Vy[i,j] != :periodic && j==nc.y+3-1)
+#         if type.Vy[i,j] == :Dirichlet_normal || (type.Vy[i,j] != :periodic && j==nc.y+3-1)
 #             # Avoid nodes with constant velocity or redundant periodic nodes
 #         else
 #             ndof+=1

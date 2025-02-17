@@ -53,7 +53,7 @@ function Numbering_Stokes!(N, nc)
     N.Vx.num                   = zeros(Int64, nc.x+3, nc.y+4) 
     # Loop through inner nodes of the mesh
     for j=3:nc.y+4-2, i=2:nc.x+3-1
-        if N.Vx.type[i,j] == :Dir_conf || (N.Vx.type[i,j] != :periodic && i==nc.x+3-1)
+        if N.Vx.type[i,j] == :Dirichlet_normal || (N.Vx.type[i,j] != :periodic && i==nc.x+3-1)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof+=1
@@ -86,7 +86,7 @@ function Numbering_Stokes!(N, nc)
     N.Vy.num                   = zeros(Int64, nc.x+4, nc.y+3)
     # Loop through inner nodes of the mesh
     for j=2:nc.y+3-1, i=3:nc.x+4-2
-        if N.Vy.type[i,j] == :Dir_conf || (N.Vy.type[i,j] != :periodic && j==nc.y+3-1)
+        if N.Vy.type[i,j] == :Dirichlet_normal || (N.Vy.type[i,j] != :periodic && j==nc.y+3-1)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof+=1
@@ -231,8 +231,8 @@ let
     numbering.Vx      = StokesPattern()
     numbering.Vx.type = fill(:out, (nc.x+3, nc.y+4))
     numbering.Vx.type[2:end-1,3:end-2] .= :in
-    numbering.Vx.type[2,2:end-1]       .= :Dir_conf # make periodic
-    numbering.Vx.type[end-1,2:1:end-1] .= :Dir_conf 
+    numbering.Vx.type[2,2:end-1]       .= :Dirichlet_normal # make periodic
+    numbering.Vx.type[end-1,2:1:end-1] .= :Dirichlet_normal 
     numbering.Vx.type[2:end-1,2]       .= :Dirichlet
     numbering.Vx.type[2:end-1,end-1]   .= :Dirichlet
     @info "Vx Node types"
@@ -243,8 +243,8 @@ let
     numbering.Vy.type[2:end-2,2:end-1] .= :in
     numbering.Vy.type[2,2:end-1]       .= :Dirichlet # make periodic
     numbering.Vy.type[end-1,2:end-1]   .= :Dirichlet 
-    numbering.Vy.type[2:end-1,2]       .= :Dir_conf
-    numbering.Vy.type[2:end-1,end-1]   .= :Dir_conf
+    numbering.Vy.type[2:end-1,2]       .= :Dirichlet_normal
+    numbering.Vy.type[2:end-1,end-1]   .= :Dirichlet_normal
     @info "Vy Node types"
     printxy(numbering.Vy.type) 
 

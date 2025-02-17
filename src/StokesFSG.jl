@@ -351,13 +351,13 @@ function Numbering!(N, type, nc)
 
     # Loop through inner nodes of the mesh
     for j=2:size(type.Vx[1],2)-1, i=2:size(type.Vx[1],1)-1
-        if type.Vx[1][i,j] == :Dir_conf || (type.Vx[1][i,j] == :periodic && i==size(type.Vx[1],1)-1)
+        if type.Vx[1][i,j] == :Dirichlet_normal || (type.Vx[1][i,j] == :periodic && i==size(type.Vx[1],1)-1)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof_x += 1
             N.Vx[1][i,j] = ndof_x  
         end
-        if type.Vy[1][i,j] == :Dir_conf || (type.Vy[1][i,j] == :periodic && i==size(type.Vx[1],1)-1)
+        if type.Vy[1][i,j] == :Dirichlet_normal || (type.Vy[1][i,j] == :periodic && i==size(type.Vx[1],1)-1)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof_y += 1
@@ -388,13 +388,13 @@ function Numbering!(N, type, nc)
 
     # Loop through inner nodes of the mesh
     for j=2:size(type.Vx[2],2)-1, i=2:size(type.Vx[2],1)-1
-        if type.Vx[2][i,j] == :Dir_conf || (type.Vx[2][i,j] == :periodic && j>2)
+        if type.Vx[2][i,j] == :Dirichlet_normal || (type.Vx[2][i,j] == :periodic && j>2)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof_x += 1
             N.Vx[2][i,j] = ndof_x
         end
-        if type.Vy[2][i,j] == :Dir_conf || (type.Vy[2][i,j] != :periodic && j==size(type.Vy[2],2)-1)
+        if type.Vy[2][i,j] == :Dirichlet_normal || (type.Vy[2][i,j] != :periodic && j==size(type.Vy[2],2)-1)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof_y += 1
@@ -437,7 +437,7 @@ function Numbering!(N, type, nc)
 
     # Loop through inner nodes of the mesh
     for j=1:size(type.Pt[2],2), i=1:size(type.Pt[2],1)
-        if type.Pt[2][i,j] == :Dir_conf || (type.Pt[2][i,j] == :periodic && (i==size(type.Pt[2],1) || j==size(type.Pt[2],2)) )
+        if type.Pt[2][i,j] == :Dirichlet_normal || (type.Pt[2][i,j] == :periodic && (i==size(type.Pt[2],1) || j==size(type.Pt[2],2)) )
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof += 1

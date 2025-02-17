@@ -709,34 +709,34 @@ function main(nc)
     type.Vy[1][inx_V[1],iny_V[1]] .= :in
     type.Vy[2][inx_V[2],iny_V[2]] .= :in  
     # ----- West ----- #   
-    type.Vx[1][2,iny_V[1]]        .= :Dir_conf 
+    type.Vx[1][2,iny_V[1]]        .= :Dirichlet_normal 
     type.Vx[2][1,iny_V[2]]        .= :Dir_norm_half
-    type.Vy[1][2,iny_V[1]]        .= :Dir_conf 
+    type.Vy[1][2,iny_V[1]]        .= :Dirichlet_normal 
     type.Vy[2][1,iny_V[2]]        .= :Dir_tang_half
     # ----- East ----- # 
-    type.Vx[1][end-1,iny_V[1]]    .= :Dir_conf 
+    type.Vx[1][end-1,iny_V[1]]    .= :Dirichlet_normal 
     type.Vx[2][end-0,iny_V[2]]    .= :Dir_norm_half
-    type.Vy[1][end-1,iny_V[1]]    .= :Dir_conf 
+    type.Vy[1][end-1,iny_V[1]]    .= :Dirichlet_normal 
     type.Vy[2][end-0,iny_V[2]]    .= :Dir_tang_half
     # ----- South ----- #
     type.Vx[1][inx_V[1],1]        .= :Dir_tang_half
     # type.Vx[1][inx_V[1],1]        .= :Neu_tang_half
-    type.Vx[2][inx_V[2],2]        .= :Dir_conf
+    type.Vx[2][inx_V[2],2]        .= :Dirichlet_normal
     # type.Vx[2][inx_V[2],1]        .= :Neu_tang_conf
     
     type.Vy[1][inx_V[1],1]        .= :Dir_norm_half
-    type.Vy[2][inx_V[2],2]        .= :Dir_conf 
+    type.Vy[2][inx_V[2],2]        .= :Dirichlet_normal 
     # ----- North ----- #
     # type.Vx[1][inx_V[1],end]      .= :Dir_tang_half
     type.Vx[1][inx_V[1],end]      .= :Neu_tang_half
-    # type.Vx[2][inx_V[2],end-1]    .= :Dir_conf 
+    # type.Vx[2][inx_V[2],end-1]    .= :Dirichlet_normal 
     type.Vx[2][inx_V[2],end-0]    .= :Neu_tang_conf 
 
     type.Vy[1][inx_V[1],end]      .= :Dir_norm_half
-    type.Vy[2][inx_V[2],end-1]    .= :Dir_conf 
+    type.Vy[2][inx_V[2],end-1]    .= :Dirichlet_normal 
     # -------- Pt -------- #
     type.Pt[1][inx_P[1],iny_P[1]] .= :in
-    type.Pt[2]                    .= :Dir_conf
+    type.Pt[2]                    .= :Dirichlet_normal
     type.Pt[2][2:end-1,2:end-0]   .= :in
 
     #--------------------------------------------#

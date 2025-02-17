@@ -6,7 +6,7 @@ include("operators.jl")
 export inn, inn_x, inn_y, av, harm, ∂x, ∂y, ∂x_inn, ∂y_inn, ∂kk
 
 include("Utils.jl")
-export printxy
+export printxy, av2D
 
 include("Solvers.jl")
 export DecoupledSolver

@@ -529,7 +529,7 @@ function NumberingTwoPhases!(N, type, nc)
     shift  = (periodic_west) ? 1 : 0 
     # Loop through inner nodes of the mesh
     for j=3:nc.y+4-2, i=2:nc.x+3-1
-        if type.Vx[i,j] == :Dir_conf || (type.Vx[i,j] != :periodic && i==nc.x+3-1)
+        if type.Vx[i,j] == :Dirichlet_normal || (type.Vx[i,j] != :periodic && i==nc.x+3-1)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof+=1
@@ -562,7 +562,7 @@ function NumberingTwoPhases!(N, type, nc)
     shift = periodic_south ? 1 : 0
     # Loop through inner nodes of the mesh
     for j=2:nc.y+3-1, i=3:nc.x+4-2
-        if type.Vy[i,j] == :Dir_conf || (type.Vy[i,j] != :periodic && j==nc.y+3-1)
+        if type.Vy[i,j] == :Dirichlet_normal || (type.Vy[i,j] != :periodic && j==nc.y+3-1)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof+=1
@@ -713,8 +713,8 @@ end
     )
     # -------- Vx -------- #
     type.Vx[inx_Vx,iny_Vx] .= :in       
-    type.Vx[2,iny_Vx]       .= :Dir_conf 
-    type.Vx[end-1,iny_Vx]   .= :Dir_conf 
+    type.Vx[2,iny_Vx]       .= :Dirichlet_normal 
+    type.Vx[end-1,iny_Vx]   .= :Dirichlet_normal 
     type.Vx[inx_Vx,2]       .= :Neumann
     type.Vx[inx_Vx,end-1]   .= :Neumann
     BC.Vx[2,iny_Vx]         .= 0.0
@@ -725,8 +725,8 @@ end
     type.Vy[inx_Vy,iny_Vy] .= :in       
     type.Vy[2,iny_Vy]       .= :Neumann
     type.Vy[end-1,iny_Vy]   .= :Neumann
-    type.Vy[inx_Vy,2]       .= :Dir_conf 
-    type.Vy[inx_Vy,end-1]   .= :Dir_conf 
+    type.Vy[inx_Vy,2]       .= :Dirichlet_normal 
+    type.Vy[inx_Vy,end-1]   .= :Dirichlet_normal 
     BC.Vy[2,iny_Vy]         .= 0.0
     BC.Vy[end-1,iny_Vy]     .= 0.0
     BC.Vy[inx_Vy,2]         .= 0.0

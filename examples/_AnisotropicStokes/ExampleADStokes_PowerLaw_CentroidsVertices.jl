@@ -365,16 +365,16 @@ end
     )
     # -------- Vx -------- #
     type.Vx[inx_Vx,iny_Vx]  .= :in       
-    type.Vx[2,iny_Vx]       .= :Dir_conf 
-    type.Vx[end-1,iny_Vx]   .= :Dir_conf 
+    type.Vx[2,iny_Vx]       .= :Dirichlet_normal 
+    type.Vx[end-1,iny_Vx]   .= :Dirichlet_normal 
     type.Vx[inx_Vx,2]       .= :Neumann
     type.Vx[inx_Vx,end-1]   .= :Neumann
     # -------- Vy -------- #
     type.Vy[inx_Vy,iny_Vy]  .= :in       
     type.Vy[2,iny_Vy]       .= :Neumann
     type.Vy[end-1,iny_Vy]   .= :Neumann
-    type.Vy[inx_Vy,2]       .= :Dir_conf 
-    type.Vy[inx_Vy,end-1]   .= :Dir_conf 
+    type.Vy[inx_Vy,2]       .= :Dirichlet_normal 
+    type.Vy[inx_Vy,end-1]   .= :Dirichlet_normal 
     # -------- Pt -------- #
     type.Pt[2:end-1,2:end-1] .= :in
 
