@@ -283,26 +283,20 @@ end
     # Set material geometry 
     phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
     phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= 0.1^2] .= 2
-
-    # p1 = heatmap(xc, yc, phases.c[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc))
-    # p2 = heatmap(xv, yv, phases.v', aspect_ratio=1, xlim=extrema(xc))
-    # display(plot(p1, p2))
+    
     #--------------------------------------------#
-
-    rvec = zeros(length(α))
-    err  = (x = zeros(niter), y = zeros(niter), p = zeros(niter))
 
     @info "Benchmark AssembleMomentum2D_x!"
     ProfileCanvas.@profview AssembleMomentum2D_x!(M, V, Pt, Pt0, λ̇, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-    @benchmark AssembleMomentum2D_x!($(M, V, Pt, Pt0, λ̇, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)...)
+    display( @benchmark AssembleMomentum2D_x!($(M, V, Pt, Pt0, λ̇, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)...) )
 
     @info "Benchmark AssembleMomentum2D_y!"
     ProfileCanvas.@profview AssembleMomentum2D_y!(M, V, Pt, Pt0, λ̇, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-    @benchmark AssembleMomentum2D_y!($(M, V, Pt, Pt0, λ̇, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)...)
+    display( @benchmark AssembleMomentum2D_y!($(M, V, Pt, Pt0, λ̇, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)...) )
    
     @info "Benchmark AssembleContinuity2D!"
     ProfileCanvas.@profview AssembleContinuity2D!(M, V, Pt, Pt0, λ̇, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-    @benchmark AssembleMomentum2D_x!($(M, V, Pt, Pt0, λ̇, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)...)
+    display( @benchmark AssembleMomentum2D_x!($(M, V, Pt, Pt0, λ̇, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)...) )
     
 end
 
