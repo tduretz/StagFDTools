@@ -302,9 +302,9 @@ end
     for it=1:nt
 
         @printf("Step %04d\n", it)
-        err.x .= 0.
-        err.y .= 0.
-        err.p .= 0.
+        fill!(err.x, 0e0)
+        fill!(err.y, 0e0)
+        fill!(err.p, 0e0)
         
         # Swap old values 
         τ0.xx .= τ.xx
