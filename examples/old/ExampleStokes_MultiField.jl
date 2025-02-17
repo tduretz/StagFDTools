@@ -73,7 +73,7 @@ end
 
 # end
 
-function Numbering_Stokes!(N, nc)
+function Numbering!(N, nc)
     
     ndof  = 0
     neq   = 0
@@ -342,7 +342,7 @@ let
     # numbering.Pt.patternVx = @SMatrix([0 1 0; 0 1 0])
     # numbering.Pt.patternVy = @SMatrix([0 0; 1 1 ; 0 0]) 
     # numbering.Pt.patternPt = @SMatrix([1])
-    # num        = Numbering_Stokes!(numbering, nc)
+    # num        = Numbering!(numbering, nc)
 
     # @info "Assembly"
     # M  = SparsityPatternStokes(numbering, nc)

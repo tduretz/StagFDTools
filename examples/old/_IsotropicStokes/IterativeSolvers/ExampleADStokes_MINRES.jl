@@ -1,90 +1,14 @@
-using StagFDTools, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays
+using StagFDTools.Stokes, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
-import GLMakie
+# import GLMakie
 
 include("BasicIterativeSolvers.jl")
 
-# Preconditioner is the identity matrix (no preconditioning)
-function ApplyPC(Dinv, x)
-    return Dinv*x  # Identity preconditioner (no change)
-end
-
-# Function for applying the preconditioner M^{-1} to a vector
-# Here, M_inv is a function that implements the preconditioner
-function preconditioned_bicgstab(A, b, ApplyPC, Dinv, x0 = zeros(length(b)), tol = 1e-8, max_iter = 1000)
-    # Initial residual
-    r0 = b - A * x0
-    z0 = ApplyPC(Dinv,r0)  # Apply preconditioner
-    
-    # Initialize variables
-    x = x0
-    r = r0
-    z = z0
-    p = z
-    p_hat = z
-    rho_old = 1.0
-    alpha = 1.0
-    omega = 1.0
-    tol_b = norm(b) * tol
-    
-    for k = 1:max_iter
-        rho = dot(r, z)
-        
-        if abs(rho) < eps()
-            println("Breakdown: rho is too small.")
-            return x
-        end
-        
-        if k > 1
-            beta = (rho / rho_old) * (alpha / omega)
-            p = z + beta * (p - omega * p_hat)
-        else
-            p = z
-        end
-        
-        # Apply A to p
-        Ap = A * p
-        p_hat = ApplyPC(Dinv, A' * p)  # Apply preconditioner to the transpose
-        
-        # Compute alpha
-        alpha = rho / dot(r, p_hat)
-        
-        # Update x and r
-        x = x + alpha * p
-        r_new = r - alpha * Ap
-        
-        # Compute omega (stabilization factor)
-        omega = dot(r_new, p_hat) / dot(Ap, p_hat)
-        
-        # Update residual
-        r = r_new
-        z = ApplyPC(Dinv,r)  # Precondition residual
-        
-        # Check convergence
-        if norm(r) < tol_b
-            println("Converged after $k iterations.")
-            return x
-        end
-        
-        rho_old = rho
-    end
-    
-    println("Max iterations reached.")
-    return x
-end
-
-struct NumberingV <: AbstractPattern
-    Vx
-    Vy
-    Pt
-end
-
-struct Numbering{Tx,Ty,Tp}
-    Vx::Tx
-    Vy::Ty
-    Pt::Tp
+# Estimate the Rayleigh Quotient for a vector v
+function rayleigh_quotient(A, v)
+    return (v' * A * v) / (v' * v)
 end
 
 function Base.getindex(x::Numbering, i::Int64)
@@ -428,12 +352,10 @@ function AssembleContinuity2D!(K, V, Pt, η, num, pattern, type, BC, nc, Δ)
     return nothing
 end
 
-let    
+@views function main(nc) 
     #--------------------------------------------#
     # Resolution
-    nc = (x = 30, y = 32)
-
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges_Stokes(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges(nc)
 
     #--------------------------------------------#
     # Boundary conditions
@@ -479,7 +401,7 @@ let
         fill(0, size_y),
         fill(0, size_c),
     )
-    Numbering_Stokes!(number, type, nc)
+    Numbering!(number, type, nc)
 
     #--------------------------------------------#
     # Stencil extent for each block matrix
@@ -521,19 +443,8 @@ let
     ε̇  = -1.0
     V.x[inx_Vx,iny_Vx] .=  ε̇*xv .+ 0*yc' 
     V.y[inx_Vy,iny_Vy] .= 0*xc .-  ε̇*yv' 
-
-    η0       = 1.0e-3
-    η1       = 1.0
-    ηi    = (s=min(η0,η1), w=1/min(η0,η1)) 
-    x_inc = [0.0       0.2  -0.3 -0.4  0.0 -0.3 0.4  0.3  0.35 -0.1] *10
-    y_inc = [0.0       0.4   0.4 -0.3 -0.2  0.2 -0.2 -0.4 0.2  -0.4] *10
-    r_inc = [0.2       0.09  0.05 0.08 0.08  0.1 0.07 0.08 0.07 0.07]*10
-    η_inc = [ηi.s      ηi.w  ηi.w ηi.s ηi.w ηi.s ηi.w ηi.s ηi.s ηi.w]
-    
-    for i in eachindex(η_inc)
-        η.y[((xvy.-x_inc[i]).^2 .+ (yvy'.-y_inc[i]).^2) .<= r_inc[i]^2] .= η_inc[i]
-        η.x[((xvx.-x_inc[i]).^2 .+ (yvx'.-y_inc[i]).^2) .<= r_inc[i]^2] .= η_inc[i] 
-    end
+    η.y[(xvy.^2 .+ (yvy').^2) .<= 1^2] .= 0.01
+    η.x[(xvx.^2 .+ (yvx').^2) .<= 1^2] .= 0.01 
     η.p .= 0.25.*(η.x[1:end-1,2:end-1].+η.x[2:end-0,2:end-1].+η.y[2:end-1,1:end-1].+η.y[2:end-1,2:end-0])
     
     #--------------------------------------------#
@@ -544,7 +455,7 @@ let
 
     # Set global residual vector
     r = zeros(nVx + nVy + nPt)
-    SetRHS_Stokes!(r, R, number, type, nc)
+    SetRHS!(r, R, number, type, nc)
 
     #--------------------------------------------#
     # Assembly
@@ -573,16 +484,51 @@ let
     D_PC[(nVx+nVy+1):end, (nVx+nVy+1):end] .+= spdiagm(diag_Pt[:])
     D_PC_inv =  spdiagm(1 ./ diag(D_PC))
 
-    dx = preconditioned_minres(𝑀, -r, ApplyPC, D_PC_inv)
+    # dx = preconditioned_minres(𝑀, -r, ApplyPC, D_PC_inv)
     # dx = preconditioned_bicgstab(𝑀, b, ApplyPC, D_PC_inv)
+   
+    Xmax = copy(r)
+    Xmin = copy(r)
+    Lmax = 0.
+    Lmin = 0.
+    for iter in 1:100
+        Xmax .= (𝑀*D_PC_inv) * Xmax / norm((𝑀*D_PC_inv) * Xmax)
+        Lmax = rayleigh_quotient(𝑀*D_PC_inv, Xmax)
+        Xmin .= ( D_PC_inv) * Xmin / norm((D_PC_inv) * Xmin)
+        Lmin = rayleigh_quotient( D_PC_inv, Xmin)
+        @show Lmin, Lmax
+    end
+
+    Dinv_K    = spdiagm(1 ./ diag(K))
+    # Dinv_M    = spdiagm(1 ./diag_Pt[:])
+    # SC = Dinv_M * (Qᵀ*(Dinv_K*K)*Q) 
+    # X = r[1:size(Qᵀ,1)]
+    # Lmax = 0.
+    # for iter in 1:100
+    #     X .= SC * X / norm(SC * X)
+    #     # @show Lmax = rayleigh_quotient(SC, X)
+    # end
+
+    @show maximum(sum(abs.(Dinv_K * K), dims=2)), maximum(sum(abs.(Dinv_K * Q), dims=2))
+    @show maximum(sum(abs.(Dinv_K * K), dims=1)), maximum(sum(abs.(Dinv_K * Q), dims=1))
+    
+    @show maximum(sum(abs.(Dinv_K * (K)), dims=2)), maximum(sum(abs.(Dinv_K * Q), dims=2))
+
+
+    @show Lmin = maximum( sum(D_PC_inv*D_PC, dims=2) + sum(-abs.(D_PC_inv * (𝑀 - D_PC)), dims=2) )
+
+    # @show Lmax = maximum(sum(abs.(Dinv_K * K), dims=2))*size(Q,1)/size(𝑀,1) +  maximum(sum(abs.(Dinv_K * Q), dims=2))*size(Q,2)/size(𝑀,1)
+
+    # dx = preconditioned_chebyshev_with_spectral_bounds(𝑀, -r, ApplyPC, D_PC_inv, zeros(size(r)), 50000, 1e-5, 2.02*Lmax)
+    dx = SolChebyshev002(𝑀, -r, ApplyPC, D_PC_inv, zeros(size(r)), 50000, 1e-5, Lmin, Lmax)
 
     #--------------------------------------------#
 
-    Dinv   = (x=zeros(size_x...), y=zeros(size_y...))
-    Dinv_p = zeros(size_c...)
-    UpdateSolution_Stokes!(Dinv, Dinv_p, diag(D_PC_inv), number, type, nc)
+    # Dinv   = (x=zeros(size_x...), y=zeros(size_y...))
+    # Dinv_p = zeros(size_c...)
+    # UpdateSolution!(Dinv, Dinv_p, diag(D_PC_inv), number, type, nc)
 
-    # #--------------------------------------------#
+    # # #--------------------------------------------#
     # n = nVx + nVy + nPt
 
     # dV   = (x=zeros(size_x...), y=zeros(size_y...))
@@ -604,7 +550,7 @@ let
     
     # # Initialize residual and preconditioned residual
     # norm_r0 = sqrt(sum(R.x.*R.x) + sum(R.y.*R.y) + sum(Rp.*Rp)) 
-    
+
     # max_iter = n
     # tol      = 1e-8
     
@@ -621,14 +567,14 @@ let
     #     alpha   = r_dot_z / (dot(p.x, Ap.x) + dot(p.y, Ap.y) + dot(p_p, Ap_p) )
  
     #     # Update the solution vector x
-    #     V.x .+= alpha .* p.x
-    #     V.y .+= alpha .* p.y
-    #     Pt  .+= alpha .* p_p
+    #     dV.x .+= alpha * p.x
+    #     dV.y .+= alpha * p.y
+    #     dPt  .+= alpha * p_p
         
     #     # Compute new residual
-    #     R.x .-= alpha .* Ap.x
-    #     R.y .-= alpha .* Ap.y
-    #     Rp  .-= alpha .* Ap_p
+    #     R.x .-= alpha * Ap.x
+    #     R.y .-= alpha * Ap.y
+    #     Rp  .-= alpha * Ap_p
     #     norm_r_new = sqrt(sum(R.x.*R.x) + sum(R.y.*R.y) + sum(Rp.*Rp)) 
         
     #     # Check for convergence
@@ -649,15 +595,14 @@ let
     #     p_p .= z_p .+ beta .* p_p
     # end
 
-    # #--------------------------------------------#
     # dx = zeros(nVx + nVy + nPt)
     # Δx = (x=dV.x, y=dV.y, p=dPt )
-    # SetRHS_Stokes!(dx, Δx, number, type, nc)
+    # SetRHS!(dx, Δx, number, type, nc)
 
     #--------------------------------------------#
-    UpdateSolution_Stokes!(V, Pt, dx, number, type, nc)
+    UpdateSolution!(V, Pt, dx, number, type, nc)
 
-    # #--------------------------------------------#
+    #--------------------------------------------#
     # Residual check
     ResidualContinuity2D!(Rp, V, Pt, η, number, type, BC, nc, Δ) 
     ResidualMomentum2D_x!(R,  V, Pt, η, number, type, BC, nc, Δ)
@@ -675,18 +620,185 @@ let
     𝑀diff = 𝑀 - 𝑀'
     dropzeros!(𝑀diff)
     @show norm(𝑀diff)
-    # f = GLMakie.spy(rotr90(𝑀diff))
-    # f = GLMakie.spy(rotr90(𝑀))
-    f = GLMakie.spy(rotr90(D_PC_inv))
-    GLMakie.DataInspector(f)
-    display(f)
+    # # f = GLMakie.spy(rotr90(𝑀diff))
+    # # f = GLMakie.spy(rotr90(𝑀))
+    # f = GLMakie.spy(rotr90(D_PC_inv))
+    # GLMakie.DataInspector(f)
+    # display(f)
 
     #--------------------------------------------#
 
     p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc))
     p2 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc))
-    p3 = heatmap(xc, yc, Pt[inx_Pt,iny_Pt]' .- mean(Pt[inx_Pt,iny_Pt]), aspect_ratio=1, xlim=extrema(xc))
+    p3 = heatmap(xc, yc,  Pt[inx_Pt,iny_Pt]' .- mean(Pt[inx_Pt,iny_Pt]), aspect_ratio=1, xlim=extrema(xc))
     display(plot(p1, p2, p3))
 
     #--------------------------------------------#
 end
+
+# Preconditioned Chebyshev Iteration with spectral bounds tracking (min and max eigenvalues)
+function preconditioned_chebyshev_with_spectral_bounds(A, b, ApplyPC, Dinv, x0, max_iter, tol, Lmax)
+    x = copy(x0)  # Initial guess
+    r = b - A * x  # Initial residual
+    norm_b = norm(b)  # Norm of the right-hand side
+    @show residual = norm(r) / norm_b  # Relative residual
+    
+    # Preconditioned residual
+    z = ApplyPC(Dinv, r)  # Solve M*z = r, where M is the preconditioner (typically M is symmetric)
+    
+    # Initial spectral bounds estimation using the Rayleigh quotient on the residual
+    λ_min_estimate = 0#rayleigh_quotient(A, z)  # Approximate minimum eigenvalue using residual
+    λ_max_estimate = Lmax;#2.02*Lmax#rayleigh_quotient(A, r)  # This will be refined
+    alpha = 2 / (λ_max_estimate - λ_min_estimate)
+    beta = (λ_max_estimate + λ_min_estimate) / (λ_max_estimate - λ_min_estimate)
+    
+    @show λ_min_estimate, λ_max_estimate
+
+    nout = 2
+
+    X = copy(r)
+
+    # Track the smallest and largest eigenvalues dynamically
+    for k in 1:max_iter
+        if residual < tol
+            println("Convergence reached after $k iterations")
+            break
+        end
+        
+        # Apply Chebyshev iteration with preconditioned residual
+        r_new = b - A * x  # New residual
+        z_new = ApplyPC(Dinv, r_new)  # Preconditioned new residual: M * z_new = r_new
+        
+        # Chebyshev update: Update the solution using alpha and beta
+        x += (alpha * z + beta * z_new)  # Update solution
+        # Update residual and preconditioned residual
+        r = r_new
+        z = z_new
+        
+        # Estimate the maximum eigenvalue (use the Rayleigh quotient on r)
+        # λ_max_estimate = rayleigh_quotient(A, r)  # Update the estimate of the maximum eigenvalue
+        
+
+        # For the minimum eigenvalue, we use an inverse iteration-like approach
+        # Here, you can apply a simple inverse power iteration method for better accuracy
+        # Inverse iteration (preconditioned) applied to the residual
+        if mod(k, 500)==0
+
+            X = Dinv*A*X / norm(Dinv*A*X)
+            @show rayleigh_quotient(Dinv*A, X)
+
+            # z_inv = ApplyPC(Dinv, r)  # Applying preconditioner (inverse iteration)
+            # λ_min_estimate = (rayleigh_quotient(A, z_inv)) / 8  # Update the estimate of the minimum eigenvalue
+            # # λ_min_estimate = rayleigh_quotient(Dinv*A, r) * 2.2
+            
+            # Dynamically adjust alpha and beta based on updated eigenvalue estimates
+            alpha = 2 / (λ_max_estimate - λ_min_estimate)
+            beta = (λ_max_estimate + λ_min_estimate) / (λ_max_estimate - λ_min_estimate)
+            
+            # Compute the relative residual
+            residual = norm(r) / norm_b
+            isnan(residual) ? error("nan") : nothing
+        
+            # Optionally, print or track the estimated spectral bounds
+            println("Iteration $k: res: $(residual) --- Lmin: $λ_min_estimate, Lmax: $λ_max_estimate")
+        end
+         # Compute the relative residual
+         residual = norm(r) / norm_b
+         isnan(residual) ? error("nan") : nothing
+    end
+    
+    if residual >= tol
+        println("Maximum iterations reached, solution may not have converged.")
+    end
+    
+    return x
+end
+
+
+function SolChebyshev002(A, b, ApplyPC, Dinv, x0, max_iter, tol, Lmin, Lmax)
+
+    # Lmax = 2.26
+    # Lmax = 2.26
+    # Lmin /= 5
+    Lmin = 0
+    Lmax *= 1.1
+    d = (Lmax + Lmin) / 2;
+    c = (Lmax - Lmin) / 2;
+    beta = 0.0
+    alpha = 0
+    x = x0;
+    r = b - A * x;
+    nr0 = norm(r)
+    p = copy(x0)
+
+    r0 = copy(r) 
+
+    # theta = (Lmin+Lmax)/2
+    # delta = (Lmax-Lmin)/2
+    # sigma1 = theta/delta
+    # rho = 1/sigma1
+    # w = ApplyPC(Dinv, r)
+    # d = 1/theta * w 
+    # for i = 1:max_iter
+    #     x .+= d
+    #     r .-= A * d
+    #     w   = ApplyPC(Dinv, r)
+    #     # print ("Iteration", it, "err=", err)
+    #     d .*= rho
+    #     d .+= 2/delta * ApplyPC(Dinv, r)
+    #     rho = 1/(2*sigma1-rho)
+    #     d .*= rho
+    #     if mod(i, 100)==0
+    #         @show norm(r)/nr0 
+    #         isnan( norm(r)) ? error("nan") : nothing
+    #     end
+    # end
+  
+    X = copy(r)
+    for i = 1:max_iter
+        r0 .= r 
+        z = ApplyPC(Dinv, r)
+        if (i == 1)
+            p .= z;
+            alpha = 1/d;
+        elseif (i == 2)
+            beta = (1/2) * (c * alpha)^2
+            alpha = 1/(d - beta / alpha);
+            p .= z + beta * p;
+        else
+            beta = (c * alpha / 2)^2;
+            alpha = 1/(d - beta / alpha);
+            p .= z + beta * p;
+        end;
+  
+        x .= x + alpha * p;
+        r .= b - A * x; #%(= r - alpha * A * p)
+        if mod(i, 100)==0 || i == 1
+            @show (rayleigh_quotient(Dinv*A,  r))
+            dr = r - r0
+
+            X = Dinv*A*X / norm(Dinv*A*X)
+            # @show Lmax = rayleigh_quotient(Dinv*A, X)
+
+            @show   Lmin = abs(dot(p, alpha*(Dinv*p)) / dot( z,p) )
+
+            d = (Lmax + Lmin) / 2;
+            c = (Lmax - Lmin) / 2;
+            
+            @show norm(r)/nr0 
+            isnan( norm(r)) ? error("nan") : nothing
+        end
+        if (norm(r)/nr0 < tol) 
+            @show i
+            break; 
+        end; # stop if necessary
+    end;
+    @show Lmin, Lmax
+
+    return x
+  end
+
+main((x = 30, y = 32))
+main((x = 2*30, y = 2*32))
+main((x = 4*30, y = 4*32))
+main((x = 8*30, y = 8*32))

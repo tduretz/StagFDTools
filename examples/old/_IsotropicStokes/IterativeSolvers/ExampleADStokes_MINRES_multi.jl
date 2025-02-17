@@ -1,8 +1,79 @@
-using StagFDTools, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays
+using StagFDTools.Stokes, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
-import GLMakie
+# import GLMakie
+
+include("BasicIterativeSolvers.jl")
+
+# Preconditioner is the identity matrix (no preconditioning)
+function ApplyPC(Dinv, x)
+    return Dinv*x  # Identity preconditioner (no change)
+end
+
+# Function for applying the preconditioner M^{-1} to a vector
+# Here, M_inv is a function that implements the preconditioner
+function preconditioned_bicgstab(A, b, ApplyPC, Dinv, x0 = zeros(length(b)), tol = 1e-8, max_iter = 1000)
+    # Initial residual
+    r0 = b - A * x0
+    z0 = ApplyPC(Dinv,r0)  # Apply preconditioner
+    
+    # Initialize variables
+    x = x0
+    r = r0
+    z = z0
+    p = z
+    p_hat = z
+    rho_old = 1.0
+    alpha = 1.0
+    omega = 1.0
+    tol_b = norm(b) * tol
+    
+    for k = 1:max_iter
+        rho = dot(r, z)
+        
+        if abs(rho) < eps()
+            println("Breakdown: rho is too small.")
+            return x
+        end
+        
+        if k > 1
+            beta = (rho / rho_old) * (alpha / omega)
+            p = z + beta * (p - omega * p_hat)
+        else
+            p = z
+        end
+        
+        # Apply A to p
+        Ap = A * p
+        p_hat = ApplyPC(Dinv, A' * p)  # Apply preconditioner to the transpose
+        
+        # Compute alpha
+        alpha = rho / dot(r, p_hat)
+        
+        # Update x and r
+        x = x + alpha * p
+        r_new = r - alpha * Ap
+        
+        # Compute omega (stabilization factor)
+        omega = dot(r_new, p_hat) / dot(Ap, p_hat)
+        
+        # Update residual
+        r = r_new
+        z = ApplyPC(Dinv,r)  # Precondition residual
+        
+        # Check convergence
+        if norm(r) < tol_b
+            println("Converged after $k iterations.")
+            return x
+        end
+        
+        rho_old = rho
+    end
+    
+    println("Max iterations reached.")
+    return x
+end
 
 struct NumberingV <: AbstractPattern
     Vx
@@ -27,7 +98,7 @@ function Momentum_x(Vx, Vy, Pt, η, type, bcv, Δ)
     
     invΔx    = 1 / Δ.x
     invΔy    = 1 / Δ.y
-    
+
     for j=1:4
         if type.y[1,j] == :Dirichlet 
             Vy[1,j] = fma(2, bcv.y[1,j], -Vy[2,j])
@@ -61,19 +132,20 @@ function Momentum_x(Vx, Vy, Pt, η, type, bcv, Δ)
     Dxy = (Vx[:,2:end] - Vx[:,1:end-1]) * invΔy 
     Dyx = (Vy[2:end,2:end-1] - Vy[1:end-1,2:end-1]) * invΔx 
 
-    ε̇xx = Dxx - 1/2*Dkk
-    ε̇yy = Dyy - 1/2*Dkk
+    ε̇xx = Dxx - 1/3*Dkk
+    ε̇yy = Dyy - 1/3*Dkk
     ε̇xy = 1/2 * ( Dxy + Dyx ) 
 
-    τxx = 2 * 1/2 * ( ε̇xx[:,1:end-1] +  ε̇xx[:,2:end] ) .* η.y[2:end-1,2:end-1]
-    τyy = 2 * 1/2 * ( ε̇yy[:,1:end-1] +  ε̇yy[:,2:end] ) .* η.y[2:end-1,2:end-1]
-    τxy = 2 * 1/2 * ( ε̇xy[1:end-1,:] +  ε̇xy[2:end,:] ) .* η.y[2:end-1,2:end-1]
-    # τxy = 2 * 1/2 * ( 1/2 * (Dxy[1:end-1,:] + Dxy[2:end,:]) .* η.y[2:end-1,2:end-1]  + 1/2*(Dyx[1:end-1,:] +  Dyx[2:end,:]) .* η.y[2:end-1,2:end-1]' )
+    ηc = 0.25*(η.x[1:end-1,:] .+ η.x[2:end,:] .+ η.y[2:end-1,1:end-1] .+ η.y[2:end-1,2:end])
+    ηv = 0.25*(η.x[:,1:end-1] .+ η.x[:,2:end] .+ η.y[1:end-1,2:end-1] .+ η.y[2:end,2:end-1])
 
-    fx  = 1/2*(τxx[2,1] + τxx[2,2] - τxx[1,1] - τxx[1,2]) * invΔx 
-    fx += ( (τxy[1,2] + τxy[2,2])/2 - (τxy[1,1] + τxy[2,1])/2) * invΔy
-    fx -= (Pt[2,2] - Pt[1,2]) * invΔx
-    fx *= -1 * Δ.x * Δ.y
+    τxx = 2 * ηc .* ε̇xx
+    τxy = 2 * ηv .* ε̇xy
+
+    fx  = (τxx[2,2] - τxx[1,2]) * invΔx 
+    fx += (τxy[2,2] - τxy[2,1]) * invΔy 
+    fx -= ( Pt[2,2] -  Pt[1,2]) * invΔx
+    # fx *= Δ.x*Δ.y
 
     return fx
 end
@@ -82,7 +154,7 @@ function Momentum_y(Vx, Vy, Pt, η, type, bcv, Δ)
     
     invΔx    = 1 / Δ.x
     invΔy    = 1 / Δ.y
-
+    
     for i=1:4
         if type.x[i,1] == :Dirichlet 
             Vx[i,1] = fma(2, bcv.x[i,1], -Vx[i,2])
@@ -116,26 +188,29 @@ function Momentum_y(Vx, Vy, Pt, η, type, bcv, Δ)
     Dxy = (Vx[2:end-1,2:end] - Vx[2:end-1,1:end-1]) * invΔy 
     Dyx = (Vy[2:end,:] - Vy[1:end-1,:]) * invΔx 
 
-    ε̇xx = Dxx - 1/2*Dkk
-    ε̇yy = Dyy - 1/2*Dkk
+    ε̇xx = Dxx - 1/3*Dkk
+    ε̇yy = Dyy - 1/3*Dkk
     ε̇xy = 1/2 * ( Dxy + Dyx ) 
 
-    τxx = 2 * 1/2 * ( ε̇xx[1:end-1,:] +  ε̇xx[2:end,:] ) .* η.x[2:end-1,2:end-1]
-    τyy = 2 * 1/2 * ( ε̇yy[1:end-1,:] +  ε̇yy[2:end,:] ) .* η.x[2:end-1,2:end-1]
-    τxy = 2 * 1/2 * ( ε̇xy[:,1:end-1] +  ε̇xy[:,2:end] ) .* η.x[2:end-1,2:end-1]
-    
-    fy  = 1/2*(τyy[1,2] + τyy[2,2] - τyy[1,1] - τyy[2,1]) * invΔy
-    fy += ((τxy[2,1] + τxy[2,2])/2 - (τxy[1,1] + τxy[1,2])/2) * invΔx
+    ηc = 0.25*(η.x[1:end-1,2:end-1] .+ η.x[2:end,2:end-1] .+ η.y[:,1:end-1] .+ η.y[:,2:end])
+    ηv = 0.25*(η.x[2:end-1,1:end-1] .+ η.x[2:end-1,2:end] .+ η.y[1:end-1,:] .+ η.y[2:end,:])
+
+    τyy = 2 * ηc .* ε̇yy
+    τxy = 2 * ηv .* ε̇xy
+
+    fy  = (τyy[2,2] - τyy[2,1]) * invΔy 
+    fy += (τxy[2,2] - τxy[1,2]) * invΔx 
     fy -= (Pt[2,2] - Pt[2,1]) * invΔy
-    fy *= -1 * Δ.x * Δ.y
-    
+    # fy *= Δ.x*Δ.y
+
     return fy
 end
 
-function Continuity(Vx, Vy, Pt, η_loc, type_loc, bcv_loc, Δ)
+function Continuity(Vx, Vy, Pt, η, type_loc, bcv_loc, Δ)
     invΔx    = 1 / Δ.x
     invΔy    = 1 / Δ.y
-    fp = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy)
+    fp = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy + 0*Pt[1]/(η))
+    # fp *= η/(Δ.x+Δ.y)
     return fp
 end
 
@@ -170,24 +245,19 @@ function AssembleMomentum2D_x!(K, V, P, η, num, pattern, type, BC, nc, Δ)
                 
     shift    = (x=1, y=2)
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x+1
-        
+        Vx_loc     = MMatrix{3,3}(      V.x[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+        Vy_loc     = MMatrix{4,4}(      V.y[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
+        bcx_loc    = SMatrix{3,3}(    BC.Vx[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+        bcy_loc    = SMatrix{4,4}(    BC.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
+        typex_loc  = SMatrix{3,3}(  type.Vx[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+        typey_loc  = SMatrix{4,4}(  type.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
+        ηx_loc     = SMatrix{3,3}(      η.x[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+        ηy_loc     = SMatrix{4,4}(      η.y[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
+        P_loc      = MMatrix{2,3}(        P[ii,jj] for ii in i-1:i,   jj in j-2:j  )
+        η_loc      = (x=ηx_loc, y=ηy_loc)
+        bcv_loc    = (x=bcx_loc, y=bcy_loc)
+        type_loc   = (x=typex_loc, y=typey_loc)
         if type.Vx[i,j] == :in
-
-            bcx_loc    = SMatrix{3,3}(    BC.Vx[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-            bcy_loc    = SMatrix{4,4}(    BC.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
-            typex_loc  = SMatrix{3,3}(  type.Vx[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-            typey_loc  = SMatrix{4,4}(  type.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
-            ηx_loc     = SMatrix{3,3}(      η.x[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-            ηy_loc     = SMatrix{4,4}(      η.y[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
- 
-            Vx_loc     = MMatrix{3,3}(      V.x[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-            Vy_loc     = MMatrix{4,4}(      V.y[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
-            P_loc      = MMatrix{2,3}(        P[ii,jj] for ii in i-1:i,   jj in j-2:j  )
-
-            η_loc      = (x=ηx_loc, y=ηy_loc)
-            bcv_loc    = (x=bcx_loc, y=bcy_loc)
-            type_loc   = (x=typex_loc, y=typey_loc)
-            
             ∂R∂Vx .= 0.
             ∂R∂Vy .= 0.
             ∂R∂Pt .= 0.
@@ -200,8 +270,6 @@ function AssembleMomentum2D_x!(K, V, P, η, num, pattern, type, BC, nc, Δ)
                 end
             end
             # Vx --- Vy
-            # Attempt to make it symmetric
-            # Local = num.Vy[i-1:i+2,j-2:j+1]' .* pattern[1][2]
             Local = num.Vy[i-1:i+2,j-2:j+1] .* pattern[1][2]
             for jj in axes(Local,2), ii in axes(Local,1)
                 if (Local[ii,jj]>0) && num.Vx[i,j]>0
@@ -250,11 +318,6 @@ function AssembleMomentum2D_y!(K, V, P, η, num, pattern, type, BC, nc, Δ)
     
     shift    = (x=2, y=1)
     for j in 1+shift.y:nc.y+shift.y+1, i in 1+shift.x:nc.x+shift.x
-
-        # ηx_loc     = SMatrix{3,3}(      η.x[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        # ηy_loc     = SMatrix{4,4}(      η.y[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
-        # P_loc      = MMatrix{2,3}(        P[ii,jj] for ii in i-1:i,   jj in j-2:j  )
-
         Vx_loc     = MMatrix{4,4}(      V.x[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
         Vy_loc     = MMatrix{3,3}(      V.y[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         bcx_loc    = SMatrix{4,4}(    BC.Vx[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
@@ -309,35 +372,36 @@ function ResidualContinuity2D!(R, V, P, η, number, type, BC, nc, Δ)
         bcy_loc    = SMatrix{2,3}(    BC.Vy[ii,jj] for ii in i:i+1, jj in j:j+2)
         typex_loc  = SMatrix{3,2}(  type.Vx[ii,jj] for ii in i:i+2, jj in j:j+1) 
         typey_loc  = SMatrix{2,3}(  type.Vy[ii,jj] for ii in i:i+1, jj in j:j+2)
-        η_loc      =   SVector{4}([η.y[i+1,j] η.x[i,j+1] η.x[i+1,j+1] η.y[i+1,j+1]] )
         bcv_loc    = (x=bcx_loc, y=bcy_loc)
         type_loc   = (x=typex_loc, y=typey_loc)
-        R[i,j]     = Continuity(Vx_loc, Vy_loc, P[i,j], η_loc, type_loc, bcv_loc, Δ)
+        R[i,j]     = Continuity(Vx_loc, Vy_loc, P[i,j], η.p[i,j], type_loc, bcv_loc, Δ)
     end
     return nothing
 end
 
-function AssembleContinuity2D!(K, V, P, η, num, pattern, type, BC, nc, Δ) 
+function AssembleContinuity2D!(K, V, Pt, η, num, pattern, type, BC, nc, Δ) 
                 
     shift    = (x=1, y=1)
     # (; bc_val, type, pattern, num) = numbering
     ∂R∂Vx = @MMatrix zeros(3,2)
     ∂R∂Vy = @MMatrix zeros(2,3)
+    ∂R∂Pt = @MMatrix zeros(1,1)
 
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
+        Pt_loc     = MMatrix{1,1}(       Pt[ii,jj] for ii in i:i, jj in j:j)
         Vx_loc     = MMatrix{3,2}(      V.x[ii,jj] for ii in i:i+2, jj in j:j+1)
         Vy_loc     = MMatrix{2,3}(      V.y[ii,jj] for ii in i:i+1, jj in j:j+2)
         bcx_loc    = SMatrix{3,2}(    BC.Vx[ii,jj] for ii in i:i+2, jj in j:j+1) 
         bcy_loc    = SMatrix{2,3}(    BC.Vy[ii,jj] for ii in i:i+1, jj in j:j+2)
         typex_loc  = SMatrix{3,2}(  type.Vx[ii,jj] for ii in i:i+2, jj in j:j+1) 
         typey_loc  = SMatrix{2,3}(  type.Vy[ii,jj] for ii in i:i+1, jj in j:j+2)
-        η_loc      =   SVector{4}([η.y[i+1,j] η.x[i,j+1] η.x[i+1,j+1] η.y[i+1,j+1]] )
         bcv_loc    = (x=bcx_loc, y=bcy_loc)
         type_loc   = (x=typex_loc, y=typey_loc)
         
         ∂R∂Vx .= 0.
         ∂R∂Vy .= 0.
-        autodiff(Enzyme.Reverse, Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Const(P[i,j]), Const(η_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
+        ∂R∂Pt .= 0.
+        autodiff(Enzyme.Reverse, Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(Pt_loc, ∂R∂Pt), Const(η.p[i,j]), Const(type_loc), Const(bcv_loc), Const(Δ))
 
         # Pt --- Vx
         Local = num.Vx[i:i+1,j:j+2] .* pattern[3][1]
@@ -353,16 +417,23 @@ function AssembleContinuity2D!(K, V, P, η, num, pattern, type, BC, nc, Δ)
                 K[3][2][num.Pt[i,j], Local[ii,jj]] = ∂R∂Vy[ii,jj] 
             end
         end
+         # Pt --- Pt
+         Local = num.Pt[i,j] .* pattern[3][3]
+         for jj in axes(Local,2), ii in axes(Local,1)
+             if (Local[ii,jj]>0) && num.Pt[i,j]>0
+                 K[3][3][num.Pt[i,j], Local[ii,jj]] = ∂R∂Pt[ii,jj]  
+             end
+         end
     end
     return nothing
 end
 
-let  
+let    
     #--------------------------------------------#
     # Resolution
-    nc = (x = 12, y = 11)
+    nc = (x = 30, y = 32)
 
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges_Stokes(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges(nc)
 
     #--------------------------------------------#
     # Boundary conditions
@@ -408,13 +479,13 @@ let
         fill(0, size_y),
         fill(0, size_c),
     )
-    Numbering_Stokes!(number, type, nc)
+    Numbering!(number, type, nc)
 
     #--------------------------------------------#
     # Stencil extent for each block matrix
     pattern = Numbering(
-        Numbering(@SMatrix([1 1 1; 1 1 1; 1 1 1]),                 @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([0 1 0; 0 1 0])), 
-        Numbering(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]),  @SMatrix([1 1 1; 1 1 1; 1 1 1]),                @SMatrix([0 0; 1 1; 0 0])), 
+        Numbering(@SMatrix([0 1 0; 1 1 1; 0 1 0]),                 @SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]), @SMatrix([0 1 0; 0 1 0])), 
+        Numbering(@SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]),  @SMatrix([0 1 0; 1 1 1; 0 1 0]),                @SMatrix([0 0; 1 1; 0 0])), 
         Numbering(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]))
     )
 
@@ -430,17 +501,17 @@ let
 
     #--------------------------------------------#
     # Intialise field
-    L  = (x=1.0, y=1.0)
-    Δ  = (x=L.x/nc.x, y=L.y/nc.y)
-    R  = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_c...))
-    V  = (x=zeros(size_x...), y=zeros(size_y...))
-    η  = (x= ones(size_x...), y= ones(size_y...), p=ones(size_c...) )
-    Rp = zeros(size_c...)
-    Pt = zeros(size_c...)
-    xv = LinRange(-L.x/2, L.x/2, nc.x+1)
-    yv = LinRange(-L.y/2, L.y/2, nc.y+1)
-    xc = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
-    yc = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
+    L   = (x=10.0, y=10.0)
+    Δ   = (x=L.x/nc.x, y=L.y/nc.y)
+    R   = (x=zeros(size_x...), y=zeros(size_y...), p=zeros(size_c...))
+    V   = (x=zeros(size_x...), y=zeros(size_y...))
+    η   = (x= ones(size_x...), y= ones(size_y...), p=ones(size_c...) )
+    Rp  = zeros(size_c...)
+    Pt  = zeros(size_c...)
+    xv  = LinRange(-L.x/2, L.x/2, nc.x+1)
+    yv  = LinRange(-L.y/2, L.y/2, nc.y+1)
+    xc  = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
+    yc  = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
     xvx = LinRange(-L.x/2-Δ.x, L.x/2+Δ.x, nc.x+3)
     xvy = LinRange(-L.x/2-3Δ.x/2, L.x/2+3Δ.x/2, nc.x+4)
     yvy = LinRange(-L.y/2-Δ.y, L.y/2+Δ.y, nc.y+3)
@@ -449,21 +520,22 @@ let
     # Initial configuration
     ε̇  = -1.0
     V.x[inx_Vx,iny_Vx] .=  ε̇*xv .+ 0*yc' 
-    V.y[inx_Vy,iny_Vy] .= 0*xc .-  ε̇*yv'
+    V.y[inx_Vy,iny_Vy] .= 0*xc .-  ε̇*yv' 
 
-    # V.x[inx_Vx,iny_Vx] .= 0*xv .+ ε̇*yc' 
-    # V.y[inx_Vy,iny_Vy] .= 0*xc .-  0*ε̇*yv' 
-    # BC.Vx[2,iny_Vx]         .= ε̇.*yc
-    # BC.Vx[end-1,iny_Vx]     .= ε̇.*yc
-    # BC.Vx[inx_Vx,2]         .= ε̇.*-L.y/2
-    # BC.Vx[inx_Vx,end-1]     .= ε̇.* L.y/2
-
-    η.x .= 1e2
-    η.y .= 1e2
-    η.x[(xvx.^2 .+ (yvx').^2) .<= 0.1^2] .= 1e-1 
-    η.y[(xvy.^2 .+ (yvy').^2) .<= 0.1^2] .= 1e-1
+    η0       = 1.0e-3
+    η1       = 1.0
+    ηi    = (s=min(η0,η1), w=1/min(η0,η1)) 
+    x_inc = [0.0       0.2  -0.3 -0.4  0.0 -0.3 0.4  0.3  0.35 -0.1] *10
+    y_inc = [0.0       0.4   0.4 -0.3 -0.2  0.2 -0.2 -0.4 0.2  -0.4] *10
+    r_inc = [0.2       0.09  0.05 0.08 0.08  0.1 0.07 0.08 0.07 0.07]*10
+    η_inc = [ηi.s      ηi.w  ηi.w ηi.s ηi.w ηi.s ηi.w ηi.s ηi.s ηi.w]
+    
+    for i in eachindex(η_inc)
+        η.y[((xvy.-x_inc[i]).^2 .+ (yvy'.-y_inc[i]).^2) .<= r_inc[i]^2] .= η_inc[i]
+        η.x[((xvx.-x_inc[i]).^2 .+ (yvx'.-y_inc[i]).^2) .<= r_inc[i]^2] .= η_inc[i] 
+    end
     η.p .= 0.25.*(η.x[1:end-1,2:end-1].+η.x[2:end-0,2:end-1].+η.y[2:end-1,1:end-1].+η.y[2:end-1,2:end-0])
-
+    
     #--------------------------------------------#
     # Residual check
     ResidualContinuity2D!(Rp, V, Pt, η, number, type, BC, nc, Δ) 
@@ -472,7 +544,7 @@ let
 
     # Set global residual vector
     r = zeros(nVx + nVy + nPt)
-    SetRHS_Stokes!(r, R, number, type, nc)
+    SetRHS!(r, R, number, type, nc)
 
     #--------------------------------------------#
     # Assembly
@@ -487,40 +559,134 @@ let
     Qᵀ = [M.Pt.Vx M.Pt.Vy]
     𝑀 = [K Q; Qᵀ M.Pt.Pt]
 
-    @info "Velocity block symmetry"
-    display(K)
-    @show norm(K-K')
+    #--------------------------------------------#
+    # Direct solver 
+    # dx = - 𝑀 \ r
+
+    #--------------------------------------------#
+    # Iterative solver 
+    D_PC    = I(size(𝑀,1)) # no preconditioner
+
+    # Diagonal preconditioner
+    D_PC    = spdiagm(diag(𝑀))
+    diag_Pt = max(nc...) ./ η.p[inx_Pt, iny_Pt]
+    D_PC[(nVx+nVy+1):end, (nVx+nVy+1):end] .+= spdiagm(diag_Pt[:])
+    D_PC_inv =  spdiagm(1 ./ diag(D_PC))
+
+    dx = preconditioned_minres(𝑀, -r, ApplyPC, D_PC_inv)
+    # dx = preconditioned_bicgstab(𝑀, b, ApplyPC, D_PC_inv)
+
+    #--------------------------------------------#
+
+    Dinv   = (x=zeros(size_x...), y=zeros(size_y...))
+    Dinv_p = zeros(size_c...)
+    UpdateSolution!(Dinv, Dinv_p, diag(D_PC_inv), number, type, nc)
+
+    # #--------------------------------------------#
+    # n = nVx + nVy + nPt
+
+    # dV   = (x=zeros(size_x...), y=zeros(size_y...))
+    # dPt  = zeros(size_c...)
+
+    # Ap   = (x=zeros(size_x...), y=zeros(size_y...))
+    # Ap_p = zeros(size_c...)
+    # z    = (x=zeros(size_x...), y=zeros(size_y...))
+    # z_p  = zeros(size_c...)
+    # p    = (x=zeros(size_x...), y=zeros(size_y...))
+    # p_p  = zeros(size_c...)
+
+    # # Initial guess (zero vector)
+    # dV.x .= 0.; dV.y .= 0.; dPt  .= 0.
     
+    # # Initial residual and preconditioned residual
+    # z.x  .= Dinv.x.*R.x; z.y  .= Dinv.y.*R.y; z_p   .= Dinv_p.*Rp
+    # p.x  .= z.x;          p.y .= z.y;         p_p   .= z_p
+    
+    # # Initialize residual and preconditioned residual
+    # norm_r0 = sqrt(sum(R.x.*R.x) + sum(R.y.*R.y) + sum(Rp.*Rp)) 
+    
+    # max_iter = n
+    # tol      = 1e-8
+    
+    # # Iteration loop
+    # for k in 1:max_iter
+
+    #     # Compute A * p
+    #     ResidualContinuity2D!(Ap_p, p, p_p, η, number, type, BC, nc, Δ) 
+    #     ResidualMomentum2D_x!(Ap,   p, p_p, η, number, type, BC, nc, Δ)
+    #     ResidualMomentum2D_y!(Ap,   p, p_p, η, number, type, BC, nc, Δ)
+        
+    #     # Compute step size alpha
+    #     r_dot_z = (dot(R.x, z.x) + dot(R.y, z.y) + dot(Rp, z_p))
+    #     alpha   = r_dot_z / (dot(p.x, Ap.x) + dot(p.y, Ap.y) + dot(p_p, Ap_p) )
+ 
+    #     # Update the solution vector x
+    #     V.x .+= alpha .* p.x
+    #     V.y .+= alpha .* p.y
+    #     Pt  .+= alpha .* p_p
+        
+    #     # Compute new residual
+    #     R.x .-= alpha .* Ap.x
+    #     R.y .-= alpha .* Ap.y
+    #     Rp  .-= alpha .* Ap_p
+    #     norm_r_new = sqrt(sum(R.x.*R.x) + sum(R.y.*R.y) + sum(Rp.*Rp)) 
+        
+    #     # Check for convergence
+    #     if norm_r_new / norm_r0 < tol  #|| norm_r_new/sqrt(n) < 2*tol 
+    #         println("Converged in $k iterations.")
+    #         break
+    #     end
+        
+    #     # Apply preconditioner to the new residual
+    #     z.x .= Dinv.x.*R.x; z.y .= Dinv.y.*R.y; z_p  .= Dinv_p.*Rp
+        
+    #     # Compute the beta value for the direction update
+    #     beta = (dot(R.x, z.x) + dot(R.y, z.y) + dot(Rp, z_p)) / r_dot_z
+
+    #     # Update the direction p and residual r
+    #     p.x .= z.x .+ beta .* p.x
+    #     p.y .= z.y .+ beta .* p.y
+    #     p_p .= z_p .+ beta .* p_p
+    # end
+
+    # #--------------------------------------------#
+    # dx = zeros(nVx + nVy + nPt)
+    # Δx = (x=dV.x, y=dV.y, p=dPt )
+    # SetRHS!(dx, Δx, number, type, nc)
+
     #--------------------------------------------#
-    # Direct solver
+    UpdateSolution!(V, Pt, dx, number, type, nc)
 
-    dx = - 𝑀 \ r
-
-    #--------------------------------------------#
-
-    UpdateSolution_Stokes!(V, Pt, dx, number, type, nc)
-
-    #--------------------------------------------#
+    # #--------------------------------------------#
     # Residual check
     ResidualContinuity2D!(Rp, V, Pt, η, number, type, BC, nc, Δ) 
     ResidualMomentum2D_x!(R,  V, Pt, η, number, type, BC, nc, Δ)
     ResidualMomentum2D_y!(R,  V, Pt, η, number, type, BC, nc, Δ)
-
+    
     @info "Residuals"
     @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
     @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
     @show norm(Rp[inx_Pt,iny_Pt])/sqrt(nPt)
 
     #--------------------------------------------#
+    @info "Velocity block symmetry"
+    # display(K - K')
+    @show norm(K-K')
+    𝑀diff = 𝑀 - 𝑀'
+    dropzeros!(𝑀diff)
+    @show norm(𝑀diff)
+    # f = GLMakie.spy(rotr90(𝑀diff))
+    # f = GLMakie.spy(rotr90(𝑀))
+    # f = GLMakie.spy(rotr90(D_PC_inv))
+    # GLMakie.DataInspector(f)
+    # display(f)
+
+    #--------------------------------------------#
+
     p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc))
     p2 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc))
-    p3 = heatmap(xc, yc,  Pt[inx_Pt,iny_Pt]' .- mean(Pt[inx_Pt,iny_Pt]), aspect_ratio=1, xlim=extrema(xc))
+    p3 = heatmap(xc, yc, Pt[inx_Pt,iny_Pt]' .- mean(Pt[inx_Pt,iny_Pt]), aspect_ratio=1, xlim=extrema(xc))
     display(plot(p1, p2, p3))
-    
+
     #--------------------------------------------#
-    Kdiff = K - K'
-    dropzeros!(Kdiff)
-    f = GLMakie.spy(rotr90(Kdiff))
-    GLMakie.DataInspector(f)
-    display(f)
 end

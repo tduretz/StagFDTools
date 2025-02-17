@@ -2,7 +2,7 @@ using StagFDTools, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseA
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
-import GLMakie
+# import GLMakie
 
 struct NumberingV <: AbstractPattern
     Vx
@@ -532,7 +532,7 @@ let
     # Resolution
     nc = (x = 20, y = 20)
 
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges_Stokes(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges(nc)
 
     #--------------------------------------------#
     # Boundary conditions
@@ -585,7 +585,7 @@ let
         fill(0, size_y),
         fill(0, size_c),
     )
-    Numbering_Stokes!(number, type, nc)
+    Numbering!(number, type, nc)
 
     #--------------------------------------------#
     # Stencil extent for each block matrix
@@ -663,7 +663,7 @@ let
 
     # Set global residual vector
     r = zeros(nVx + nVy + nPt)
-    SetRHS_Stokes!(r, R, number, type, nc)
+    SetRHS!(r, R, number, type, nc)
 
     #--------------------------------------------#
     # Assembly
@@ -691,7 +691,7 @@ let
 
     #--------------------------------------------#
 
-    UpdateSolution_Stokes!(V, Pt, dx, number, type, nc)
+    UpdateSolution!(V, Pt, dx, number, type, nc)
 
     end
 

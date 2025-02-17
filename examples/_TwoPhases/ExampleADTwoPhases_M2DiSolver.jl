@@ -2,7 +2,7 @@ using StagFDTools, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseA
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
-import GLMakie
+# import GLMakie
 
 struct NumberingV <: AbstractPattern
     Vx
@@ -696,7 +696,7 @@ end
     
     # Resolution
 
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges_Stokes(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges(nc)
     
     # Define node types and set BC flags
     type = Numbering(

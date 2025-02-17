@@ -19,7 +19,10 @@ end
 module Stokes
     using StaticArrays, ExtendableSparse, StaticArrays
     include("Stokes.jl")
-    export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx!, SetBCVy!
+    export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx!, SetBCVy!, set_boundaries_template!, SetBCVx1, SetBCVy1
+    export Continuity, SMomentum_x_Generic, SMomentum_y_Generic
+    export ResidualContinuity2D!, ResidualMomentum2D_x!, ResidualMomentum2D_y!
+    export AssembleContinuity2D!, AssembleMomentum2D_x!, AssembleMomentum2D_y!
 end
 
 module StokesFSG
