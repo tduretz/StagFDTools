@@ -7,7 +7,7 @@ end
 function LocalRheology(ε̇, materials, phases, Δ)
 
     # Effective strain rate & pressure
-    ε̇II  = sqrt.(1/2*(ε̇[1]^2 + ε̇[2]^2 + (-ε̇[2]-ε̇[2])^2) + ε̇[3]^2)
+    ε̇II  = sqrt.(1/2*(ε̇[1]^2 + ε̇[2]^2 + (-ε̇[1]-ε̇[2])^2) + ε̇[3]^2)
     P    = ε̇[4]
 
     # Parameters
@@ -46,6 +46,8 @@ function LocalRheology(ε̇, materials, phases, Δ)
         λ̇    = F / (ηvep + ηvp + comp*Δ.t/β*sind(ϕ)*sind(ψ)) 
         τII -= λ̇ * ηvep
         P   += comp * λ̇  * sind(ψ) * Δ.t / β
+        ηvep = τII/(2*ε̇II)
+
         # τII = C*cosd(ϕ) + P*sind(ϕ) + ηvp*λ̇
         F    = τII - C*cosd(ϕ) - P*sind(ϕ )- λ̇*ηvp
         (F>1e-10) && error("Failed return mapping")
