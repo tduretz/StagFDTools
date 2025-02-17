@@ -327,9 +327,9 @@ end
                 ResidualMomentum2D_y!(R, V, Pt, Pt0, λ̇, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
             end
 
-            err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
-            err.y[iter] = norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-            err.p[iter] = norm(R.p[inx_c,iny_c])/sqrt(nPt)
+            err.x[iter] = @views norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
+            err.y[iter] = @views norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
+            err.p[iter] = @views norm(R.p[inx_c,iny_c])/sqrt(nPt)
             max(err.x[iter], err.y[iter]) < ϵ_nl ? break : nothing
 
             #--------------------------------------------#
