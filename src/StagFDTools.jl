@@ -17,7 +17,7 @@ module Poisson
     export Fields, Ranges, Numbering!, SparsityPattern!
 end
 module Stokes
-    using StaticArrays, ExtendableSparse, StaticArrays
+    using StaticArrays, ExtendableSparse, StaticArrays, Enzyme, StagFDTools
     include("Stokes.jl")
     export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx!, SetBCVy!, set_boundaries_template!, SetBCVx1, SetBCVy1
     export Continuity, SMomentum_x_Generic, SMomentum_y_Generic
@@ -38,6 +38,12 @@ module TwoPhases
     using StaticArrays, ExtendableSparse, StaticArrays
     include("TwoPhases.jl")
     export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx!, SetBCVy!
+end
+
+module Rheology
+    using StaticArrays, Enzyme, StagFDTools.Stokes, StagFDTools, LinearAlgebra
+    include("Rheology.jl")
+    export LocalRheology, StressVector!, TangentOperator!, LineSearch!
 end
 
 end # module StagFDTools

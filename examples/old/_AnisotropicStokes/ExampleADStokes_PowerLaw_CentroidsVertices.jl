@@ -332,7 +332,7 @@ function SetBCVy1!(Vy, typey, bcy, Δ)
     end
 end
 
-function Rheology!(ε̇, materials, phases) 
+function StressVector!(ε̇, materials, phases) 
     ε̇II = sqrt.(1/2*(ε̇[1].^2 .+ ε̇[2].^2) + ε̇[3].^2)
     n   = materials.n[phases]
     η0  = materials.η0[phases]

@@ -17,16 +17,16 @@ using TimerOutputs
     # Material parameters
     materials = ( 
         compressible = false,
-        n   = [1.0  1.0],
+        n   = [10.0 1.0],
         η0  = [1e2  1e-1], 
         G   = [1e1  1e1],
-        C   = [150  150],
+        C   = [1e10 1e10],
         ϕ   = [30.  30.],
-        ηvp = [0.15  0.15],
+        ηvp = [0.5  0.5],
         β   = [1e-2 1e-2],
-        ψ   = [3.0  3.0],
-        B   = [0.0  0.0],
-    )
+        ψ   = [3.   3.],
+        B   = [0.   0.],
+    ) 
     materials.B   .= (2*materials.η0).^(-materials.n)
 
     # Time steps
@@ -195,7 +195,7 @@ using TimerOutputs
             𝐐  = [M.Vx.Pt; M.Vy.Pt]
             𝐐ᵀ = [M.Pt.Vx M.Pt.Vy]
             𝐏  = M.Pt.Pt
-            
+
             #--------------------------------------------#
      
             # Direct-iterative solver
@@ -219,9 +219,9 @@ using TimerOutputs
         τII  = sqrt.( 0.5.*(τ.xx[inx_c,iny_c].^2 + τ.yy[inx_c,iny_c].^2) .+ τxyc[inx_c,iny_c].^2 )
         ε̇xyc = av2D(ε̇.xy)
         ε̇II  = sqrt.( 0.5.*(ε̇.xx[inx_c,iny_c].^2 + ε̇.yy[inx_c,iny_c].^2) .+ ε̇xyc[inx_c,iny_c].^2 )
-         
+        
         p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
-        p2 = heatmap(xc, yc,  Ptc[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt")
+        p2 = heatmap(xv, yv,  η.v[inx_v,iny_v]', aspect_ratio=1, xlim=extrema(xv), title="ηv")
         p3 = heatmap(xc, yc,  log10.(ε̇II)', aspect_ratio=1, xlim=extrema(xc), title="ε̇II", c=:coolwarm)
         p4 = heatmap(xc, yc,  τII', aspect_ratio=1, xlim=extrema(xc), title="τII", c=:turbo)
         p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright)
@@ -229,8 +229,6 @@ using TimerOutputs
         p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
         p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
         display(plot(p1, p2, p3, p4, layout=(2,2)))
-
-        @show (3/materials.β[1] - 2*materials.G[1])/(2*(3/materials.β[1] + 2*materials.G[1]))
 
         # update pressure
         Pt .= Ptc
@@ -243,7 +241,7 @@ end
 
 
 let
-    main((x = 100, y = 100))
+    main((x = 40, y = 40))
 end
 
 # ### NEW

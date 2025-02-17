@@ -45,7 +45,7 @@ function RheologyLocalIterations(ε̇, τ0, materials, phases, Δ)
     return τ_trial, J⁻¹
 end
 
-function PowerLaw(ε̇, materials, phases, Δ)
+function LocalRheology(ε̇, materials, phases, Δ)
     ε̇II  = sqrt.(1/2*(ε̇[1].^2 .+ ε̇[2].^2) + ε̇[3].^2)
     P    = ε̇[4]
     n    = materials.n[phases]
@@ -71,8 +71,8 @@ function PowerLaw(ε̇, materials, phases, Δ)
     return ηvep, λ̇
 end
 
-function Rheology!(ε̇, materials, phases, Δ) 
-    η, λ̇ = PowerLaw(ε̇, materials, phases, Δ)
+function StressVector!(ε̇, materials, phases, Δ) 
+    η, λ̇ = LocalRheology(ε̇, materials, phases, Δ)
     τ    = @SVector([2 * η * ε̇[1],
                      2 * η * ε̇[2],
                      2 * η * ε̇[3],
@@ -112,7 +112,7 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, type,
         ε̇vec  = @SVector([ε̇xx[1]+τ0.xx[i,j]/(2*G[1]*Δ.t), ε̇yy[1]+τ0.yy[i,j]/(2*G[1]*Δ.t), ε̇̄xy[1]+τ̄xy0[1]/(2*G[1]*Δ.t), Pt[i,j]])
         
         # # Tangent operator used for Newton Linearisation
-        # jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, Rheology!, ε̇vec, Const(materials), Const(phases.c[i,j]), Const(Δ))
+        # jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector!, ε̇vec, Const(materials), Const(phases.c[i,j]), Const(Δ))
         
         # # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
         # 𝐷_ctl.c[i,j][:,1] .= jac.derivs[1][1][1]
@@ -180,7 +180,7 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, type,
         ε̇vec  = @SVector([ε̇̄xx[1]+τ̄xx0[1]/(2*G[1]*Δ.t), ε̇̄yy[1]+τ̄yy0[1]/(2*G[1]*Δ.t), ε̇xy[1]+τ0.xy[i,j]/(2*G[1]*Δ.t), P̄[1]])
         
         # # Tangent operator used for Newton Linearisation
-        # jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, Rheology!, ε̇vec, Const(materials), Const(phases.v[i,j]), Const(Δ))
+        # jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector!, ε̇vec, Const(materials), Const(phases.v[i,j]), Const(Δ))
 
         # # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
         # 𝐷_ctl.v[i,j][:,1] .= jac.derivs[1][1][1]
