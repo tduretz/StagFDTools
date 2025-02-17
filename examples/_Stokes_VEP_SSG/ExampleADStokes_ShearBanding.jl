@@ -262,9 +262,9 @@ end
     phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...))  # phase on velocity points
 
     # Initial velocity & pressure field
-    V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
-    V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
-    Pt[inx_c, iny_c ]  .= 10.                 
+    @views V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
+    @views V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
+    @views Pt[inx_c, iny_c ]  .= 10.                 
     UpdateSolution!(V, Pt, dx, number, type, nc)
 
     # Boundary condition values
