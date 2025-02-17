@@ -362,8 +362,8 @@ end
             #--------------------------------------------#
      
             # Direct-iterative solver
-            fu   = -r[1:size(𝐊,1)]
-            fp   = -r[size(𝐊,1)+1:end]
+            fu   = @views -r[1:size(𝐊,1)]
+            fp   = @views -r[size(𝐊,1)+1:end]
             u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu,  ηb=1e3, niter_l=10, ϵ_l=1e-11)
             @views dx[1:size(𝐊,1)]     .= u
             @views dx[size(𝐊,1)+1:end] .= p
