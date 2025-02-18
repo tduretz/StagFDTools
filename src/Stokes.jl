@@ -122,7 +122,7 @@ function set_boundaries_template!(type, config, nc)
     end
 end
 
-function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, λ̇, τ0, 𝐷, phases, materials, type, bcv, Δ)
+function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δ)
     
     invΔx, invΔy = 1 / Δ.x, 1 / Δ.y
 
@@ -166,9 +166,7 @@ function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, λ̇, τ0, 𝐷, phases, materi
 
     # Corrected pressure
     comp = materials.compressible
-    β    = SVector{2, Float64}( materials.β[phases.c[:]] )
-    ψ    = SVector{2, Float64}( materials.ψ[phases.c[:]] )
-    Ptc  = SVector{2, Float64}( @. Pt[:,2] + comp * λ̇[:] * Δ.t / β * sind(ψ) )
+    Ptc  = SVector{2, Float64}( @. Pt[:,2] + comp * ΔP[:] )
 
     # Stress
     τxx = @MVector zeros(2)
@@ -187,7 +185,7 @@ function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, λ̇, τ0, 𝐷, phases, materi
     return fx
 end
 
-function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, λ̇, τ0, 𝐷, phases, materials, type, bcv, Δ)
+function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δ)
     
     invΔx, invΔy = 1 / Δ.x, 1 / Δ.y
 
@@ -231,9 +229,7 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, λ̇, τ0, 𝐷, phases, materi
 
     # Corrected pressure
     comp = materials.compressible
-    β    = SVector{2, Float64}( materials.β[phases.c[:]] )
-    ψ    = SVector{2, Float64}( materials.ψ[phases.c[:]] )
-    Ptc  = SVector{2, Float64}( @. Pt[2,:] + comp * λ̇[:] * Δ.t / β * sind(ψ) )
+    Ptc  = SVector{2, Float64}( @. Pt[2,:] + comp * ΔP[:] )
 
     # Stress
     τyy = @MVector zeros(2)
@@ -262,7 +258,7 @@ function Continuity(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δ)
     return ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy) + comp * β * (Pt[1] - Pt0) * invΔt
 end
 
-function ResidualMomentum2D_x!(R, V, P, P0, λ̇, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
+function ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
                 
     shift    = (x=1, y=2)
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x+1
@@ -276,7 +272,7 @@ function ResidualMomentum2D_x!(R, V, P, P0, λ̇, τ0, 𝐷, phases, materials, 
             phc_loc    = SMatrix{2,1}( phases.c[ii,jj] for ii in i-1:i,   jj in j-1:j-1)
             phv_loc    = SMatrix{1,2}( phases.v[ii,jj] for ii in i-0:i-0, jj in j-1:j-0)
             P_loc      = SMatrix{2,3}(        P[ii,jj] for ii in i-1:i,   jj in j-2:j  )
-            λ̇_loc      = SMatrix{2,1}(      λ̇.c[ii,jj] for ii in i-1:i,   jj in j-1:j-1)
+            ΔP_loc     = SMatrix{2,1}(       ΔP[ii,jj] for ii in i-1:i,   jj in j-1:j-1)
             τxx0       = SMatrix{2,3}(    τ0.xx[ii,jj] for ii in i-1:i,   jj in j-2:j  )
             τyy0       = SMatrix{2,3}(    τ0.yy[ii,jj] for ii in i-1:i,   jj in j-2:j  )
             τxy0       = SMatrix{3,2}(    τ0.xy[ii,jj] for ii in i-1:i+1, jj in j-1:j  )
@@ -289,13 +285,13 @@ function ResidualMomentum2D_x!(R, V, P, P0, λ̇, τ0, 𝐷, phases, materials, 
             D          = (c=Dc, v=Dv)
             τ0_loc     = (xx=τxx0, yy=τyy0, xy=τxy0)
     
-            R.x[i,j]   = SMomentum_x_Generic(Vx_loc, Vy_loc, P_loc, λ̇_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δ)
+            R.x[i,j]   = SMomentum_x_Generic(Vx_loc, Vy_loc, P_loc, ΔP_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δ)
         end
     end
     return nothing
 end
 
-function AssembleMomentum2D_x!(K, V, P, P0, λ̇, τ0, 𝐷, phases, materials, num, pattern, type, BC, nc, Δ) 
+function AssembleMomentum2D_x!(K, V, P, P0, ΔP, τ0, 𝐷, phases, materials, num, pattern, type, BC, nc, Δ) 
 
     ∂R∂Vx = @MMatrix zeros(3,3)
     ∂R∂Vy = @MMatrix zeros(4,4)
@@ -304,7 +300,7 @@ function AssembleMomentum2D_x!(K, V, P, P0, λ̇, τ0, 𝐷, phases, materials, 
     Vx_loc = @MMatrix zeros(3,3)
     Vy_loc = @MMatrix zeros(4,4)
     P_loc  = @MMatrix zeros(2,3)
-    λ̇_loc  = @MMatrix zeros(2,1)
+    ΔP_loc  = @MMatrix zeros(2,1)
 
     shift    = (x=1, y=2)
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x+1
@@ -321,7 +317,7 @@ function AssembleMomentum2D_x!(K, V, P, P0, λ̇, τ0, 𝐷, phases, materials, 
             Vx_loc    .= SMatrix{3,3}(      V.x[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             Vy_loc    .= SMatrix{4,4}(      V.y[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
             P_loc     .= SMatrix{2,3}(        P[ii,jj] for ii in i-1:i,   jj in j-2:j  )
-            λ̇_loc     .= SMatrix{2,1}(      λ̇.c[ii,jj] for ii in i-1:i,   jj in j-1:j-1)
+            ΔP_loc    .= SMatrix{2,1}(       ΔP[ii,jj] for ii in i-1:i,   jj in j-1:j-1)
 
             τxx0       = SMatrix{2,3}(    τ0.xx[ii,jj] for ii in i-1:i,   jj in j-2:j  )
             τyy0       = SMatrix{2,3}(    τ0.yy[ii,jj] for ii in i-1:i,   jj in j-2:j  )
@@ -338,7 +334,7 @@ function AssembleMomentum2D_x!(K, V, P, P0, λ̇, τ0, 𝐷, phases, materials, 
             fill!(∂R∂Vx, 0e0)
             fill!(∂R∂Vy, 0e0)
             fill!(∂R∂Pt, 0e0)
-            autodiff(Enzyme.Reverse, SMomentum_x_Generic, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(λ̇_loc), Const(τ0_loc), Const(D), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+            autodiff(Enzyme.Reverse, SMomentum_x_Generic, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ΔP_loc), Const(τ0_loc), Const(D), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
             # Vx --- Vx
             Local = SMatrix{3,3}(num.Vx[ii, jj] for ii in i-1:i+1, jj in j-1:j+1) .* pattern[1][1]
             for jj in axes(Local,2), ii in axes(Local,1)
@@ -365,7 +361,7 @@ function AssembleMomentum2D_x!(K, V, P, P0, λ̇, τ0, 𝐷, phases, materials, 
     return nothing
 end
 
-function ResidualMomentum2D_y!(R, V, P, P0, λ̇, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)                 
+function ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)                 
     shift    = (x=2, y=1)
     for j in 1+shift.y:nc.y+shift.y+1, i in 1+shift.x:nc.x+shift.x
         if type.Vy[i,j] == :in
@@ -378,7 +374,7 @@ function ResidualMomentum2D_y!(R, V, P, P0, λ̇, τ0, 𝐷, phases, materials, 
             phc_loc    = SMatrix{1,2}( phases.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
             phv_loc    = SMatrix{2,1}( phases.v[ii,jj] for ii in i-1:i-0, jj in j-0:j-0) 
             P_loc      = SMatrix{3,2}(        P[ii,jj] for ii in i-2:i,   jj in j-1:j  )
-            λ̇_loc      = SMatrix{1,2}(      λ̇.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
+            ΔP_loc     = SMatrix{1,2}(       ΔP[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
             τxx0       = SMatrix{3,2}(    τ0.xx[ii,jj] for ii in i-2:i,   jj in j-1:j  )
             τyy0       = SMatrix{3,2}(    τ0.yy[ii,jj] for ii in i-2:i,   jj in j-1:j  )
             τxy0       = SMatrix{2,3}(    τ0.xy[ii,jj] for ii in i-1:i,   jj in j-1:j+1)
@@ -390,13 +386,13 @@ function ResidualMomentum2D_y!(R, V, P, P0, λ̇, τ0, 𝐷, phases, materials, 
             D          = (c=Dc, v=Dv)
             τ0_loc     = (xx=τxx0, yy=τyy0, xy=τxy0)
 
-            R.y[i,j]   = SMomentum_y_Generic(Vx_loc, Vy_loc, P_loc, λ̇_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δ)
+            R.y[i,j]   = SMomentum_y_Generic(Vx_loc, Vy_loc, P_loc, ΔP_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δ)
         end
     end
     return nothing
 end
 
-function AssembleMomentum2D_y!(K, V, P, P0, λ̇, τ0, 𝐷, phases, materials, num, pattern, type, BC, nc, Δ) 
+function AssembleMomentum2D_y!(K, V, P, P0, ΔP, τ0, 𝐷, phases, materials, num, pattern, type, BC, nc, Δ) 
     
     ∂R∂Vy = @MMatrix zeros(3,3)
     ∂R∂Vx = @MMatrix zeros(4,4)
@@ -405,7 +401,7 @@ function AssembleMomentum2D_y!(K, V, P, P0, λ̇, τ0, 𝐷, phases, materials, 
     Vx_loc = @MMatrix zeros(4,4)
     Vy_loc = @MMatrix zeros(3,3)
     P_loc  = @MMatrix zeros(3,2)
-    λ̇_loc  = @MMatrix zeros(1,2)
+    ΔP_loc  = @MMatrix zeros(1,2)
        
     shift    = (x=2, y=1)
     K21 = K[2][1]
@@ -425,7 +421,7 @@ function AssembleMomentum2D_y!(K, V, P, P0, λ̇, τ0, 𝐷, phases, materials, 
             phc_loc    = @inline SMatrix{1,2}(@inbounds  phases.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
             phv_loc    = @inline SMatrix{2,1}(@inbounds  phases.v[ii,jj] for ii in i-1:i-0, jj in j-0:j-0) 
             P_loc     .= @inline SMatrix{3,2}(@inbounds         P[ii,jj] for ii in i-2:i,   jj in j-1:j  )
-            λ̇_loc     .= @inline SMatrix{1,2}(@inbounds       λ̇.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
+            ΔP_loc    .= @inline SMatrix{1,2}(@inbounds        ΔP[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
             τxx0       = @inline SMatrix{3,2}(@inbounds     τ0.xx[ii,jj] for ii in i-2:i,   jj in j-1:j  )
             τyy0       = @inline SMatrix{3,2}(@inbounds     τ0.yy[ii,jj] for ii in i-2:i,   jj in j-1:j  )
             τxy0       = @inline SMatrix{2,3}(@inbounds     τ0.xy[ii,jj] for ii in i-1:i,   jj in j-1:j+1)
@@ -440,7 +436,7 @@ function AssembleMomentum2D_y!(K, V, P, P0, λ̇, τ0, 𝐷, phases, materials, 
             fill!(∂R∂Vx, 0.0)
             fill!(∂R∂Vy, 0.0)
             fill!(∂R∂Pt, 0.0)
-            autodiff(Enzyme.Reverse, SMomentum_y_Generic, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(λ̇_loc), Const(τ0_loc), Const(D), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+            autodiff(Enzyme.Reverse, SMomentum_y_Generic, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ΔP_loc), Const(τ0_loc), Const(D), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
             
             num_Vy = @inbounds num.Vy[i,j]
             bounds_Vy = num_Vy > 0
@@ -479,11 +475,11 @@ function AssembleMomentum2D_y!(K, V, P, P0, λ̇, τ0, 𝐷, phases, materials, 
                 end
             end
         end
-    end
+    end 
     return nothing
 end
 
-function ResidualContinuity2D!(R, V, P, P0, λ̇, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
+function ResidualContinuity2D!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
                 
     for j in 2:size(R.p,2)-1, i in 2:size(R.p,1)-1
         Vx_loc     = SMatrix{3,2}(      V.x[ii,jj] for ii in i:i+2, jj in j:j+1)
@@ -496,7 +492,7 @@ function ResidualContinuity2D!(R, V, P, P0, λ̇, τ0, 𝐷, phases, materials, 
     return nothing
 end
 
-function AssembleContinuity2D!(K, V, P, Pt0, λ̇, τ0, 𝐷, phases, materials, num, pattern, type, BC, nc, Δ) 
+function AssembleContinuity2D!(K, V, P, Pt0, ΔP, τ0, 𝐷, phases, materials, num, pattern, type, BC, nc, Δ) 
                 
     ∂R∂Vx = @MMatrix zeros(3,2)
     ∂R∂Vy = @MMatrix zeros(2,3)
