@@ -1,4 +1,86 @@
-function StrainRateTrial_Invariant(τII, G, Δt, B, n)
+function line(p, K, dt, η_ve, ψ, p1, t1)
+    p2 = p1 + K*dt*sind(ψ)  # introduce sinϕ ?
+    t2 = t1 - η_ve  
+    a  = (t2-t1)/(p2-p1)
+    b  = t2 - a*p2
+    return a*p + b
+end
+
+
+function Kiss2023(τ, P, η_ve, comp, β, Δt, C, φ, ψ, ηvp, σ_T, δσ_T, pc1, τc1, pc2, τc2)
+
+    K         = 1/β
+    λ̇         = 0.
+    domain_pl = 0.0
+    Pc        = P
+    τc        = τ
+
+    l1    = line(P, K, Δt, η_ve, π/2, pc1, τc1)
+    l2    = line(P, K, Δt, η_ve, π/2, pc2, τc2)
+    l3    = line(P, K, Δt, η_ve,   ψ, pc2, τc2)
+
+    if max(τ - P*sind(φ) - C*cosd(φ) , τ - P - σ_T , - P - (σ_T - δσ_T) ) > 0.0                                                         # check if F_tr > 0
+        if τ <= τc1 
+            # pressure limiter 
+            dqdp = -1.0
+            f    = - P - (σ_T - δσ_T) 
+            λ̇    = f / (K*Δt)                                                                                                                          # tensile pressure cutoff
+            τc   = τ 
+            Pc   = P - K*Δt*λ̇*dqdp
+            f    = - Pc - (σ_T - δσ_T) 
+            domain_pl = 1.0
+        elseif τc1 < τ <= l1    
+            # corner 1 
+            τc = τ - η_ve*(τ - τc1)/(η_ve)
+            Pc = P - K*Δt*(P - pc1)/(K*Δt)
+            domain_pl = 2.0
+        # elseif l1 < τ <= l2            # mode-1
+        # # if τ - P - σ_T > 1e-10
+        #     # tension
+        #     dqdp = -1.0
+        #     dqdτ =  1.0
+        #     f    = τ - P - σ_T 
+        #     λ̇    = f / (K*Δt + η_ve + ηvp) 
+        #     τc   = τ - η_ve*λ̇*dqdτ
+        #     Pc   = P - K*Δt*λ̇*dqdp
+        #     domain_pl = 3.0 
+        #     # @show τc - Pc - σ_T - ηvp*λ̇
+        # elseif l2< τ <= l3 # 2nd corner
+        #     # corner 2
+        #     τc = τ - η_ve*(τ - τc2)/(η_ve)
+        #     Pc = P - K*Δt*(P - pc2)/(K*Δt)
+        #     domain_pl = 4.0
+        # elseif l3 < τ                  # mode-2
+        # # if τ - P*sind(φ) - C*cosd(φ) > 1e-10
+        #     # Drucker-Prager                                                             
+        #     dqdp = -sind(ψ)
+        #     dqdτ =  1.0
+        #     f    = τ - P*sind(φ) - C*cosd(φ) 
+        #     λ̇    = f / (K*Δt*sind(φ)*sind(ψ) + η_ve + ηvp) 
+        #     τc   = τ - η_ve*λ̇*dqdτ
+        #     Pc   = P - K*Δt*λ̇*dqdp
+        end
+    end
+
+    return τc, Pc, λ̇
+end
+
+
+function DruckerPrager(τII, P, ηve, comp, β, Δt, C, ϕ, ψ, ηvp)
+    λ̇    = 0.0
+    F    = τII - C*cosd(ϕ) - P*sind(ϕ )- λ̇*ηvp
+    if F > 1e-10
+        λ̇    = F / (ηve + ηvp + comp*Δt/β*sind(ϕ)*sind(ψ)) 
+        τII -= λ̇ * ηve
+        P   += comp * λ̇*sind(ψ)*Δt/β
+        F    = τII - C*cosd(ϕ) - P*sind(ϕ )- λ̇*ηvp
+        (F>1e-10) && error("Failed return mapping")
+        (τII<0.0) && error("Plasticity without condom")
+    end
+    return τII, P, λ̇
+end
+
+function StrainRateTrial(τII, G, Δt, B, n)
     ε̇II_vis   = B.*τII.^n 
     ε̇II_trial = ε̇II_vis + τII/(2*G*Δt)
     return ε̇II_trial
@@ -30,7 +112,7 @@ function LocalRheology(ε̇, materials, phases, Δ)
 
     # Visco-elastic powerlaw
     for it=1:20
-        r      = ε̇II - StrainRateTrial_Invariant(τII, G, Δ.t, B, n)
+        r      = ε̇II - StrainRateTrial(τII, G, Δ.t, B, n)
         # @show abs(r)
         (abs(r)<ϵ) && break
         ∂ε̇II∂τII = Enzyme.jacobian(Enzyme.Forward, StrainRateTrial_Invariant, τII, G, Δ.t, B, n)
@@ -39,19 +121,12 @@ function LocalRheology(ε̇, materials, phases, Δ)
     end
     isnan(τII) && error()
  
-    # Viscoplastic return mapping
-    λ̇    = 0.0
-    F    = τII - C*cosd(ϕ) - P*sind(ϕ )- λ̇*ηvp
-    if F > 1e-10
-        λ̇    = F / (ηvep + ηvp + comp*Δ.t/β*sind(ϕ)*sind(ψ)) 
-        τII -= λ̇ * ηvep
-        P   += comp * λ̇  * sind(ψ) * Δ.t / β
-        ηvep = τII/(2*ε̇II)
-
-        # τII = C*cosd(ϕ) + P*sind(ϕ) + ηvp*λ̇
-        F    = τII - C*cosd(ϕ) - P*sind(ϕ )- λ̇*ηvp
-        (F>1e-10) && error("Failed return mapping")
-        (τII<0.0) && error("Plasticity without condom")
+    # # Viscoplastic return mapping
+    λ̇ = 0.
+    if materials.plasticity === :DruckerPrager
+        τII, P, λ̇ = DruckerPrager(τII, P, ηvep, comp, β, Δ.t, C, ϕ, ψ, ηvp)
+    elseif materials.plasticity === :Kiss2023
+        τII, P, λ̇ = Kiss2023(τII, P, ηvep, comp, β, Δ.t, C, ϕ, ψ, ηvp, materials.σT[phases], materials.δσT[phases], materials.P1[phases], materials.τ1[phases], materials.P2[phases], materials.τ2[phases])
     end
 
     # Effective viscosity

@@ -17,6 +17,7 @@ using TimerOutputs
     # Material parameters
     materials = ( 
         compressible = true,
+        plasticity   = :none,
         n   = [1.0  1.0],
         η0  = [1e2  1e-1], 
         G   = [1e1  1e1],

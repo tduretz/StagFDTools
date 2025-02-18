@@ -17,18 +17,31 @@ using TimerOutputs
     # Material parameters
     materials = ( 
         compressible = true,
-        plasticity   = :DruckerPrager,
-        n   = [1.0  1.0],
-        η0  = [1e2  1e-1], 
-        G   = [1e1  1e1],
-        C   = [150  150],
-        ϕ   = [30.  30.],
-        ηvp = [0.5  0.5],
-        β   = [1e-2 1e-2],
-        ψ   = [3.0  3.0],
-        B   = [0.0  0.0],
+        plasticity   = :Kiss2023,
+        n   = [1.0    1.0  ],
+        η0  = [1e2    1e-1 ], 
+        G   = [1e1    1e1  ],
+        C   = [150.0  150.0],
+        σT  = [50.0   50.0 ], # Kiss2023
+        δσT = [1.0    1.0  ], # Kiss2023
+        P1  = [0.0    0.0  ], # Kiss2023
+        τ1  = [0.0    0.0  ], # Kiss2023
+        P2  = [0.0    0.0  ], # Kiss2023
+        τ2  = [0.0    0.0  ], # Kiss2023
+        ϕ   = [30.0   30.0 ],
+        ηvp = [0.5    0.5  ],
+        β   = [1e-2   1e-2 ],
+        ψ   = [3.0    3.0  ],
+        B   = [0.0    0.0  ],
     )
-    materials.B   .= (2*materials.η0).^(-materials.n)
+    # For power law
+    @. materials.B  = (2*materials.η0)^(-materials.n)
+    
+    # For Kiss2023: Calculate corner coordinates 
+    @. materials.P1 = -(materials.σT - materials.δσT)                                         # p at the intersection of cutoff and Mode-1
+    @. materials.τ1 = materials.δσT                                                           # τII at the intersection of cutoff and Mode-1
+    @. materials.P2 = -(materials.σT - materials.C*cosd(materials.ϕ))/(1.0-sind(materials.ϕ)) # p at the intersection of Drucker-Prager and Mode-1
+    @. materials.τ2 = materials.P2 + materials.σT                                             # τII at the intersection of Drucker-Prager and Mode-1
 
     # Time steps
     Δt0   = 0.5
