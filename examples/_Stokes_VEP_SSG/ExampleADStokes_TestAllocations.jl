@@ -141,7 +141,6 @@ using ProfileCanvas, BenchmarkTools
     display( @benchmark AssembleMomentum2D_x!($(M, V, Pt, Pt0, λ̇, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)...) )
 
     @info "Benchmark AssembleMomentum2D_y!"
-    ProfileCanvas.@profview AssembleMomentum2D_y!(M, V, Pt, Pt0, λ̇, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
     display( @benchmark AssembleMomentum2D_y!($(M, V, Pt, Pt0, λ̇, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)...) )
    
     @info "Benchmark AssembleContinuity2D!"
