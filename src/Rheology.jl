@@ -65,15 +65,14 @@ function Kiss2023(τ, P, η_ve, comp, β, Δt, C, φ, ψ, ηvp, σ_T, δσ_T, pc
     return τc, Pc, λ̇
 end
 
-
-function DruckerPrager(τII, P, ηve, comp, β, Δt, C, ϕ, ψ, ηvp)
+function DruckerPrager(τII, P, ηve, comp, β, Δt, C, cosϕ, sinϕ, sinψ, ηvp)
     λ̇    = 0.0
-    F    = τII - C*cosd(ϕ) - P*sind(ϕ )- λ̇*ηvp
+    F    = τII - C*cosϕ - P*sinϕ - λ̇*ηvp
     if F > 1e-10
-        λ̇    = F / (ηve + ηvp + comp*Δt/β*sind(ϕ)*sind(ψ)) 
+        λ̇    = F / (ηve + ηvp + comp*Δt/β*sinϕ*sinψ) 
         τII -= λ̇ * ηve
-        P   += comp * λ̇*sind(ψ)*Δt/β
-        F    = τII - C*cosd(ϕ) - P*sind(ϕ )- λ̇*ηvp
+        P   += comp * λ̇*sinψ*Δt/β
+        F    = τII - C*cosϕ - P*sinϕ - λ̇*ηvp
         (F>1e-10) && error("Failed return mapping")
         (τII<0.0) && error("Plasticity without condom")
     end
@@ -89,7 +88,7 @@ end
 function LocalRheology(ε̇, materials, phases, Δ)
 
     # Effective strain rate & pressure
-    ε̇II  = sqrt.(1/2*(ε̇[1]^2 + ε̇[2]^2 + (-ε̇[1]-ε̇[2])^2) + ε̇[3]^2)
+    ε̇II  = sqrt.( (ε̇[1]^2 + ε̇[2]^2 + (-ε̇[1]-ε̇[2])^2)/2 + ε̇[3]^2 )
     P    = ε̇[4]
 
     # Parameters
@@ -99,9 +98,15 @@ function LocalRheology(ε̇, materials, phases, Δ)
     B    = materials.B[phases]
     G    = materials.G[phases]
     C    = materials.C[phases]
+
     ϕ    = materials.ϕ[phases]
+    ψ    = materials.ψ[phases]
+
     ηvp  = materials.ηvp[phases]
-    ψ    = materials.ψ[phases]    
+    sinψ = materials.sinψ[phases]    
+    sinϕ = materials.sinϕ[phases] 
+    cosϕ = materials.cosϕ[phases]    
+
     β    = materials.β[phases]
     comp = materials.compressible
 
@@ -124,7 +129,7 @@ function LocalRheology(ε̇, materials, phases, Δ)
     # # Viscoplastic return mapping
     λ̇ = 0.
     if materials.plasticity === :DruckerPrager
-        τII, P, λ̇ = DruckerPrager(τII, P, ηvep, comp, β, Δ.t, C, ϕ, ψ, ηvp)
+        τII, P, λ̇ = DruckerPrager(τII, P, ηvep, comp, β, Δ.t, C, cosϕ, sinϕ, sinψ, ηvp)
     elseif materials.plasticity === :Kiss2023
         τII, P, λ̇ = Kiss2023(τII, P, ηvep, comp, β, Δ.t, C, ϕ, ψ, ηvp, materials.σT[phases], materials.δσT[phases], materials.P1[phases], materials.τ1[phases], materials.P2[phases], materials.τ2[phases])
     end

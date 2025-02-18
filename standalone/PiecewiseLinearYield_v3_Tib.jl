@@ -1,3 +1,6 @@
+# This is the model of Kiss et al., 2023
+# https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2022JB025341 
+
 using Plots
 
 line1_Dani(p,K,dt,η_ve,η_vp,p1,t1)       = (η_ve + η_vp)/(dt*K + 2.0/3.0*η_vp)*(-p + p1) + t1 
