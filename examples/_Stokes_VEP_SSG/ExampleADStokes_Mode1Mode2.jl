@@ -4,6 +4,14 @@ using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 using TimerOutputs
 
+function line(p, K, Δt, η_ve, ψ, p1, t1)
+    p2 = p1 + K*Δt*sind(ψ)
+    t2 = t1 - η_ve  
+    a  = (t2-t1)/(p2-p1)
+    b  = t2 - a*p2
+    return a*p + b
+end
+
 @views function main(nc)
     #--------------------------------------------#
 
@@ -19,9 +27,9 @@ using TimerOutputs
         compressible = true,
         plasticity   = :Kiss2023,
         n    = [1.0    1.0  ],
-        η0   = [1e2    1e-1 ], 
+        η0   = [1e3    1e-1 ], 
         G    = [1e1    1e1  ],
-        C    = [150.0  150.0],
+        C    = [100.0  100.0],
         σT   = [50.0   50.0 ], # Kiss2023
         δσT  = [10.0   10.0 ], # Kiss2023
         P1   = [0.0    0.0  ], # Kiss2023
@@ -29,7 +37,7 @@ using TimerOutputs
         P2   = [0.0    0.0  ], # Kiss2023
         τ2   = [0.0    0.0  ], # Kiss2023
         ϕ    = [30.0   30.0 ],
-        ηvp  = [0.0    0.0  ],
+        ηvp  = [1.     1.   ],
         β    = [1e-2   1e-2 ],
         ψ    = [3.0    3.0  ],
         B    = [0.0    0.0  ],
@@ -53,10 +61,10 @@ using TimerOutputs
 
     # Time steps
     Δt0   = 0.5
-    nt    = 40
+    nt    = 100
 
     # Newton solver
-    niter = 50
+    niter = 20
     ϵ_nl  = 1e-8
     α     = LinRange(0.05, 1.0, 10)
 
@@ -142,7 +150,7 @@ using TimerOutputs
     # Initial velocity & pressure field
     @views V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
     @views V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
-    @views Pt[inx_c, iny_c ]  .= 10.                 
+    @views Pt[inx_c, iny_c ]  .= 0.                 
     UpdateSolution!(V, Pt, dx, number, type, nc)
 
     # Boundary condition values
@@ -248,10 +256,42 @@ using TimerOutputs
         τII  = sqrt.( 0.5.*(τ.xx[inx_c,iny_c].^2 + τ.yy[inx_c,iny_c].^2) .+ τxyc[inx_c,iny_c].^2 )
         ε̇xyc = av2D(ε̇.xy)
         ε̇II  = sqrt.( 0.5.*(ε̇.xx[inx_c,iny_c].^2 + ε̇.yy[inx_c,iny_c].^2) .+ ε̇xyc[inx_c,iny_c].^2 )
-         
+        
+        p_tr1 = LinRange(-100, 0, 100)
+        p_tr2 = LinRange(0, 200, 100)
+        p_tr3 = LinRange(50, 200, 100)
+
+        K      = 1 / materials.β[1]
+        η_ve   = materials.G[1] * Δ.t
+        pc1    = materials.P1[1]
+        pc2    = materials.P2[1]
+        τc1    = materials.τ1[1]
+        τc2    = materials.τ2[1]
+        φ      = materials.ϕ[1]
+        C      = materials.C[1]
+        ψ      = materials.ψ[1]
+        η_vp   = materials.ηvp[1]
+
+        l1    = line.(p_tr1, K, Δ.t, η_ve, 90., pc1, τc1)
+        l2    = line.(p_tr2, K, Δ.t, η_ve, 90., pc2, τc2)
+        l3    = line.(p_tr3, K, Δ.t, η_ve,   ψ, pc2, τc2)
+    
+        l1D    = line1_Dani.(p_tr1, K, Δ.t, η_ve, η_vp, pc1, τc1)
+        l2D    = line2_Dani.(p_tr2, K, Δ.t, η_ve, η_vp, pc2, τc2)
+        l3D    = line3_Dani.(p_tr3, K, Δ.t, η_ve, η_vp, pc2, τc2, ψ)
+    
+        P_end =  1000
+ 
+        p3 = plot(aspect_ratio=1, xlabel="P", ylabel="τII")
+        p3 = plot!([pc1, pc1, pc2, P_end],[0.0, τc1, τc2, P_end*sind(φ)+C*cosd(φ)], label=:none)
+        p3 = plot!(p_tr1,  l1, label=:none)
+        p3 = plot!(p_tr2,  l2, label=:none)
+        p3 = plot!(p_tr3,  l3, label=:none)
+        p3 = scatter!( Pt[inx_c,iny_c][:], τII[:], label=:none)
+
         p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
-        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt", c=:coolwarm)
-        p3 = heatmap(xc, yc,  log10.(ε̇II)', aspect_ratio=1, xlim=extrema(xc), title="ε̇II", c=:coolwarm)
+        # p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt", c=:coolwarm)
+        p2 = heatmap(xc, yc,  log10.(ε̇II)', aspect_ratio=1, xlim=extrema(xc), title="ε̇II", c=:coolwarm)
         p4 = heatmap(xc, yc,  τII', aspect_ratio=1, xlim=extrema(xc), title="τII", c=:turbo)
         p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright)
         p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
