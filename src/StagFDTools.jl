@@ -44,6 +44,7 @@ module Rheology
     using StaticArrays, Enzyme, StagFDTools.Stokes, StagFDTools, LinearAlgebra
     include("Rheology.jl")
     export LocalRheology, StressVector!, TangentOperator!, LineSearch!
+    export Kiss2023
 end
 
 end # module StagFDTools

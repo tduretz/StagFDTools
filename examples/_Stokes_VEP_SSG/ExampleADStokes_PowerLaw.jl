@@ -18,15 +18,18 @@ using TimerOutputs
     materials = ( 
         compressible = false,
         plasticity   = :none,
-        n   = [10.0 1.0],
-        η0  = [1e2  1e-1], 
-        G   = [1e1  1e1],
-        C   = [1e10 1e10],
-        ϕ   = [30.  30.],
-        ηvp = [0.5  0.5],
-        β   = [1e-2 1e-2],
-        ψ   = [3.   3.],
-        B   = [0.   0.],
+        n    = [10.0   1.0  ],
+        η0   = [1e2    1e-1 ], 
+        G    = [1e1    1e1  ],
+        C    = [1e10   1e10 ],
+        ϕ    = [30.    30.  ],
+        ηvp  = [0.5    0.5  ],
+        β    = [1e-2   1e-2 ],
+        ψ    = [3.     3.   ],
+        B    = [0.     0.   ],
+        cosϕ = [0.0    0.0  ],
+        sinϕ = [0.0    0.0  ],
+        sinψ = [0.0    0.0  ],
     ) 
     materials.B   .= (2*materials.η0).^(-materials.n)
 

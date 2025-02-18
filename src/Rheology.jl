@@ -15,9 +15,9 @@ function Kiss2023(τ, P, η_ve, comp, β, Δt, C, φ, ψ, ηvp, σ_T, δσ_T, pc
     Pc        = P
     τc        = τ
 
-    l1    = line(P, K, Δt, η_ve, π/2, pc1, τc1)
-    l2    = line(P, K, Δt, η_ve, π/2, pc2, τc2)
-    l3    = line(P, K, Δt, η_ve,   ψ, pc2, τc2)
+    l1    = line(P, K, Δt, η_ve, 90.0, pc1, τc1)
+    l2    = line(P, K, Δt, η_ve, 90.0, pc2, τc2)
+    l3    = line(P, K, Δt, η_ve,    ψ, pc2, τc2)
 
     if max(τ - P*sind(φ) - C*cosd(φ) , τ - P - σ_T , - P - (σ_T - δσ_T) ) > 0.0                                                         # check if F_tr > 0
         if τ <= τc1 
@@ -31,34 +31,33 @@ function Kiss2023(τ, P, η_ve, comp, β, Δt, C, φ, ψ, ηvp, σ_T, δσ_T, pc
             domain_pl = 1.0
         elseif τc1 < τ <= l1    
             # corner 1 
-            τc = τ - η_ve*(τ - τc1)/(η_ve)
-            Pc = P - K*Δt*(P - pc1)/(K*Δt)
+            τc = τ - η_ve*(τ - τc1)/(η_ve + ηvp)
+            Pc = P - K*Δt*(P - pc1)/(K*Δt + ηvp)
             domain_pl = 2.0
-        # elseif l1 < τ <= l2            # mode-1
-        # # if τ - P - σ_T > 1e-10
-        #     # tension
-        #     dqdp = -1.0
-        #     dqdτ =  1.0
-        #     f    = τ - P - σ_T 
-        #     λ̇    = f / (K*Δt + η_ve + ηvp) 
-        #     τc   = τ - η_ve*λ̇*dqdτ
-        #     Pc   = P - K*Δt*λ̇*dqdp
-        #     domain_pl = 3.0 
-        #     # @show τc - Pc - σ_T - ηvp*λ̇
-        # elseif l2< τ <= l3 # 2nd corner
-        #     # corner 2
-        #     τc = τ - η_ve*(τ - τc2)/(η_ve)
-        #     Pc = P - K*Δt*(P - pc2)/(K*Δt)
-        #     domain_pl = 4.0
-        # elseif l3 < τ                  # mode-2
-        # # if τ - P*sind(φ) - C*cosd(φ) > 1e-10
-        #     # Drucker-Prager                                                             
-        #     dqdp = -sind(ψ)
-        #     dqdτ =  1.0
-        #     f    = τ - P*sind(φ) - C*cosd(φ) 
-        #     λ̇    = f / (K*Δt*sind(φ)*sind(ψ) + η_ve + ηvp) 
-        #     τc   = τ - η_ve*λ̇*dqdτ
-        #     Pc   = P - K*Δt*λ̇*dqdp
+        elseif l1 < τ <= l2            # mode-1
+            # tension
+            dqdp = -1.0
+            dqdτ =  1.0
+            f    = τ - P - σ_T 
+            λ̇    = f / (K*Δt + η_ve + ηvp) 
+            τc   = τ - η_ve*λ̇*dqdτ
+            Pc   = P - K*Δt*λ̇*dqdp
+            domain_pl = 3.0 
+        elseif l2< τ <= l3 # 2nd corner
+            # corner 2
+            τc = τ - η_ve*(τ - τc2)/(η_ve + ηvp)
+            Pc = P - K*Δt*(P - pc2)/(K*Δt + ηvp)
+            domain_pl = 4.0
+        elseif l3 < τ  
+            # Drucker-Prager                                                              # Drucker Prager
+            dqdp = -sind(ψ)
+            dqdτ =  1.0
+            f    = τ - P*sind(φ) - C*cosd(φ) 
+            λ̇    = f / (K*Δt*sind(φ)*sind(ψ) + η_ve + ηvp) 
+            τc   = τ - η_ve*λ̇*dqdτ
+            Pc   = P - K*Δt*λ̇*dqdp
+            domain_pl = 5.0 
+            # @show f
         end
     end
 
@@ -111,7 +110,7 @@ function LocalRheology(ε̇, materials, phases, Δ)
     comp = materials.compressible
 
     # Initial guess
-    η    =  (η0 .* ε̇II.^(1 ./ n .- 1.0 ))[1]
+    η    = (η0 .* ε̇II.^(1 ./ n .- 1.0 ))[1]
     ηvep = inv(1/η + 1/(G*Δ.t))
     τII  = 2*ηvep*ε̇II
 
@@ -120,7 +119,7 @@ function LocalRheology(ε̇, materials, phases, Δ)
         r      = ε̇II - StrainRateTrial(τII, G, Δ.t, B, n)
         # @show abs(r)
         (abs(r)<ϵ) && break
-        ∂ε̇II∂τII = Enzyme.jacobian(Enzyme.Forward, StrainRateTrial_Invariant, τII, G, Δ.t, B, n)
+        ∂ε̇II∂τII = Enzyme.jacobian(Enzyme.Forward, StrainRateTrial, τII, G, Δ.t, B, n)
         ∂τII∂ε̇II = inv(∂ε̇II∂τII[1])
         τII     += ∂τII∂ε̇II*r
     end

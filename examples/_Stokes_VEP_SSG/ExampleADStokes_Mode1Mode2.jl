@@ -23,13 +23,13 @@ using TimerOutputs
         G    = [1e1    1e1  ],
         C    = [150.0  150.0],
         σT   = [50.0   50.0 ], # Kiss2023
-        δσT  = [1.0    1.0  ], # Kiss2023
+        δσT  = [10.0   10.0 ], # Kiss2023
         P1   = [0.0    0.0  ], # Kiss2023
         τ1   = [0.0    0.0  ], # Kiss2023
         P2   = [0.0    0.0  ], # Kiss2023
         τ2   = [0.0    0.0  ], # Kiss2023
         ϕ    = [30.0   30.0 ],
-        ηvp  = [0.5    0.5  ],
+        ηvp  = [0.0    0.0  ],
         β    = [1e-2   1e-2 ],
         ψ    = [3.0    3.0  ],
         B    = [0.0    0.0  ],
@@ -45,7 +45,7 @@ using TimerOutputs
     @. materials.sinϕ  = sind(materials.ϕ)
     @. materials.sinψ  = sind(materials.ψ)
     
-    # For Kiss2023: Calculate corner coordinates 
+    # For Kiss2023: calculate corner coordinates 
     @. materials.P1 = -(materials.σT - materials.δσT)                                         # p at the intersection of cutoff and Mode-1
     @. materials.τ1 = materials.δσT                                                           # τII at the intersection of cutoff and Mode-1
     @. materials.P2 = -(materials.σT - materials.C*cosd(materials.ϕ))/(1.0-sind(materials.ϕ)) # p at the intersection of Drucker-Prager and Mode-1
@@ -56,7 +56,7 @@ using TimerOutputs
     nt    = 40
 
     # Newton solver
-    niter = 20
+    niter = 50
     ϵ_nl  = 1e-8
     α     = LinRange(0.05, 1.0, 10)
 
@@ -250,7 +250,7 @@ using TimerOutputs
         ε̇II  = sqrt.( 0.5.*(ε̇.xx[inx_c,iny_c].^2 + ε̇.yy[inx_c,iny_c].^2) .+ ε̇xyc[inx_c,iny_c].^2 )
          
         p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
-        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt")
+        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt", c=:coolwarm)
         p3 = heatmap(xc, yc,  log10.(ε̇II)', aspect_ratio=1, xlim=extrema(xc), title="ε̇II", c=:coolwarm)
         p4 = heatmap(xc, yc,  τII', aspect_ratio=1, xlim=extrema(xc), title="τII", c=:turbo)
         p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright)
