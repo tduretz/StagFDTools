@@ -18,24 +18,32 @@ using TimerOutputs
     materials = ( 
         compressible = true,
         plasticity   = :Kiss2023,
-        n   = [1.0    1.0  ],
-        η0  = [1e2    1e-1 ], 
-        G   = [1e1    1e1  ],
-        C   = [150.0  150.0],
-        σT  = [50.0   50.0 ], # Kiss2023
-        δσT = [1.0    1.0  ], # Kiss2023
-        P1  = [0.0    0.0  ], # Kiss2023
-        τ1  = [0.0    0.0  ], # Kiss2023
-        P2  = [0.0    0.0  ], # Kiss2023
-        τ2  = [0.0    0.0  ], # Kiss2023
-        ϕ   = [30.0   30.0 ],
-        ηvp = [0.5    0.5  ],
-        β   = [1e-2   1e-2 ],
-        ψ   = [3.0    3.0  ],
-        B   = [0.0    0.0  ],
+        n    = [1.0    1.0  ],
+        η0   = [1e2    1e-1 ], 
+        G    = [1e1    1e1  ],
+        C    = [150.0  150.0],
+        σT   = [50.0   50.0 ], # Kiss2023
+        δσT  = [1.0    1.0  ], # Kiss2023
+        P1   = [0.0    0.0  ], # Kiss2023
+        τ1   = [0.0    0.0  ], # Kiss2023
+        P2   = [0.0    0.0  ], # Kiss2023
+        τ2   = [0.0    0.0  ], # Kiss2023
+        ϕ    = [30.0   30.0 ],
+        ηvp  = [0.5    0.5  ],
+        β    = [1e-2   1e-2 ],
+        ψ    = [3.0    3.0  ],
+        B    = [0.0    0.0  ],
+        cosϕ = [0.0    0.0  ],
+        sinϕ = [0.0    0.0  ],
+        sinψ = [0.0    0.0  ],
     )
     # For power law
     @. materials.B  = (2*materials.η0)^(-materials.n)
+
+    # For plasticity
+    @. materials.cosϕ  = cosd(materials.ϕ)
+    @. materials.sinϕ  = sind(materials.ϕ)
+    @. materials.sinψ  = sind(materials.ψ)
     
     # For Kiss2023: Calculate corner coordinates 
     @. materials.P1 = -(materials.σT - materials.δσT)                                         # p at the intersection of cutoff and Mode-1
@@ -92,7 +100,12 @@ using TimerOutputs
         Fields(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt)), 
         Fields(ExtendableSparseMatrix(nPt, nVx), ExtendableSparseMatrix(nPt, nVy), ExtendableSparseMatrix(nPt, nPt))
     )
-    dx   = zeros(nVx + nVy + nPt)
+    𝐊  = ExtendableSparseMatrix(nVx + nVy, nVx + nVy)
+    𝐐  = ExtendableSparseMatrix(nVx + nVy, nPt)
+    𝐐ᵀ = ExtendableSparseMatrix(nPt, nVx + nVy)
+    𝐏  = ExtendableSparseMatrix(nPt, nPt)
+    dx = zeros(nVx + nVy + nPt)
+    r  = zeros(nVx + nVy + nPt)
 
     #--------------------------------------------#
     # Intialise field
@@ -192,7 +205,6 @@ using TimerOutputs
 
             #--------------------------------------------#
             # Set global residual vector
-            r = zeros(nVx + nVy + nPt)
             SetRHS!(r, R, number, type, nc)
 
             #--------------------------------------------#
@@ -205,10 +217,10 @@ using TimerOutputs
 
             #--------------------------------------------# 
             # Stokes operator as block matrices
-            𝐊  = [M.Vx.Vx M.Vx.Vy; M.Vy.Vx M.Vy.Vy]
-            𝐐  = [M.Vx.Pt; M.Vy.Pt]
-            𝐐ᵀ = [M.Pt.Vx M.Pt.Vy]
-            𝐏  = M.Pt.Pt
+            𝐊  .= [M.Vx.Vx M.Vx.Vy; M.Vy.Vx M.Vy.Vy]
+            𝐐  .= [M.Vx.Pt; M.Vy.Pt]
+            𝐐ᵀ .= [M.Pt.Vx M.Pt.Vy]
+            𝐏  .= M.Pt.Pt
             
             #--------------------------------------------#
      

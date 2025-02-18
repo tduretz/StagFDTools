@@ -79,7 +79,12 @@ using TimerOutputs
         Fields(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt)), 
         Fields(ExtendableSparseMatrix(nPt, nVx), ExtendableSparseMatrix(nPt, nVy), ExtendableSparseMatrix(nPt, nPt))
     )
-    dx   = zeros(nVx + nVy + nPt)
+    𝐊  = ExtendableSparseMatrix(nVx + nVy, nVx + nVy)
+    𝐐  = ExtendableSparseMatrix(nVx + nVy, nPt)
+    𝐐ᵀ = ExtendableSparseMatrix(nPt, nVx + nVy)
+    𝐏  = ExtendableSparseMatrix(nPt, nPt)
+    dx = zeros(nVx + nVy + nPt)
+    r  = zeros(nVx + nVy + nPt)
 
     #--------------------------------------------#
     # Intialise field
@@ -177,7 +182,6 @@ using TimerOutputs
 
             #--------------------------------------------#
             # Set global residual vector
-            r = zeros(nVx + nVy + nPt)
             SetRHS!(r, R, number, type, nc)
 
             #--------------------------------------------#
@@ -190,10 +194,10 @@ using TimerOutputs
 
             #--------------------------------------------# 
             # Stokes operator as block matrices
-            𝐊  = [M.Vx.Vx M.Vx.Vy; M.Vy.Vx M.Vy.Vy]
-            𝐐  = [M.Vx.Pt; M.Vy.Pt]
-            𝐐ᵀ = [M.Pt.Vx M.Pt.Vy]
-            𝐏  = [M.Pt.Pt;]             
+            𝐊  .= [M.Vx.Vx M.Vx.Vy; M.Vy.Vx M.Vy.Vy]
+            𝐐  .= [M.Vx.Pt; M.Vy.Pt]
+            𝐐ᵀ .= [M.Pt.Vx M.Pt.Vy]
+            𝐏  .= [M.Pt.Pt;]             
             
             #--------------------------------------------#
      
