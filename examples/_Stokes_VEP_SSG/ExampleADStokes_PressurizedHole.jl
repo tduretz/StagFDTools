@@ -4,26 +4,47 @@ using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 using TimerOutputs
 
+function line(p, K, Δt, η_ve, ψ, p1, t1)
+    p2 = p1 + K*Δt*sind(ψ)
+    t2 = t1 - η_ve  
+    a  = (t2-t1)/(p2-p1)
+    b  = t2 - a*p2
+    return a*p + b
+end
+
 @views function main(nc)
     #--------------------------------------------#
 
-    # Resolution
+    # Intialise field
+    radius = 0.1
+
+    Δt0 = 0.5
+    L   = (x=1.0, y=1.0)
+    Δ   = (x=L.x/nc.x, y=L.y/nc.y, t = Δt0)
+    xc = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
+    yc = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
 
     # Boundary loading type
     config = :free_slip
-    D_BC   = @SMatrix( [ -1. 0.;
-                          0  1 ])
+    D_BC   = @SMatrix( [ -1e-3    0.;   # Make background shear rate negligible
+                          0    1e-3 ])
 
     # Material parameters
     materials = ( 
         compressible = true,
-        plasticity   = :DruckerPrager,
+        plasticity   = :Kiss2023,
         n    = [1.0    1.0  ],
-        η0   = [1e2    1e-1 ], 
+        η0   = [1e3    1e-1 ], 
         G    = [1e1    1e1  ],
-        C    = [150    150  ],
-        ϕ    = [30.    30.  ],
-        ηvp  = [0.5    0.5  ],
+        C    = [100.0  100.0],
+        σT   = [50.0   50.0 ], # Kiss2023
+        δσT  = [10.0   10.0 ], # Kiss2023
+        P1   = [0.0    0.0  ], # Kiss2023
+        τ1   = [0.0    0.0  ], # Kiss2023
+        P2   = [0.0    0.0  ], # Kiss2023
+        τ2   = [0.0    0.0  ], # Kiss2023
+        ϕ    = [30.0   30.0 ],
+        ηvp  = [0.1    0.1  ],
         β    = [1e-2   1e-2 ],
         ψ    = [3.0    3.0  ],
         B    = [0.0    0.0  ],
@@ -32,16 +53,22 @@ using TimerOutputs
         sinψ = [0.0    0.0  ],
     )
     # For power law
-    materials.B   .= (2*materials.η0).^(-materials.n)
+    @. materials.B  = (2*materials.η0)^(-materials.n)
 
     # For plasticity
     @. materials.cosϕ  = cosd(materials.ϕ)
     @. materials.sinϕ  = sind(materials.ϕ)
     @. materials.sinψ  = sind(materials.ψ)
+    
+    # For Kiss2023: calculate corner coordinates 
+    @. materials.P1 = -(materials.σT - materials.δσT)                                         # p at the intersection of cutoff and Mode-1
+    @. materials.τ1 = materials.δσT                                                           # τII at the intersection of cutoff and Mode-1
+    @. materials.P2 = -(materials.σT - materials.C*cosd(materials.ϕ))/(1.0-sind(materials.ϕ)) # p at the intersection of Drucker-Prager and Mode-1
+    @. materials.τ2 = materials.P2 + materials.σT                                             # τII at the intersection of Drucker-Prager and Mode-1
 
     # Time steps
     Δt0   = 0.5
-    nt    = 40
+    nt    = 245
 
     # Newton solver
     niter = 20
@@ -61,6 +88,9 @@ using TimerOutputs
         fill(:out, (nc.x+2, nc.y+2)),
     )
     set_boundaries_template!(type, config, nc)
+
+    # Add a constrant pressure within a circular region
+    @views type.Pt[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= radius^2] .= :constant
 
     #--------------------------------------------#
     # Equation numbering
@@ -96,9 +126,6 @@ using TimerOutputs
     r  = zeros(nVx + nVy + nPt)
 
     #--------------------------------------------#
-    # Intialise field
-    L   = (x=1.0, y=1.0)
-    Δ   = (x=L.x/nc.x, y=L.y/nc.y, t = Δt0)
 
     # Allocations
     R       = (x  = zeros(size_x...), y  = zeros(size_y...), p  = zeros(size_c...))
@@ -130,7 +157,8 @@ using TimerOutputs
     # Initial velocity & pressure field
     @views V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
     @views V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
-    @views Pt[inx_c, iny_c ]  .= 10.                 
+    @views Pt[inx_c, iny_c ]  .= 0.
+    @views Pt[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 1.0     
     UpdateSolution!(V, Pt, dx, number, type, nc)
 
     # Boundary condition values
@@ -147,20 +175,22 @@ using TimerOutputs
     end
 
     # Set material geometry 
-    @views phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
-    @views phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= 0.1^2] .= 2
+    # @views phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
+    # @views phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= 0.1^2] .= 2
 
     #--------------------------------------------#
 
     rvec = zeros(length(α))
     err  = (x = zeros(niter), y = zeros(niter), p = zeros(niter))
     to   = TimerOutput()
+    time = 0.0
 
     #--------------------------------------------#
 
     anim = @animate for it=1:nt
 
-        @printf("Step %04d\n", it)
+        time += Δ.t
+        @printf("Step %04d --- time = %1.3f \n", it, time)
         fill!(err.x, 0e0)
         fill!(err.y, 0e0)
         fill!(err.p, 0e0)
@@ -170,6 +200,9 @@ using TimerOutputs
         τ0.yy .= τ.yy
         τ0.xy .= τ.xy
         Pt0   .= Pt
+
+        # Update pressure in the hole
+        @views Pt[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= radius^2] .= 1 + 5*time     
 
         for iter=1:niter
 
@@ -237,51 +270,51 @@ using TimerOutputs
         ε̇xyc = av2D(ε̇.xy)
         ε̇II  = sqrt.( 0.5.*(ε̇.xx[inx_c,iny_c].^2 + ε̇.yy[inx_c,iny_c].^2 + (-ε̇.xx[inx_c,iny_c]-ε̇.yy[inx_c,iny_c]).^2) .+ ε̇xyc[inx_c,iny_c].^2 )
         
+        p_tr1 = LinRange(-100, 0, 100)
+        p_tr2 = LinRange(0, 200, 100)
+        p_tr3 = LinRange(50, 200, 100)
+
+        K      = 1 / materials.β[1]
+        η_ve   = materials.G[1] * Δ.t
+        pc1    = materials.P1[1]
+        pc2    = materials.P2[1]
+        τc1    = materials.τ1[1]
+        τc2    = materials.τ2[1]
+        φ      = materials.ϕ[1]
+        C      = materials.C[1]
+        ψ      = materials.ψ[1]
+        η_vp   = materials.ηvp[1]
+
+        l1    = line.(p_tr1, K, Δ.t, η_ve, 90., pc1, τc1)
+        l2    = line.(p_tr2, K, Δ.t, η_ve, 90., pc2, τc2)
+        l3    = line.(p_tr3, K, Δ.t, η_ve,   ψ, pc2, τc2)
+    
+        P_end =  600
+
+        p3 = plot(aspect_ratio=1, xlabel="P", ylabel="τII")
+        p3 = plot!([pc1, pc1, pc2, P_end],[0.0, τc1, τc2, P_end*sind(φ)+C*cosd(φ)], label=:none)
+        p3 = plot!(p_tr1,  l1, label=:none)
+        p3 = plot!(p_tr2,  l2, label=:none)
+        p3 = plot!(p_tr3,  l3, label=:none)
+        p3 = scatter!( Pt[inx_c,iny_c][:], τII[:], label=:none)
+
         p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
-        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt")
-        p3 = heatmap(xc, yc,  log10.(ε̇II)', aspect_ratio=1, xlim=extrema(xc), title="ε̇II", c=:coolwarm)
-        p4 = heatmap(xc, yc,  τII', aspect_ratio=1, xlim=extrema(xc), title="τII", c=:turbo)
+        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt", c=:coolwarm, clims=(0,600))
+        p4 = heatmap(xc, yc,  log10.(ε̇II)', aspect_ratio=1, xlim=extrema(xc), title="ε̇II", c=:coolwarm)
+        # p4 = heatmap(xc, yc,  τII', aspect_ratio=1, xlim=extrema(xc), title="τII", c=:turbo)
         p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright)
         p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
         p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
         p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
         display(plot(p1, p2, p3, p4, layout=(2,2)))
 
-        @show (3/materials.β[1] - 2*materials.G[1])/(2*(3/materials.β[1] + 2*materials.G[1]))
-
     end
-    gif(anim, "./results/ShearBanding.gif", fps = 5)
+    gif(anim, "./results/PressurizedHole.gif", fps = 15)
 
     display(to)
     
 end
 
-
 let
     main((x = 100, y = 100))
 end
-
-# ### NEW
-# ────────────────────────────────────────────────────────────────────────
-#                                Time                    Allocations      
-#                       ───────────────────────   ────────────────────────
-#   Tot / % measured:        1.42s /  15.1%            259MiB /  19.6%
-
-# Section       ncalls     time    %tot     avg     alloc    %tot      avg
-# ────────────────────────────────────────────────────────────────────────
-# Line search       26    118ms   54.9%  4.53ms   5.25MiB   10.3%   207KiB
-# Assembly          26   58.9ms   27.5%  2.26ms   45.4MiB   89.4%  1.75MiB
-# Residual          43   37.9ms   17.7%   881μs    120KiB    0.2%  2.78KiB
-
-# ### ORIGINAL
-# ────────────────────────────────────────────────────────────────────────
-#                                Time                    Allocations      
-#                       ───────────────────────   ────────────────────────
-#   Tot / % measured:        5.03s /  71.9%           5.10GiB /  96.0%
-
-# Section       ncalls     time    %tot     avg     alloc    %tot      avg
-# ────────────────────────────────────────────────────────────────────────
-# Line search       26    2.05s   56.6%  78.7ms   3.78GiB   77.1%   149MiB
-# Assembly          26    1.06s   29.3%  40.8ms    511MiB   10.2%  19.6MiB
-# Residual          43    509ms   14.1%  11.8ms    639MiB   12.7%  14.9MiB
-# ────────────────────────────────────────────────────────────────────────

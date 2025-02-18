@@ -113,11 +113,11 @@ function main()
     p = plot(aspect_ratio=1)
     p = plot!([pc1, pc1, pc2, P_end],[0.0, τc1, τc2, P_end*sin(φ)+C*cos(φ)])
     p = plot!(p_tr1, l1, label="l1")
-    p = plot!(p_tr1, l1D, label="l1D")
+    # p = plot!(p_tr1, l1D, label="l1D")
     p = plot!(p_tr2,  l2, label="l2")
-    p = plot!(p_tr2, l2D, label="l2D")
+    # p = plot!(p_tr2, l2D, label="l2D")
     p = plot!(p_tr3,  l3, label="l3")
-    p = plot!(p_tr3, l3D, label="l3D")
+    # p = plot!(p_tr3, l3D, label="l3D")
 
     comp = true
     β    = 1/K

@@ -253,9 +253,9 @@ end
         #--------------------------------------------#
 
         τxyc = av2D(τ.xy)
-        τII  = sqrt.( 0.5.*(τ.xx[inx_c,iny_c].^2 + τ.yy[inx_c,iny_c].^2) .+ τxyc[inx_c,iny_c].^2 )
+        τII  = sqrt.( 0.5.*(τ.xx[inx_c,iny_c].^2 + τ.yy[inx_c,iny_c].^2 + (-τ.xx[inx_c,iny_c]-τ.yy[inx_c,iny_c]).^2) .+ τxyc[inx_c,iny_c].^2 )
         ε̇xyc = av2D(ε̇.xy)
-        ε̇II  = sqrt.( 0.5.*(ε̇.xx[inx_c,iny_c].^2 + ε̇.yy[inx_c,iny_c].^2) .+ ε̇xyc[inx_c,iny_c].^2 )
+        ε̇II  = sqrt.( 0.5.*(ε̇.xx[inx_c,iny_c].^2 + ε̇.yy[inx_c,iny_c].^2 + (-ε̇.xx[inx_c,iny_c]-ε̇.yy[inx_c,iny_c]).^2) .+ ε̇xyc[inx_c,iny_c].^2 )
         
         p_tr1 = LinRange(-100, 0, 100)
         p_tr2 = LinRange(0, 200, 100)
@@ -275,10 +275,6 @@ end
         l1    = line.(p_tr1, K, Δ.t, η_ve, 90., pc1, τc1)
         l2    = line.(p_tr2, K, Δ.t, η_ve, 90., pc2, τc2)
         l3    = line.(p_tr3, K, Δ.t, η_ve,   ψ, pc2, τc2)
-    
-        l1D    = line1_Dani.(p_tr1, K, Δ.t, η_ve, η_vp, pc1, τc1)
-        l2D    = line2_Dani.(p_tr2, K, Δ.t, η_ve, η_vp, pc2, τc2)
-        l3D    = line3_Dani.(p_tr3, K, Δ.t, η_ve, η_vp, pc2, τc2, ψ)
     
         P_end =  1000
  

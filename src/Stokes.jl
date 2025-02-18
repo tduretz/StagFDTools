@@ -482,12 +482,14 @@ end
 function ResidualContinuity2D!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
                 
     for j in 2:size(R.p,2)-1, i in 2:size(R.p,1)-1
-        Vx_loc     = SMatrix{3,2}(      V.x[ii,jj] for ii in i:i+2, jj in j:j+1)
-        Vy_loc     = SMatrix{2,3}(      V.y[ii,jj] for ii in i:i+1, jj in j:j+2)
-        bcv_loc    = (;)
-        type_loc   = (;)
-        D          = (;)
-        R.p[i,j]   = Continuity(Vx_loc, Vy_loc, P[i,j], P0[i,j], D, phases.c[i,j], materials, type_loc, bcv_loc, Δ)
+        if type.Pt[i,j] !== :constant 
+            Vx_loc     = SMatrix{3,2}(      V.x[ii,jj] for ii in i:i+2, jj in j:j+1)
+            Vy_loc     = SMatrix{2,3}(      V.y[ii,jj] for ii in i:i+1, jj in j:j+2)
+            bcv_loc    = (;)
+            type_loc   = (;)
+            D          = (;)
+            R.p[i,j]   = Continuity(Vx_loc, Vy_loc, P[i,j], P0[i,j], D, phases.c[i,j], materials, type_loc, bcv_loc, Δ)
+        end
     end
     return nothing
 end
@@ -531,7 +533,9 @@ function AssembleContinuity2D!(K, V, P, Pt0, ΔP, τ0, 𝐷, phases, materials, 
         end
 
         # Pt --- Pt
-        K[3][3][num.Pt[i,j], num.Pt[i,j]] = ∂R∂P[1,1]
+        if num.Pt[i,j]>0
+            K[3][3][num.Pt[i,j], num.Pt[i,j]] = ∂R∂P[1,1]
+        end
     end
     return nothing
 end
@@ -941,8 +945,15 @@ function Numbering!(N, type, nc)
     neq = maximum(N.Vy)
 
     ############ Numbering Pt ############
-    neq_Pt                     = nc.x * nc.y
-    N.Pt[2:end-1,2:end-1] .= reshape((1:neq_Pt) .+ 0*neq, nc.x, nc.y)
+    # neq_Pt                     = nc.x * nc.y
+    # N.Pt[2:end-1,2:end-1] .= reshape((1:neq_Pt) .+ 0*neq, nc.x, nc.y)
+    ii = 0
+    for j=1:nc.y, i=1:nc.x
+        if type.Pt[i+1,j+1] != :constant
+            ii += 1
+            N.Pt[i+1,j+1] = ii
+        end
+    end
 
     if periodic_west
         N.Pt[1,:]   .= N.Pt[end-1,:]

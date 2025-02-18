@@ -57,7 +57,6 @@ function Kiss2023(τ, P, η_ve, comp, β, Δt, C, φ, ψ, ηvp, σ_T, δσ_T, pc
             τc   = τ - η_ve*λ̇*dqdτ
             Pc   = P - K*Δt*λ̇*dqdp
             domain_pl = 5.0 
-            # @show f
         end
     end
 

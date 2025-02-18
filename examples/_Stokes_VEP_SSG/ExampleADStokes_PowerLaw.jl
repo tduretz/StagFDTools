@@ -152,7 +152,7 @@ using TimerOutputs
 
     #--------------------------------------------#
 
-    for it=1:nt
+    anim = @animate for it=1:nt
 
         @printf("Step %04d\n", it)
         fill!(err.x, 0e0)
@@ -227,9 +227,9 @@ using TimerOutputs
         #--------------------------------------------#
 
         τxyc = av2D(τ.xy)
-        τII  = sqrt.( 0.5.*(τ.xx[inx_c,iny_c].^2 + τ.yy[inx_c,iny_c].^2) .+ τxyc[inx_c,iny_c].^2 )
+        τII  = sqrt.( 0.5.*(τ.xx[inx_c,iny_c].^2 + τ.yy[inx_c,iny_c].^2 + (-τ.xx[inx_c,iny_c]-τ.yy[inx_c,iny_c]).^2) .+ τxyc[inx_c,iny_c].^2 )
         ε̇xyc = av2D(ε̇.xy)
-        ε̇II  = sqrt.( 0.5.*(ε̇.xx[inx_c,iny_c].^2 + ε̇.yy[inx_c,iny_c].^2) .+ ε̇xyc[inx_c,iny_c].^2 )
+        ε̇II  = sqrt.( 0.5.*(ε̇.xx[inx_c,iny_c].^2 + ε̇.yy[inx_c,iny_c].^2 + (-ε̇.xx[inx_c,iny_c]-ε̇.yy[inx_c,iny_c]).^2) .+ ε̇xyc[inx_c,iny_c].^2 )
         
         p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
         p2 = heatmap(xv, yv,  η.v[inx_v,iny_v]', aspect_ratio=1, xlim=extrema(xv), title="ηv")
@@ -242,6 +242,7 @@ using TimerOutputs
         display(plot(p1, p2, p3, p4, layout=(2,2)))
 
     end
+    gif(anim, "./results/PowerLaw.gif", fps = 5)
 
     display(to)
     
@@ -249,5 +250,5 @@ end
 
 
 let
-    main((x = 40, y = 40))
+    main((x = 100, y = 100))
 end
