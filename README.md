@@ -81,14 +81,28 @@ This package aims at generating flexible FD stencils that can interoperate with 
   ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅ 
   ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅    ⋅ 
 ```
+## Power-law Stokes (standard staggered grid - asymmetric operator)
 
-# Power-law Stokes (standard stagerred grid - asymmetric operator)
-![image](https://github.com/user-attachments/assets/e29d72a5-93cf-4cc5-84a1-c353a05a4edb)
+![image](./results/PowerLaw.gif)
+<!-- 
+![image](https://github.com/user-attachments/assets/e29d72a5-93cf-4cc5-84a1-c353a05a4edb) -->
 
-# Power-law Stokes (full stagerred grid - symmetric operator)
+## Shear banding with compressibility and dilatancy
+![image](./results/ShearBanding.gif)
+
+## Pressurized holed with mixed-mode plasticity (see Kiss et al., 2023)
+![image](./results/PressurizedHole.gif)
+
+## Host-inclusion decompression with Drucker-Prager plasticity
+![image](./results/HostInclusion_DruckerPrager.gif)
+
+## Host-inclusion decompression with tensile plasticity
+![image](./results/HostInclusion_tensile.gif)
+
+## Power-law Stokes (full staggered grid - symmetric operator)
 ![image](https://github.com/user-attachments/assets/9c1e02d5-6b7f-4764-a99d-12a87e28ea21)
 
-# Anisotropic Stokes (full stagerred grid - symmetric operator)
+## Anisotropic Stokes (full staggered grid - symmetric operator)
 ![image](https://github.com/user-attachments/assets/3df8215a-0eca-4e3e-b01a-85a501a4bacb)
 
 # Two-phase flow

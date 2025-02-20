@@ -13,16 +13,16 @@ let
     )
     # -------- Vx -------- #
     type.Vx[2:end-1,3:end-2] .= :in       
-    type.Vx[2,2:end-1]       .= :Dir_conf 
-    type.Vx[end-1,2:1:end-1] .= :Dir_conf 
+    type.Vx[2,2:end-1]       .= :Dirichlet_normal 
+    type.Vx[end-1,2:1:end-1] .= :Dirichlet_normal 
     type.Vx[2:end-1,2]       .= :Dirichlet
     type.Vx[2:end-1,end-1]   .= :Dirichlet
     # -------- Vy -------- #
     type.Vy[2:end-2,2:end-1] .= :in       
     type.Vy[2,2:end-1]       .= :Dirichlet
     type.Vy[end-1,2:end-1]   .= :Dirichlet
-    type.Vy[2:end-1,2]       .= :Dir_conf 
-    type.Vy[2:end-1,end-1]   .= :Dir_conf 
+    type.Vy[2:end-1,2]       .= :Dirichlet_normal 
+    type.Vy[2:end-1,end-1]   .= :Dirichlet_normal 
     # -------- Pt -------- #
     type.Pt[2:end-1,2:end-1] .= :in
     

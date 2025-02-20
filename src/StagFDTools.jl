@@ -6,7 +6,7 @@ include("operators.jl")
 export inn, inn_x, inn_y, av, harm, ∂x, ∂y, ∂x_inn, ∂y_inn, ∂kk
 
 include("Utils.jl")
-export printxy
+export printxy, av2D
 
 include("Solvers.jl")
 export DecoupledSolver
@@ -17,9 +17,12 @@ module Poisson
     export Fields, Ranges, Numbering!, SparsityPattern!
 end
 module Stokes
-    using StaticArrays, ExtendableSparse, StaticArrays
+    using StaticArrays, ExtendableSparse, StaticArrays, Enzyme, StagFDTools
     include("Stokes.jl")
-    export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx!, SetBCVy!
+    export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx!, SetBCVy!, set_boundaries_template!, SetBCVx1, SetBCVy1
+    export Continuity, SMomentum_x_Generic, SMomentum_y_Generic
+    export ResidualContinuity2D!, ResidualMomentum2D_x!, ResidualMomentum2D_y!
+    export AssembleContinuity2D!, AssembleMomentum2D_x!, AssembleMomentum2D_y!
 end
 
 module StokesFSG
@@ -35,6 +38,13 @@ module TwoPhases
     using StaticArrays, ExtendableSparse, StaticArrays
     include("TwoPhases.jl")
     export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx!, SetBCVy!
+end
+
+module Rheology
+    using StaticArrays, Enzyme, StagFDTools.Stokes, StagFDTools, LinearAlgebra
+    include("Rheology.jl")
+    export LocalRheology, StressVector!, TangentOperator!, LineSearch!
+    export Kiss2023
 end
 
 end # module StagFDTools

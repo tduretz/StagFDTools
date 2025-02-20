@@ -117,7 +117,7 @@ function TangentOperator!(𝐷, 𝐷_ctl, ε̇, V, Pt, type, BC, materials, phas
         ε̇vec  = @SVector([ε̇xx[1], ε̇yy[1], ε̇̄xy[1]])
         
         # Tangent operator used for Newton Linearisation
-        jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, Rheology!, ε̇vec, Const(materials), Const(phases.c[i,j]))
+        jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector!, ε̇vec, Const(materials), Const(phases.c[i,j]))
         
         # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
         𝐷_ctl.c[i,j][:,1] .= jac.derivs[1][1][1]
@@ -154,7 +154,7 @@ function TangentOperator!(𝐷, 𝐷_ctl, ε̇, V, Pt, type, BC, materials, phas
         ε̇vec = @SVector([ε̇̄xx[1], ε̇̄yy[1], ε̇xy[1]])
         
         # Tangent operator used for Newton Linearisation
-        jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, Rheology!, ε̇vec, Const(materials), Const(phases.v[i,j]))
+        jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector!, ε̇vec, Const(materials), Const(phases.v[i,j]))
 
         # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
         𝐷_ctl.v[i,j][:,1] .= jac.derivs[1][1][1]
@@ -416,7 +416,7 @@ function SetBCVy1!(Vy, typey, bcy, Δ)
     end
 end
 
-function PowerLaw(ε̇, materials, phases)
+function LocalRheology(ε̇, materials, phases)
     ε̇II = sqrt.(1/2*(ε̇[1].^2 .+ ε̇[2].^2) + ε̇[3].^2)
     n   = materials.n[phases]
     η0  = materials.η0[phases]
@@ -424,8 +424,8 @@ function PowerLaw(ε̇, materials, phases)
     return η
 end
 
-function Rheology!(ε̇, materials, phases) 
-    η   =  PowerLaw(ε̇, materials, phases)
+function StressVector!(ε̇, materials, phases) 
+    η   =  LocalRheology(ε̇, materials, phases)
     τ   = @SVector([2 * η * ε̇[1],
                     2 * η * ε̇[2],
                     2 * η * ε̇[3]])
@@ -456,16 +456,16 @@ end
     )
     # -------- Vx -------- #
     type.Vx[inx_Vx,iny_Vx]  .= :in       
-    type.Vx[2,iny_Vx]       .= :Dir_conf 
-    type.Vx[end-1,iny_Vx]   .= :Dir_conf 
+    type.Vx[2,iny_Vx]       .= :Dirichlet_normal 
+    type.Vx[end-1,iny_Vx]   .= :Dirichlet_normal 
     type.Vx[inx_Vx,2]       .= :Dirichlet
     type.Vx[inx_Vx,end-1]   .= :Dirichlet
     # -------- Vy -------- #
     type.Vy[inx_Vy,iny_Vy]  .= :in       
     type.Vy[2,iny_Vy]       .= :Dirichlet
     type.Vy[end-1,iny_Vy]   .= :Dirichlet
-    type.Vy[inx_Vy,2]       .= :Dir_conf 
-    type.Vy[inx_Vy,end-1]   .= :Dir_conf 
+    type.Vy[inx_Vy,2]       .= :Dirichlet_normal 
+    type.Vy[inx_Vy,end-1]   .= :Dirichlet_normal 
     # -------- Pt -------- #
     type.Pt[2:end-1,2:end-1] .= :in
 

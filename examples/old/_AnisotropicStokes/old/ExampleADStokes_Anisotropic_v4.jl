@@ -635,7 +635,7 @@ let
     # Resolution
     nc = (x = 20, y = 20)
 
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges_Stokes(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges(nc)
 
     #--------------------------------------------#
     # Boundary conditions
@@ -660,8 +660,8 @@ let
 
     # -------- Vx -------- #
     type.Vx[inx_Vx,iny_Vx] .= :in       
-    type.Vx[2,iny_Vx]       .= :Dir_conf 
-    type.Vx[end-1,iny_Vx]   .= :Dir_conf 
+    type.Vx[2,iny_Vx]       .= :Dirichlet_normal 
+    type.Vx[end-1,iny_Vx]   .= :Dirichlet_normal 
     type.Vx[inx_Vx,2]       .= :Dirichlet
     type.Vx[inx_Vx,end-1]   .= :Dirichlet
     BC.Vx[2,iny_Vx]         .= 0.0
@@ -672,8 +672,8 @@ let
     type.Vy[inx_Vy,iny_Vy] .= :in       
     type.Vy[2,iny_Vy]       .= :Neumann
     type.Vy[end-1,iny_Vy]   .= :Neumann
-    type.Vy[inx_Vy,2]       .= :Dir_conf 
-    type.Vy[inx_Vy,end-1]   .= :Dir_conf 
+    type.Vy[inx_Vy,2]       .= :Dirichlet_normal 
+    type.Vy[inx_Vy,end-1]   .= :Dirichlet_normal 
     BC.Vy[2,iny_Vy]         .= 0.0
     BC.Vy[end-1,iny_Vy]     .= 0.0
     BC.Vy[inx_Vy,2]         .= 0.0
@@ -688,7 +688,7 @@ let
         fill(0, size_y),
         fill(0, size_c),
     )
-    Numbering_Stokes!(number, type, nc)
+    Numbering!(number, type, nc)
 
     #--------------------------------------------#
     # Stencil extent for each block matrix
@@ -768,7 +768,7 @@ let
         # Set global residual vector
         # r = zeros(nVx + nVy + nPt)
         fill!(r, 0e0)
-        SetRHS_Stokes!(r, R, number, type, nc)
+        SetRHS!(r, R, number, type, nc)
 
         #--------------------------------------------#
         # Assembly
@@ -795,7 +795,7 @@ let
         dx = - 𝑀 \ r
         #--------------------------------------------#
 
-        UpdateSolution_Stokes!(V, Pt, dx, number, type, nc)
+        UpdateSolution!(V, Pt, dx, number, type, nc)
     end
 
     #--------------------------------------------#

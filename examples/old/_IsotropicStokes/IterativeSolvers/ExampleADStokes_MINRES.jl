@@ -1,25 +1,14 @@
-using StagFDTools, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays
+using StagFDTools.Stokes, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
-import GLMakie
+# import GLMakie
 
 include("BasicIterativeSolvers.jl")
 
 # Estimate the Rayleigh Quotient for a vector v
 function rayleigh_quotient(A, v)
     return (v' * A * v) / (v' * v)
-end
-struct NumberingV <: AbstractPattern
-    Vx
-    Vy
-    Pt
-end
-
-struct Numbering{Tx,Ty,Tp}
-    Vx::Tx
-    Vy::Ty
-    Pt::Tp
 end
 
 function Base.getindex(x::Numbering, i::Int64)
@@ -363,10 +352,10 @@ function AssembleContinuity2D!(K, V, Pt, η, num, pattern, type, BC, nc, Δ)
     return nothing
 end
 
-@views function (@main)(nc) 
+@views function main(nc) 
     #--------------------------------------------#
     # Resolution
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges_Stokes(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges(nc)
 
     #--------------------------------------------#
     # Boundary conditions
@@ -384,8 +373,8 @@ end
     )
     # -------- Vx -------- #
     type.Vx[inx_Vx,iny_Vx] .= :in       
-    type.Vx[2,iny_Vx]       .= :Dir_conf 
-    type.Vx[end-1,iny_Vx]   .= :Dir_conf 
+    type.Vx[2,iny_Vx]       .= :Dirichlet_normal 
+    type.Vx[end-1,iny_Vx]   .= :Dirichlet_normal 
     type.Vx[inx_Vx,2]       .= :Neumann
     type.Vx[inx_Vx,end-1]   .= :Neumann
     BC.Vx[2,iny_Vx]         .= 0.0
@@ -396,8 +385,8 @@ end
     type.Vy[inx_Vy,iny_Vy] .= :in       
     type.Vy[2,iny_Vy]       .= :Neumann
     type.Vy[end-1,iny_Vy]   .= :Neumann
-    type.Vy[inx_Vy,2]       .= :Dir_conf 
-    type.Vy[inx_Vy,end-1]   .= :Dir_conf 
+    type.Vy[inx_Vy,2]       .= :Dirichlet_normal 
+    type.Vy[inx_Vy,end-1]   .= :Dirichlet_normal 
     BC.Vy[2,iny_Vy]         .= 0.0
     BC.Vy[end-1,iny_Vy]     .= 0.0
     BC.Vy[inx_Vy,2]         .= 0.0
@@ -412,7 +401,7 @@ end
         fill(0, size_y),
         fill(0, size_c),
     )
-    Numbering_Stokes!(number, type, nc)
+    Numbering!(number, type, nc)
 
     #--------------------------------------------#
     # Stencil extent for each block matrix
@@ -466,7 +455,7 @@ end
 
     # Set global residual vector
     r = zeros(nVx + nVy + nPt)
-    SetRHS_Stokes!(r, R, number, type, nc)
+    SetRHS!(r, R, number, type, nc)
 
     #--------------------------------------------#
     # Assembly
@@ -537,7 +526,7 @@ end
 
     # Dinv   = (x=zeros(size_x...), y=zeros(size_y...))
     # Dinv_p = zeros(size_c...)
-    # UpdateSolution_Stokes!(Dinv, Dinv_p, diag(D_PC_inv), number, type, nc)
+    # UpdateSolution!(Dinv, Dinv_p, diag(D_PC_inv), number, type, nc)
 
     # # #--------------------------------------------#
     # n = nVx + nVy + nPt
@@ -608,10 +597,10 @@ end
 
     # dx = zeros(nVx + nVy + nPt)
     # Δx = (x=dV.x, y=dV.y, p=dPt )
-    # SetRHS_Stokes!(dx, Δx, number, type, nc)
+    # SetRHS!(dx, Δx, number, type, nc)
 
     #--------------------------------------------#
-    UpdateSolution_Stokes!(V, Pt, dx, number, type, nc)
+    UpdateSolution!(V, Pt, dx, number, type, nc)
 
     #--------------------------------------------#
     # Residual check
