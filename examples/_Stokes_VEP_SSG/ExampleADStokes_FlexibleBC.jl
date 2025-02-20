@@ -223,7 +223,7 @@ using TimerOutputs
         Pt .+= ΔPt 
 
         #--------------------------------------------#
-        
+
         p3 = heatmap(xv, yc, (V.x[inx_Vx,iny_Vx])', aspect_ratio=1, xlim=extrema(xv), title="Vx")
         p4 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy")
         p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt")
@@ -270,28 +270,3 @@ let
         main(BCs[iBC], D_BCs[iBC])
     end
 end
-
-# ### NEW
-# ────────────────────────────────────────────────────────────────────────
-#                                Time                    Allocations      
-#                       ───────────────────────   ────────────────────────
-#   Tot / % measured:        1.42s /  15.1%            259MiB /  19.6%
-
-# Section       ncalls     time    %tot     avg     alloc    %tot      avg
-# ────────────────────────────────────────────────────────────────────────
-# Line search       26    118ms   54.9%  4.53ms   5.25MiB   10.3%   207KiB
-# Assembly          26   58.9ms   27.5%  2.26ms   45.4MiB   89.4%  1.75MiB
-# Residual          43   37.9ms   17.7%   881μs    120KiB    0.2%  2.78KiB
-
-# ### ORIGINAL
-# ────────────────────────────────────────────────────────────────────────
-#                                Time                    Allocations      
-#                       ───────────────────────   ────────────────────────
-#   Tot / % measured:        5.03s /  71.9%           5.10GiB /  96.0%
-
-# Section       ncalls     time    %tot     avg     alloc    %tot      avg
-# ────────────────────────────────────────────────────────────────────────
-# Line search       26    2.05s   56.6%  78.7ms   3.78GiB   77.1%   149MiB
-# Assembly          26    1.06s   29.3%  40.8ms    511MiB   10.2%  19.6MiB
-# Residual          43    509ms   14.1%  11.8ms    639MiB   12.7%  14.9MiB
-# ────────────────────────────────────────────────────────────────────────

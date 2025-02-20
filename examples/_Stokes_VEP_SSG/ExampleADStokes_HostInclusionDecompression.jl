@@ -15,35 +15,42 @@ end
 @views function main(nc)
     #--------------------------------------------#
 
-    # Resolution
+    # Scales
+    sc = (σ = 3e10, L = 1e-2, t = 1e10)
+    L   = (x=1e-2/sc.L, y=1e-2/sc.L)
 
     # Boundary loading type
     config = :free_slip
-    D_BC   = @SMatrix( [ -1. 0.;
-                          0  1 ])
+    ε̇kk    = 0.5e-14.*sc.t
+    P0     = 1e9/sc.σ
+    D_BC   = @SMatrix( [ ε̇kk  0.0;
+                         0.0  ε̇kk ])
 
     # Material parameters
+    G0   = 3e10
+    K0   = 4*G0
+
     materials = ( 
         compressible = true,
-        plasticity   = :Kiss2023,
-        n    = [1.0    1.0  ],
-        η0   = [1e3    1e-1 ], 
-        G    = [1e1    1e1  ],
-        C    = [100.0  100.0],
-        σT   = [50.0   50.0 ], # Kiss2023
-        δσT  = [10.0   10.0 ], # Kiss2023
-        P1   = [0.0    0.0  ], # Kiss2023
-        τ1   = [0.0    0.0  ], # Kiss2023
-        P2   = [0.0    0.0  ], # Kiss2023
-        τ2   = [0.0    0.0  ], # Kiss2023
-        ϕ    = [30.0   30.0 ],
-        ηvp  = [1.     1.   ],
-        β    = [1e-2   1e-2 ],
-        ψ    = [3.0    3.0  ],
-        B    = [0.0    0.0  ],
-        cosϕ = [0.0    0.0  ],
-        sinϕ = [0.0    0.0  ],
-        sinψ = [0.0    0.0  ],
+        plasticity   = :tensile,
+        n    = [1.0    1.0    1.0 ],
+        η0   = [1e50   1e50   1e50]./(sc.σ*sc.t), 
+        G    = [G0     G0/4   2*G0]./sc.σ,
+        C    = [50e6   50e6   50e6]./sc.σ,
+        σT   = [50e6   50e6   50e6]./sc.σ, # Kiss2023
+        δσT  = [1e6    1e6    1e6 ]./sc.σ, # Kiss2023
+        P1   = [0.0    0.0    0.0 ], # Kiss2023
+        τ1   = [0.0    0.0    0.0 ], # Kiss2023
+        P2   = [0.0    0.0    0.0 ], # Kiss2023
+        τ2   = [0.0    0.0    0.0 ], # Kiss2023
+        ϕ    = [35.0   35.0  35.0 ],
+        ηvp  = [1e19   1e19  1e19 ]./(sc.σ*sc.t),
+        β    = [1/K0   1/(K0/4)  1/(2*K0)].*sc.σ,
+        ψ    = [5.0    5.0    5.0 ],
+        B    = [0.0    0.0    0.0 ],
+        cosϕ = [0.0    0.0    0.0 ],
+        sinϕ = [0.0    0.0    0.0 ],
+        sinψ = [0.0    0.0    0.0 ],
     )
     # For power law
     @. materials.B  = (2*materials.η0)^(-materials.n)
@@ -60,11 +67,11 @@ end
     @. materials.τ2 = materials.P2 + materials.σT                                             # τII at the intersection of Drucker-Prager and Mode-1
 
     # Time steps
-    Δt0   = 0.5
-    nt    = 100
+    Δt0   = 5e9/sc.t
+    nt    = 200
 
     # Newton solver
-    niter = 20
+    niter = 15
     ϵ_nl  = 1e-8
     α     = LinRange(0.05, 1.0, 10)
 
@@ -117,7 +124,6 @@ end
 
     #--------------------------------------------#
     # Intialise field
-    L   = (x=1.0, y=1.0)
     Δ   = (x=L.x/nc.x, y=L.y/nc.y, t = Δt0)
 
     # Allocations
@@ -141,16 +147,20 @@ end
     𝐷_ctl   = (c = D_ctl_c, v = D_ctl_v)
 
     # Mesh coordinates
-    xv = LinRange(-L.x/2, L.x/2, nc.x+1)
-    yv = LinRange(-L.y/2, L.y/2, nc.y+1)
-    xc = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
-    yc = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
+    # xmin, xmax = -L.x/2, L.x/2
+    # ymin, ymax = -L.y/2, L.y/2
+    xmin, xmax = -0.0, L.x
+    ymin, ymax = -0.0, L.y
+    xv = LinRange(xmin,       xmax, nc.x+1)
+    yv = LinRange(ymin,       ymax, nc.y+1)
+    xc = LinRange(xmin+Δ.x/2, xmax-Δ.x/2, nc.x)
+    yc = LinRange(ymin+Δ.y/2, ymax-Δ.y/2, nc.y)
     phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...))  # phase on velocity points
 
     # Initial velocity & pressure field
     @views V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
     @views V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
-    @views Pt[inx_c, iny_c ]  .= 0.                 
+    @views Pt[inx_c, iny_c ]  .= P0
     UpdateSolution!(V, Pt, dx, number, type, nc)
 
     # Boundary condition values
@@ -167,8 +177,21 @@ end
     end
 
     # Set material geometry 
-    @views phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
-    @views phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= 0.1^2] .= 2
+    a, b = -1., 1.0
+    xc2 = xc .+ 0*yc'
+    yc2 = 0*xc .+ yc'
+    xv2 = xv .+ 0*yv'
+    yv2 = 0*xv .+ yv'
+    @views @. phases.c[inx_c, iny_c][yc2<0.75 && xc2<0.75 && yc2<(xc2*a + b)] .= 3
+    @views @. phases.v[inx_v, iny_v][yv2<0.75 && xv2<0.75 && yv2<(xv2*a + b)] .= 3
+    @views @. phases.c[inx_c, iny_c][yc2<0.25 && xc2<0.25] .= 2
+    @views @. phases.v[inx_v, iny_v][yv2<0.25 && xv2<0.25] .= 2
+    # @views phases.c[inx_c, iny_c][((xc.-(xmax+xmin)/2).^2 .+ ((yc.-(xmax+xmin)/2)').^2) .<= 0.1^2] .= 2
+    # @views phases.v[inx_v, iny_v][((xv.-(ymax+ymin)/2).^2 .+ ((yv.-(ymax+ymin)/2)').^2) .<= 0.1^2] .= 2
+
+    p1 = heatmap(xc, yc, phases.c[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc))
+    p2 = heatmap(xv, yv, phases.v[inx_v,iny_v]', aspect_ratio=1, xlim=extrema(xc))
+    display(plot(p1, p2))
 
     #--------------------------------------------#
 
@@ -178,9 +201,9 @@ end
 
     #--------------------------------------------#
 
-    for it=1:nt
+    anim = @animate for it=1:nt
 
-        @printf("Step %04d\n", it)
+        @printf("Step %04d --- mean(Pt) = %1.2f GPa\n", it, mean(Pt).*sc.σ/1e9)
         fill!(err.x, 0e0)
         fill!(err.y, 0e0)
         fill!(err.p, 0e0)
@@ -257,9 +280,9 @@ end
         ε̇xyc = av2D(ε̇.xy)
         ε̇II  = sqrt.( 0.5.*(ε̇.xx[inx_c,iny_c].^2 + ε̇.yy[inx_c,iny_c].^2 + (-ε̇.xx[inx_c,iny_c]-ε̇.yy[inx_c,iny_c]).^2) .+ ε̇xyc[inx_c,iny_c].^2 )
         
-        p_tr1 = LinRange(-100, 0, 100)
-        p_tr2 = LinRange(0, 200, 100)
-        p_tr3 = LinRange(50, 200, 100)
+        p_tr1 = LinRange(-1, 0, 10)
+        p_tr2 = LinRange(0, 1, 100)
+        p_tr3 = LinRange(-1, 1, 100)
 
         K      = 1 / materials.β[1]
         η_ve   = materials.G[1] * Δ.t
@@ -270,25 +293,37 @@ end
         φ      = materials.ϕ[1]
         C      = materials.C[1]
         ψ      = materials.ψ[1]
-        η_vp   = materials.ηvp[1]
-
-        l1    = line.(p_tr1, K, Δ.t, η_ve, 90., pc1, τc1)
-        l2    = line.(p_tr2, K, Δ.t, η_ve, 90., pc2, τc2)
-        l3    = line.(p_tr3, K, Δ.t, η_ve,   ψ, pc2, τc2)
+        σT     = materials.σT[1]
     
-        P_end =  1000
+        P_end =  0.05
  
-        p3 = plot(aspect_ratio=1, xlabel="P", ylabel="τII")
-        p3 = plot!([pc1, pc1, pc2, P_end],[0.0, τc1, τc2, P_end*sind(φ)+C*cosd(φ)], label=:none)
-        p3 = plot!(p_tr1,  l1, label=:none)
-        p3 = plot!(p_tr2,  l2, label=:none)
-        p3 = plot!(p_tr3,  l3, label=:none)
-        p3 = scatter!( Pt[inx_c,iny_c][:], τII[:], label=:none)
+        p3 = plot(aspect_ratio=1, xlabel="P [GPa]", ylabel="τII [GPa]")
+        if materials.plasticity === :DruckerPrager
+            plot!([0.0, P_end.*sc.σ/1e9],[C*cosd(φ).*sc.σ/1e9, (P_end*sind(φ)+C*cosd(φ)).*sc.σ/1e9], label=:none)
+        elseif materials.plasticity === :tensile
+            plot!([-σT.*sc.σ/1e9, P_end.*sc.σ/1e9],[0., (P_end+σT).*sc.σ/1e9], label=:none)
+        elseif materials.plasticity === :Kiss2023
+            # l1    = line.(p_tr1, K, Δ.t, η_ve, 90., pc1, τc1)
+            # l2    = line.(p_tr2, K, Δ.t, η_ve, 90., pc2, τc2)
+            # l3    = line.(p_tr3, K, Δ.t, η_ve,   ψ, pc2, τc2)
+            # p3 = plot!(p_tr1,  l1, label=:none)
+            # p3 = plot!(p_tr2,  l2, label=:none)
+            # p3 = plot!(p_tr3,  l3, label=:none)
+            p3 = plot!([pc1.*sc.σ/1e9, pc1.*sc.σ/1e9, pc2.*sc.σ/1e9, P_end.*sc.σ/1e9],[0.0, τc1.*sc.σ/1e9, τc2.*sc.σ/1e9, (P_end*sind(φ)+C*cosd(φ)).*sc.σ/1e9], label=:none)
+        end
+        p3 = scatter!( Pt[inx_c,iny_c][:].*sc.σ/1e9, τII[:].*sc.σ/1e9, label=:none)
 
-        p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
+        # p1 = heatmap(xv, yc, R.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
         # p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt", c=:coolwarm)
-        p2 = heatmap(xc, yc,  log10.(ε̇II)', aspect_ratio=1, xlim=extrema(xc), title="ε̇II", c=:coolwarm)
-        p4 = heatmap(xc, yc,  τII', aspect_ratio=1, xlim=extrema(xc), title="τII", c=:turbo)
+        p2 = heatmap(xc*sc.L*1e2, yc*sc.L*1e2,  log10.(ε̇II./sc.t)', aspect_ratio=1, xlim=extrema(xc*sc.L*1e2), title="log10 ε̇II [1/s]", c=:coolwarm)
+        p4 = heatmap(xc*sc.L*1e2, yc.*sc.L*1e2,  τII'.*sc.σ./1e6,   aspect_ratio=1, xlim=extrema(xc*sc.L*1e2), title="τII [MPa]", c=:turbo)
+        # p4 = heatmap(xv*sc.L, yv.*sc.L,  τ.xy[inx_v,iny_v]'.*sc.σ, aspect_ratio=1, xlim=extrema(xc*sc.L), title="τ.xy", c=:turbo)
+        # p4 = heatmap(xv*sc.L, yv.*sc.L,  η.v[inx_v,iny_v]'.*sc.σ, aspect_ratio=1, xlim=extrema(xc*sc.L), title="τII", c=:turbo)
+
+        # p3 = heatmap(xv, yc, (V.x[inx_Vx,iny_Vx])', aspect_ratio=1, xlim=extrema(xv), title="Vx")
+        # p4 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy")
+        # p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt")
+
         p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright)
         p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
         p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
@@ -298,6 +333,7 @@ end
         @show (3/materials.β[1] - 2*materials.G[1])/(2*(3/materials.β[1] + 2*materials.G[1]))
 
     end
+    gif(anim, "./results/HostInclusion_$(materials.plasticity).gif", fps = 15)
 
     display(to)
     

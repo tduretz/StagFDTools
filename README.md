@@ -93,6 +93,12 @@ This package aims at generating flexible FD stencils that can interoperate with 
 ## Pressurized holed with mixed-mode plasticity (see Kiss et al., 2023)
 ![image](./results/PressurizedHole.gif)
 
+## Host-inclusion decompression with Drucker-Prager plasticity
+![image](./results/HostInclusion_DruckerPrager.gif)
+
+## Host-inclusion decompression with tensile plasticity
+![image](./results/HostInclusion_tensile.gif)
+
 ## Power-law Stokes (full staggered grid - symmetric operator)
 ![image](https://github.com/user-attachments/assets/9c1e02d5-6b7f-4764-a99d-12a87e28ea21)
 

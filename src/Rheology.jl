@@ -77,6 +77,20 @@ function DruckerPrager(τII, P, ηve, comp, β, Δt, C, cosϕ, sinϕ, sinψ, ηv
     return τII, P, λ̇
 end
 
+function Tensile(τII, P, ηve, comp, β, Δt, σ_T, ηvp)
+    λ̇    = 0.0
+    F    = τII - σ_T - P - λ̇*ηvp
+    if F > 1e-10
+        λ̇    = F / (ηve + ηvp + comp*Δt/β) 
+        τII -= λ̇ * ηve
+        P   += comp * λ̇*Δt/β
+        F    = τII - σ_T - P - λ̇*ηvp
+        (F>1e-10) && error("Failed return mapping")
+        (τII<0.0) && error("Plasticity without condom")
+    end
+    return τII, P, λ̇
+end
+
 function StrainRateTrial(τII, G, Δt, B, n)
     ε̇II_vis   = B.*τII.^n 
     ε̇II_trial = ε̇II_vis + τII/(2*G*Δt)
@@ -128,6 +142,8 @@ function LocalRheology(ε̇, materials, phases, Δ)
     λ̇ = 0.
     if materials.plasticity === :DruckerPrager
         τII, P, λ̇ = DruckerPrager(τII, P, ηvep, comp, β, Δ.t, C, cosϕ, sinϕ, sinψ, ηvp)
+    elseif materials.plasticity === :tensile
+        τII, P, λ̇ = Tensile(τII, P, ηvep, comp, β, Δ.t, materials.σT[phases], ηvp)
     elseif materials.plasticity === :Kiss2023
         τII, P, λ̇ = Kiss2023(τII, P, ηvep, comp, β, Δ.t, C, ϕ, ψ, ηvp, materials.σT[phases], materials.δσT[phases], materials.P1[phases], materials.τ1[phases], materials.P2[phases], materials.τ2[phases])
     end
@@ -235,7 +251,7 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, ΔPt,
         ε̇̄yy   = av(ε̇yy)
         
         # Visco-elasticity
-        G     = materials.G[phases.v[i,j]]
+        G     = materials.G[phases.v[i+1,j+1]]
         τ̄xx0  = av(τxx0)
         τ̄yy0  = av(τyy0)
         P̄     = av(   P)
@@ -259,6 +275,8 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, ΔPt,
         ε̇.xy[i+1,j+1] = ε̇xy[1]
         λ̇.v[i+1,j+1]  = jac.val[3]
         η.v[i+1,j+1]  = jac.val[2]
+        # τ.xy[i+1,j+1] = 2*jac.val[2]*(ε̇xy[1]+τ0.xy[i+1,j+1]/(2*G[1]*Δ.t))
+
     end
 end
 
