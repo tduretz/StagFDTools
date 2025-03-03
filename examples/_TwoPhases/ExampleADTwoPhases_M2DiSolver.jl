@@ -1,30 +1,8 @@
-using StagFDTools, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf
+using StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 # import GLMakie
-
-struct NumberingV <: AbstractPattern
-    Vx
-    Vy
-    Pt
-    Pf
-end
-
-struct Numbering{Tx,Ty,Tp,Tpf}
-    Vx::Tx
-    Vy::Ty
-    Pt::Tp
-    Pf::Tpf
-end
-
-function Base.getindex(x::Numbering, i::Int64)
-    @assert 0 < i < 5 
-    i == 1 && return x.Vx
-    i == 2 && return x.Vy
-    i == 3 && return x.Pt
-    i == 4 && return x.Pf
-end
 
 function Momentum_x(Vx, Vy, Pt, Pf, η, type, bcv, Δ)
     
@@ -516,196 +494,20 @@ function AssembleFluidContinuity2D!(K, V, P, rheo, num, pattern, type, BC, nc, �
     return nothing
 end
 
-function NumberingTwoPhases!(N, type, nc)
-    
-    ndof  = 0
-    neq   = 0
-    noisy = false
-
-    ############ Numbering Vx ############
-    periodic_west  = sum(any(i->i==:periodic, type.Vx[2,:], dims=2)) > 0
-    periodic_south = sum(any(i->i==:periodic, type.Vx[:,2], dims=1)) > 0
-
-    shift  = (periodic_west) ? 1 : 0 
-    # Loop through inner nodes of the mesh
-    for j=3:nc.y+4-2, i=2:nc.x+3-1
-        if type.Vx[i,j] == :Dirichlet_normal || (type.Vx[i,j] != :periodic && i==nc.x+3-1)
-            # Avoid nodes with constant velocity or redundant periodic nodes
-        else
-            ndof+=1
-            N.Vx[i,j] = ndof  
-        end
-    end
-
-    # Copy equation indices for periodic cases
-    if periodic_west
-        N.Vx[1,:] .= N.Vx[end-2,:]
-    end
-
-    # Copy equation indices for periodic cases
-    if periodic_south
-        # South
-        N.Vx[:,1] .= N.Vx[:,end-3]
-        N.Vx[:,2] .= N.Vx[:,end-2]
-        # North
-        N.Vx[:,end]   .= N.Vx[:,4]
-        N.Vx[:,end-1] .= N.Vx[:,3]
-    end
-    noisy ? printxy(N.Vx) : nothing
-
-    neq = maximum(N.Vx)
-
-    ############ Numbering Vy ############
-    ndof  = 0
-    periodic_west  = sum(any(i->i==:periodic, type.Vy[2,:], dims=2)) > 0
-    periodic_south = sum(any(i->i==:periodic, type.Vy[:,2], dims=1)) > 0
-    shift = periodic_south ? 1 : 0
-    # Loop through inner nodes of the mesh
-    for j=2:nc.y+3-1, i=3:nc.x+4-2
-        if type.Vy[i,j] == :Dirichlet_normal || (type.Vy[i,j] != :periodic && j==nc.y+3-1)
-            # Avoid nodes with constant velocity or redundant periodic nodes
-        else
-            ndof+=1
-            N.Vy[i,j] = ndof  
-        end
-    end
-
-    # Copy equation indices for periodic cases
-    if periodic_south
-        N.Vy[:,1] .= N.Vy[:,end-2]
-    end
-
-    # Copy equation indices for periodic cases
-    if periodic_west
-        # West
-        N.Vy[1,:] .= N.Vy[end-3,:]
-        N.Vy[2,:] .= N.Vy[end-2,:]
-        # East
-        N.Vy[end,:]   .= N.Vy[4,:]
-        N.Vy[end-1,:] .= N.Vy[3,:]
-    end
-    noisy ? printxy(N.Vy) : nothing
-
-    neq = maximum(N.Vy)
-
-    ############ Numbering Pt ############
-    neq_Pt                     = nc.x * nc.y
-    N.Pt[2:end-1,2:end-1] .= reshape((1:neq_Pt) .+ 0*neq, nc.x, nc.y)
-
-    if periodic_west
-        N.Pt[1,:]   .= N.Pt[end-1,:]
-        N.Pt[end,:] .= N.Pt[2,:]
-    end
-
-    if periodic_south
-        N.Pt[:,1]   .= N.Pt[:,end-1]
-        N.Pt[:,end] .= N.Pt[:,2]
-    end
-    noisy ? printxy(N.Pt) : nothing
-
-    neq = maximum(N.Pt)
-
-    ############ Numbering Pf ############
-
-    neq_Pf                    = nc.x * nc.y
-    N.Pf[2:end-1,2:end-1] .= reshape(1:neq_Pf, nc.x, nc.y)
-
-    # Make periodic in x
-    for j in axes(type.Pf,2)
-        if type.Pf[1,j] === :periodic
-            N.Pf[1,j] = N.Pf[end-1,j]
-        end
-        if type.Pf[end,j] === :periodic
-            N.Pf[end,j] = N.Pf[2,j]
-        end
-    end
-
-    # Make periodic in y
-    for i in axes(type.Pf,1)
-        if type.Pf[i,1] === :periodic
-            N.Pf[i,1] = N.Pf[i,end-1]
-        end
-        if type.Pf[i,end] === :periodic
-            N.Pf[i,end] = N.Pf[i,2]
-        end
-    end
-
-end
-
-function SetRHS_TwoPhases!(r, R, number, type, nc)
-
-    nVx, nVy, nPt   = maximum(number.Vx), maximum(number.Vy), maximum(number.Pt)
-
-    for j=2:nc.y+3-1, i=3:nc.x+4-2
-        if type.Vx[i,j] == :in
-            ind = number.Vx[i,j]
-            r[ind] = R.x[i,j]
-        end
-    end
-    for j=3:nc.y+4-2, i=2:nc.x+3-1
-        if type.Vy[i,j] == :in
-            ind = number.Vy[i,j] + nVx
-            r[ind] = R.y[i,j]
-        end
-    end
-    for j=2:nc.y+1, i=2:nc.x+1
-        if type.Pt[i,j] == :in
-            ind = number.Pt[i,j] + nVx + nVy
-            r[ind] = R.pt[i,j]
-        end
-    end
-    for j=2:nc.y+1, i=2:nc.x+1
-        if type.Pf[i,j] == :in
-            ind = number.Pf[i,j] + nVx + nVy + nPt
-            r[ind] = R.pf[i,j]
-        end
-    end
-end
-
-function UpdateSolution_TwoPhases!(V, P, dx, number, type, nc)
-
-    nVx, nVy, nPt   = maximum(number.Vx), maximum(number.Vy), maximum(number.Pt)
-
-    for j=2:nc.y+3-1, i=3:nc.x+4-2
-        if type.Vx[i,j] == :in
-            ind = number.Vx[i,j]
-            V.x[i,j] += dx[ind] 
-        end
-    end
-    for j=3:nc.y+4-2, i=2:nc.x+3-1
-        if type.Vy[i,j] == :in
-            ind = number.Vy[i,j] + nVx
-            V.y[i,j] += dx[ind]
-        end
-    end
-    for j=2:nc.y+1, i=2:nc.x+1
-        if type.Pt[i,j] == :in
-            ind = number.Pt[i,j] + nVx + nVy
-            P.t[i,j] += dx[ind]
-        end
-    end
-    for j=2:nc.y+1, i=2:nc.x+1
-        if type.Pf[i,j] == :in
-            ind = number.Pf[i,j] + nVx + nVy + nPt
-            P.f[i,j] += dx[ind]
-        end
-    end
-end
-
-@views function (@main)(nc)
+function main(nc)
     
     # Resolution
 
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, inx_v, iny_v, size_x, size_y, size_c = Ranges(nc)
     
     # Define node types and set BC flags
-    type = Numbering(
+    type = Fields(
         fill(:out, (nc.x+3, nc.y+4)),
         fill(:out, (nc.x+4, nc.y+3)),
         fill(:out, (nc.x+2, nc.y+2)),
         fill(:out, (nc.x+2, nc.y+2)),
     )
-    BC = Numbering(
+    BC = Fields(
         fill(0., (nc.x+3, nc.y+4)),
         fill(0., (nc.x+4, nc.y+3)),
         fill(0., (nc.x+2, nc.y+2)),
@@ -741,20 +543,20 @@ end
     type.Pf[:,end]           .= :Dirichlet
     
     # Equation numbering
-    number = Numbering(
+    number = Fields(
         fill(0, (nc.x+3, nc.y+4)),
         fill(0, (nc.x+4, nc.y+3)),
         fill(0, (nc.x+2, nc.y+2)),
         fill(0, (nc.x+2, nc.y+2)),
     )
-    NumberingTwoPhases!(number, type, nc)
+    Numbering!(number, type, nc)
 
     # Stencil extent for each block matrix
-    pattern = Numbering(
-        Numbering(@SMatrix([0 1 0; 1 1 1; 0 1 0]),                 @SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]), @SMatrix([0 1 0;  0 1 0]),        @SMatrix([0 1 0;  0 1 0])), 
-        Numbering(@SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]),  @SMatrix([0 1 0; 1 1 1; 0 1 0]),                @SMatrix([0 0; 1 1; 0 0]),        @SMatrix([0 0; 1 1; 0 0])),
-        Numbering(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]),                    @SMatrix([1])),
-        Numbering(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]),                    @SMatrix([1 1 1; 1 1 1; 1 1 1])),
+    pattern = Fields(
+        Fields(@SMatrix([0 1 0; 1 1 1; 0 1 0]),                 @SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]), @SMatrix([0 1 0;  0 1 0]),        @SMatrix([0 1 0;  0 1 0])), 
+        Fields(@SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]),  @SMatrix([0 1 0; 1 1 1; 0 1 0]),                @SMatrix([0 0; 1 1; 0 0]),        @SMatrix([0 0; 1 1; 0 0])),
+        Fields(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]),                    @SMatrix([1])),
+        Fields(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]),                    @SMatrix([1 1 1; 1 1 1; 1 1 1])),
     )
 
     # Sparse matrix assembly
@@ -762,11 +564,11 @@ end
     nVy   = maximum(number.Vy)
     nPt   = maximum(number.Pt)
     nPf   = maximum(number.Pf)
-    M = Numbering(
-        Numbering(ExtendableSparseMatrix(nVx, nVx), ExtendableSparseMatrix(nVx, nVy), ExtendableSparseMatrix(nVx, nPt), ExtendableSparseMatrix(nVx, nPt)), 
-        Numbering(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt), ExtendableSparseMatrix(nVy, nPt)), 
-        Numbering(ExtendableSparseMatrix(nPt, nVx), ExtendableSparseMatrix(nPt, nVy), ExtendableSparseMatrix(nPt, nPt), ExtendableSparseMatrix(nPt, nPf)),
-        Numbering(ExtendableSparseMatrix(nPf, nVx), ExtendableSparseMatrix(nPf, nVy), ExtendableSparseMatrix(nPf, nPt), ExtendableSparseMatrix(nPf, nPf)),
+    M = Fields(
+        Fields(ExtendableSparseMatrix(nVx, nVx), ExtendableSparseMatrix(nVx, nVy), ExtendableSparseMatrix(nVx, nPt), ExtendableSparseMatrix(nVx, nPt)), 
+        Fields(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt), ExtendableSparseMatrix(nVy, nPt)), 
+        Fields(ExtendableSparseMatrix(nPt, nVx), ExtendableSparseMatrix(nPt, nVy), ExtendableSparseMatrix(nPt, nPt), ExtendableSparseMatrix(nPt, nPf)),
+        Fields(ExtendableSparseMatrix(nPf, nVx), ExtendableSparseMatrix(nPf, nVy), ExtendableSparseMatrix(nPf, nPt), ExtendableSparseMatrix(nPf, nPf)),
     )
 
     #--------------------------------------------#
@@ -809,7 +611,7 @@ end
 
     # Set global residual vector
     r = zeros(nVx + nVy + nPt + nPf)
-    SetRHS_TwoPhases!(r, R, number, type, nc)
+    SetRHS!(r, R, number, type, nc)
 
     #--------------------------------------------#
     # Assembly
@@ -834,47 +636,7 @@ end
 
     #--------------------------------------------#
     # # Direct solver 
-    @time dx = - 𝑀 \ r
-
-
-    # A  = [M.Vx.Vx M.Vx.Vy;
-    #       M.Vy.Vx M.Vy.Vy]
-    
-    # B  = [M.Vx.Pt M.Vx.Pf;
-    #       M.Vy.Pt M.Vy.Pf;].*1e-0
-
-    # C  = [M.Pt.Vx M.Pt.Vy
-    #       M.Pf.Vx M.Pf.Vy] .*1e-0
-
-    # D  = [M.Pt.Pt M.Pt.Pf;
-    #       M.Pf.Pt M.Pf.Pf]
-
-    # Ac = cholesky(A)
-    # Dc = cholesky(D)
-
-    # A_D_inv = spdiagm(1 ./ diag(A  ))
-    # D_D_inv = spdiagm(1 ./ diag(D  ))
-
-    # fv = -r[1:(nVx+nVy)]
-    # fp = -r[(nVx+nVy+1):end]
-    # dv = zeros(nVx+nVy)
-    # dp = zeros(nPt+nPf)
-    # dv0 = zeros(nVx+nVy)
-    # dp0 = zeros(nPt+nPf)
-    # for iter=1:40
-
-    #     rv  = fv - (A*dv + B*dp) 
-    #     rp  = fp - (C*dv + D*dp)
-
-    #     dv .= (A_D_inv*A)\(A_D_inv*(fv - B*dp))
-    #     dp .= (D_D_inv*D)\(D_D_inv*(fp - C*dv))
-
-    #     @show norm(rv), norm(rp)
-    # end
-
-    # dx = zeros(nVx + nVy + nPt + nPf)
-    # dx[1:(nVx+nVy)] .= dv
-    # dx[(nVx+nVy+1):end] .= dp
+    # @time dx = - 𝑀 \ r
 
     # M2Di solver
     fv    = -r[1:(nVx+nVy)]
@@ -911,8 +673,9 @@ end
         Jpv_t  = Jpv  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfv
         Jpp_t  = Jpp  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfp
         Jvv_t  = Kvv  - Jvp *spdiagm(1 ./ diag(Jpp_t))*Jpv 
-        Jpf_h  = cholesky(Jpf, check = false  )        # Cholesky factors
-        Jvv_th = cholesky(Jvv_t, check = false)        # Cholesky factors
+        @show typeof(SparseMatrixCSC(Jpf))
+        Jpf_h  = cholesky(Hermitian(SparseMatrixCSC(Jpf)), check = false  )        # Cholesky factors
+        Jvv_th = cholesky(Hermitian(SparseMatrixCSC(Jvv_t)), check = false)        # Cholesky factors
         Jpp_th = spdiagm(1 ./diag(Jpp_t));             # trivial inverse
         @views for itPH=1:15
             rv    .= -( Jvv*dv  + Jvp*dpt             - fv  )
@@ -948,7 +711,7 @@ end
     dx[(nVx+nVy+nPt+1):end] .= dpf
 
     #--------------------------------------------#
-    UpdateSolution_TwoPhases!(V, P, dx, number, type, nc)
+    UpdateSolution!(V, P, dx, number, type, nc)
 
     #--------------------------------------------#
     # Residual check
@@ -960,15 +723,15 @@ end
     @info "Residuals"
     @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
     @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-    @show norm(R.pt[inx_Pt,iny_Pt])/sqrt(nPt)
-    @show norm(R.pf[inx_Pt,iny_Pt])/sqrt(nPf)
+    @show norm(R.pt[inx_c,iny_c])/sqrt(nPt)
+    @show norm(R.pf[inx_c,iny_c])/sqrt(nPf)
 
     #--------------------------------------------#
 
     p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
     p2 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy")
-    p3 = heatmap(xc, yc, P.t[inx_Pt,iny_Pt]', aspect_ratio=1, xlim=extrema(xc), title="Pt")
-    p4 = heatmap(xc, yc, P.f[inx_Pt,iny_Pt]', aspect_ratio=1, xlim=extrema(xc), title="Pf")
+    p3 = heatmap(xc, yc, P.t[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt")
+    p4 = heatmap(xc, yc, P.f[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pf")
     display(plot(p1, p2, p3, p4))
 
     #--------------------------------------------#

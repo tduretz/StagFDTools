@@ -1,30 +1,8 @@
-using StagFDTools, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf
+using StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 # import GLMakie
-
-struct NumberingV <: AbstractPattern
-    Vx
-    Vy
-    Pt
-    Pf
-end
-
-struct Numbering{Tx,Ty,Tp,Tpf}
-    Vx::Tx
-    Vy::Ty
-    Pt::Tp
-    Pf::Tpf
-end
-
-function Base.getindex(x::Numbering, i::Int64)
-    @assert 0 < i < 5 
-    i == 1 && return x.Vx
-    i == 2 && return x.Vy
-    i == 3 && return x.Pt
-    i == 4 && return x.Pf
-end
 
 function Momentum_x(Vx, Vy, Pt, Pf, η, type, bcv, Δ)
     
@@ -32,27 +10,27 @@ function Momentum_x(Vx, Vy, Pt, Pf, η, type, bcv, Δ)
     invΔy    = 1 / Δ.y
 
     for j=1:4
-        if type.y[1,j] == :Dirichlet 
+        if type.y[1,j] == :Dirichlet_tangent
             Vy[1,j] = fma(2, bcv.y[1,j], -Vy[2,j])
-        elseif type.y[1,j] == :Neumann
+        elseif type.y[1,j] == :Neumann_tangent
             Vy[1,j] = fma(Δ.x, bcv.y[1,j], Vy[2,j])
         end
-        if type.y[4,j] == :Dirichlet 
+        if type.y[4,j] == :Dirichlet_tangent 
             Vy[4,j] = fma(2, bcv.y[4,j], -Vy[3,j])
-        elseif type.y[4,j] == :Neumann
+        elseif type.y[4,j] == :Neumann_tangent
             Vy[4,j] = fma(Δ.x, bcv.y[4,j], Vy[3,j])
         end
     end
 
     for i=1:3
-        if type.x[i,1] == :Dirichlet 
+        if type.x[i,1] == :Dirichlet_tangent
             Vx[i,1] = fma(2, bcv.x[i,1], -Vx[i,2])
-        elseif type.x[i,1] == :Neumann
+        elseif type.x[i,1] == :Neumann_tangent
             Vx[i,1] = fma(Δ.y, bcv.x[i,1], Vx[i,2])
         end
-        if type.x[i,end] == :Dirichlet 
+        if type.x[i,end] == :Dirichlet_tangent 
             Vx[i,end] = fma(2, bcv.x[i,end], -Vx[i,end-1])
-        elseif type.x[i,end] == :Neumann
+        elseif type.x[i,end] == :Neumann_tangent
             Vx[i,end] = fma(Δ.y, bcv.x[i,end], Vx[i,end-1])
         end
     end
@@ -88,27 +66,27 @@ function Momentum_y(Vx, Vy, Pt, Pf, η, type, bcv, Δ)
     invΔy    = 1 / Δ.y
     
     for i=1:4
-        if type.x[i,1] == :Dirichlet 
+        if type.x[i,1] == :Dirichlet_tangent 
             Vx[i,1] = fma(2, bcv.x[i,1], -Vx[i,2])
-        elseif type.x[i,1] == :Neumann
+        elseif type.x[i,1] == :Neumann_tangent
             Vx[i,1] = fma(Δ.y, bcv.x[i,1], Vx[i,2])
         end
-        if type.x[i,4] == :Dirichlet 
+        if type.x[i,4] == :Dirichlet_tangent 
             Vx[i,4] = fma(2, bcv.x[i,4], -Vx[i,3])
-        elseif type.x[i,4] == :Neumann
+        elseif type.x[i,4] == :Neumann_tangent
             Vx[i,4] = fma(Δ.y, bcv.x[i,4], Vx[i,3])
         end
     end
 
     for j=1:3
-        if type.y[1,j] == :Dirichlet 
+        if type.y[1,j] == :Dirichlet_tangent 
             Vy[1,j] = fma(2, bcv.y[1,j], -Vy[2,j])
-        elseif type.y[1,j] == :Neumann
+        elseif type.y[1,j] == :Neumann_tangent
             Vy[1,j] = fma(Δ.x, bcv.y[1,j], Vy[2,j])
         end
-        if type.y[end,j] == :Dirichlet 
+        if type.y[end,j] == :Dirichlet_tangent 
             Vy[end,j] = fma(2, bcv.y[end,j], -Vy[end-1,j])
-        elseif type.y[end,j] == :Neumann
+        elseif type.y[end,j] == :Neumann_tangent
             Vy[end,j] = fma(Δ.x, bcv.y[end,j], Vy[end-1,j])
         end
     end
@@ -687,20 +665,21 @@ function UpdateSolution_TwoPhases!(V, P, dx, number, type, nc)
     end
 end
 
-@views function (@main)(nc)
+@views function main(nc)
+
+    D_BC = @SMatrix( [1 0; 0 -1] )
     
     # Resolution
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, inx_v, iny_v, size_x, size_y, size_c = Ranges(nc)
 
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges(nc)
-    
     # Define node types and set BC flags
-    type = Numbering(
+    type = Fields(
         fill(:out, (nc.x+3, nc.y+4)),
         fill(:out, (nc.x+4, nc.y+3)),
         fill(:out, (nc.x+2, nc.y+2)),
         fill(:out, (nc.x+2, nc.y+2)),
     )
-    BC = Numbering(
+    BC = Fields(
         fill(0., (nc.x+3, nc.y+4)),
         fill(0., (nc.x+4, nc.y+3)),
         fill(0., (nc.x+2, nc.y+2)),
@@ -710,16 +689,16 @@ end
     type.Vx[inx_Vx,iny_Vx] .= :in       
     type.Vx[2,iny_Vx]       .= :Dirichlet_normal 
     type.Vx[end-1,iny_Vx]   .= :Dirichlet_normal 
-    type.Vx[inx_Vx,2]       .= :Neumann
-    type.Vx[inx_Vx,end-1]   .= :Neumann
+    type.Vx[inx_Vx,2]       .= :Neumann_tangent
+    type.Vx[inx_Vx,end-1]   .= :Neumann_tangent
     BC.Vx[2,iny_Vx]         .= 0.0
     BC.Vx[end-1,iny_Vx]     .= 0.0
     BC.Vx[inx_Vx,2]         .= 0.0
     BC.Vx[inx_Vx,end-1]     .= 0.0
     # -------- Vy -------- #
     type.Vy[inx_Vy,iny_Vy] .= :in       
-    type.Vy[2,iny_Vy]       .= :Neumann
-    type.Vy[end-1,iny_Vy]   .= :Neumann
+    type.Vy[2,iny_Vy]       .= :Neumann_tangent
+    type.Vy[end-1,iny_Vy]   .= :Neumann_tangent
     type.Vy[inx_Vy,2]       .= :Dirichlet_normal 
     type.Vy[inx_Vy,end-1]   .= :Dirichlet_normal 
     BC.Vy[2,iny_Vy]         .= 0.0
@@ -735,21 +714,21 @@ end
     type.Pf[:,1]             .= :Dirichlet
     type.Pf[:,end]           .= :Dirichlet
     
-    # Equation numbering
-    number = Numbering(
+    # Equation Fields
+    number = Fields(
         fill(0, (nc.x+3, nc.y+4)),
         fill(0, (nc.x+4, nc.y+3)),
         fill(0, (nc.x+2, nc.y+2)),
         fill(0, (nc.x+2, nc.y+2)),
     )
-    NumberingTwoPhases!(number, type, nc)
+    Numbering!(number, type, nc)
 
     # Stencil extent for each block matrix
-    pattern = Numbering(
-        Numbering(@SMatrix([0 1 0; 1 1 1; 0 1 0]),                 @SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]), @SMatrix([0 1 0;  0 1 0]),        @SMatrix([0 1 0;  0 1 0])), 
-        Numbering(@SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]),  @SMatrix([0 1 0; 1 1 1; 0 1 0]),                @SMatrix([0 0; 1 1; 0 0]),        @SMatrix([0 0; 1 1; 0 0])),
-        Numbering(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]),                    @SMatrix([1])),
-        Numbering(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]),                    @SMatrix([1 1 1; 1 1 1; 1 1 1])),
+    pattern = Fields(
+        Fields(@SMatrix([0 1 0; 1 1 1; 0 1 0]),                 @SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]), @SMatrix([0 1 0;  0 1 0]),        @SMatrix([0 1 0;  0 1 0])), 
+        Fields(@SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]),  @SMatrix([0 1 0; 1 1 1; 0 1 0]),                @SMatrix([0 0; 1 1; 0 0]),        @SMatrix([0 0; 1 1; 0 0])),
+        Fields(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]),                    @SMatrix([1])),
+        Fields(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]),                    @SMatrix([1 1 1; 1 1 1; 1 1 1])),
     )
 
     # Sparse matrix assembly
@@ -757,11 +736,11 @@ end
     nVy   = maximum(number.Vy)
     nPt   = maximum(number.Pt)
     nPf   = maximum(number.Pf)
-    M = Numbering(
-        Numbering(ExtendableSparseMatrix(nVx, nVx), ExtendableSparseMatrix(nVx, nVy), ExtendableSparseMatrix(nVx, nPt), ExtendableSparseMatrix(nVx, nPt)), 
-        Numbering(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt), ExtendableSparseMatrix(nVy, nPt)), 
-        Numbering(ExtendableSparseMatrix(nPt, nVx), ExtendableSparseMatrix(nPt, nVy), ExtendableSparseMatrix(nPt, nPt), ExtendableSparseMatrix(nPt, nPf)),
-        Numbering(ExtendableSparseMatrix(nPf, nVx), ExtendableSparseMatrix(nPf, nVy), ExtendableSparseMatrix(nPf, nPt), ExtendableSparseMatrix(nPf, nPf)),
+    M = Fields(
+        Fields(ExtendableSparseMatrix(nVx, nVx), ExtendableSparseMatrix(nVx, nVy), ExtendableSparseMatrix(nVx, nPt), ExtendableSparseMatrix(nVx, nPt)), 
+        Fields(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt), ExtendableSparseMatrix(nVy, nPt)), 
+        Fields(ExtendableSparseMatrix(nPt, nVx), ExtendableSparseMatrix(nPt, nVy), ExtendableSparseMatrix(nPt, nPt), ExtendableSparseMatrix(nPt, nPf)),
+        Fields(ExtendableSparseMatrix(nPf, nVx), ExtendableSparseMatrix(nPf, nVy), ExtendableSparseMatrix(nPf, nPt), ExtendableSparseMatrix(nPf, nPf)),
     )
 
     #--------------------------------------------#
@@ -786,8 +765,8 @@ end
 
     # Initial configuration
     ε̇  = -1.0
-    V.x[inx_Vx,iny_Vx] .=  ε̇*xv .+ 0*yc' 
-    V.y[inx_Vy,iny_Vy] .= 0*xc .-  ε̇*yv' 
+    V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
+    V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
     η.y[(xvy.^2 .+ (yvy').^2) .<= 1^2] .= 0.1
     η.x[(xvx.^2 .+ (yvx').^2) .<= 1^2] .= 0.1 
     η.p .= 0.25.*(η.x[1:end-1,2:end-1].+η.x[2:end-0,2:end-1].+η.y[2:end-1,1:end-1].+η.y[2:end-1,2:end-0])
@@ -804,7 +783,18 @@ end
 
     # Set global residual vector
     r = zeros(nVx + nVy + nPt + nPf)
-    SetRHS_TwoPhases!(r, R, number, type, nc)
+    SetRHS!(r, R, number, type, nc)
+
+    # # Boundary condition values
+    # BC = ( Vx = zeros(size_x...), Vy = zeros(size_y...))
+    # BC.Vx[     2, iny_Vx] .= (type.Vx[     1, iny_Vx] .== :Neumann_normal) .* D_BC[1,1]
+    # BC.Vx[ end-1, iny_Vx] .= (type.Vx[   end, iny_Vx] .== :Neumann_normal) .* D_BC[1,1]
+    # BC.Vx[inx_Vx,      2] .= (type.Vx[inx_Vx,      2] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[inx_Vx,     2] .== :Dirichlet_tangent) .* (D_BC[1,1]*xv .+ D_BC[1,2]*yv[1]  )
+    # BC.Vx[inx_Vx,  end-1] .= (type.Vx[inx_Vx,  end-1] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[inx_Vx, end-1] .== :Dirichlet_tangent) .* (D_BC[1,1]*xv .+ D_BC[1,2]*yv[end])
+    # BC.Vy[inx_Vy,     2 ] .= (type.Vy[inx_Vy,     1 ] .== :Neumann_normal) .* D_BC[2,2]
+    # BC.Vy[inx_Vy, end-1 ] .= (type.Vy[inx_Vy,   end ] .== :Neumann_normal) .* D_BC[2,2]
+    # BC.Vy[     2, iny_Vy] .= (type.Vy[     2, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[    2, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[1]   .+ D_BC[2,2]*yv)
+    # BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
 
     #--------------------------------------------#
     # Assembly
@@ -832,7 +822,7 @@ end
     dx = - 𝑀 \ r
 
     #--------------------------------------------#
-    UpdateSolution_TwoPhases!(V, P, dx, number, type, nc)
+    UpdateSolution!(V, P, dx, number, type, nc)
 
     #--------------------------------------------#
     # Residual check
@@ -844,15 +834,15 @@ end
     @info "Residuals"
     @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
     @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-    @show norm(R.pt[inx_Pt,iny_Pt])/sqrt(nPt)
-    @show norm(R.pf[inx_Pt,iny_Pt])/sqrt(nPf)
+    @show norm(R.pt[inx_c,iny_c])/sqrt(nPt)
+    @show norm(R.pf[inx_c,iny_c])/sqrt(nPf)
 
     #--------------------------------------------#
 
     p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
     p2 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy")
-    p3 = heatmap(xc, yc, P.t[inx_Pt,iny_Pt]', aspect_ratio=1, xlim=extrema(xc), title="Pt")
-    p4 = heatmap(xc, yc, P.f[inx_Pt,iny_Pt]', aspect_ratio=1, xlim=extrema(xc), title="Pf")
+    p3 = heatmap(xc, yc, P.t[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt")
+    p4 = heatmap(xc, yc, P.f[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pf")
     display(plot(p1, p2, p3, p4))
 
     #--------------------------------------------#

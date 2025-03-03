@@ -12,12 +12,12 @@ function line(p, K, Δt, η_ve, ψ, p1, t1)
     return a*p + b
 end
 
-@views function main(nc)
+@views function main(nc, radius)
     #--------------------------------------------#
 
     # Scales
     sc = (σ = 3e10, L = 1e-2, t = 1e10)
-    L   = (x=1e-2/sc.L, y=1e-2/sc.L)
+    L  = (x=1e-2/sc.L, y=1e-2/sc.L)
 
     # Boundary loading type
     config = :free_slip
@@ -32,7 +32,7 @@ end
 
     materials = ( 
         compressible = true,
-        plasticity   = :tensile,
+        plasticity   = :DruckerPrager,
         n    = [1.0    1.0    1.0 ],
         η0   = [1e50   1e50   1e50]./(sc.σ*sc.t), 
         G    = [G0     G0/4   2*G0]./sc.σ,
@@ -68,7 +68,7 @@ end
 
     # Time steps
     Δt0   = 5e9/sc.t
-    nt    = 200
+    nt    = 1#145
 
     # Newton solver
     niter = 15
@@ -184,8 +184,8 @@ end
     yv2 = 0*xv .+ yv'
     @views @. phases.c[inx_c, iny_c][yc2<0.75 && xc2<0.75 && yc2<(xc2*a + b)] .= 3
     @views @. phases.v[inx_v, iny_v][yv2<0.75 && xv2<0.75 && yv2<(xv2*a + b)] .= 3
-    @views @. phases.c[inx_c, iny_c][yc2<0.25 && xc2<0.25] .= 2
-    @views @. phases.v[inx_v, iny_v][yv2<0.25 && xv2<0.25] .= 2
+    @views @. phases.c[inx_c, iny_c][yc2<radius && xc2<radius] .= 2
+    @views @. phases.v[inx_v, iny_v][yv2<radius && xv2<radius] .= 2
     # @views phases.c[inx_c, iny_c][((xc.-(xmax+xmin)/2).^2 .+ ((yc.-(xmax+xmin)/2)').^2) .<= 0.1^2] .= 2
     # @views phases.v[inx_v, iny_v][((xv.-(ymax+ymin)/2).^2 .+ ((yv.-(ymax+ymin)/2)').^2) .<= 0.1^2] .= 2
 
@@ -300,6 +300,25 @@ end
         p3 = plot(aspect_ratio=1, xlabel="P [GPa]", ylabel="τII [GPa]")
         if materials.plasticity === :DruckerPrager
             plot!([0.0, P_end.*sc.σ/1e9],[C*cosd(φ).*sc.σ/1e9, (P_end*sind(φ)+C*cosd(φ)).*sc.σ/1e9], label=:none)
+        
+            function F_hyperbolic(τ, P, φ, C, σT)    
+                return sqrt.( τ.^2 .+ (C*cosd(φ)-σT*sind(φ)).^2 ) .- (C*cosd(φ) .+ P*sind(φ))
+            end
+    
+            P_ax = LinRange(-σT, P_end, 100)
+            τ_ax = collect(P_ax*sind(φ) .+ C*cosd(φ))
+            dFdτ = zero(τ_ax)
+            for iter=1:10
+                F_yield = F_hyperbolic(τ_ax, P_ax, φ, C, σT) 
+                @show norm(F_yield)
+
+                # autodiff(Enzyme.Reverse, F_hyperbolic, Duplicated(τ_ax, dFdτ), Const(P_ax), Const(φ), Const(C), Const(σT) )
+                τ_ax .-= F_yield./1
+            end
+
+            plot!(P_ax.*sc.σ/1e9, τ_ax.*sc.σ/1e9, c=:black)
+
+        
         elseif materials.plasticity === :tensile
             plot!([-σT.*sc.σ/1e9, P_end.*sc.σ/1e9],[0., (P_end+σT).*sc.σ/1e9], label=:none)
         elseif materials.plasticity === :Kiss2023
@@ -333,12 +352,16 @@ end
         @show (3/materials.β[1] - 2*materials.G[1])/(2*(3/materials.β[1] + 2*materials.G[1]))
 
     end
-    gif(anim, "./results/HostInclusion_$(materials.plasticity).gif", fps = 15)
+    gif(anim, "./results/HostInclusion_$(materials.plasticity)_r$(radius).gif", fps = 15)
 
     display(to)
     
 end
 
 let
-    main((x = 100, y = 100))
+    # r = [0.05 0.1 0.15 0.2 0.25 0.3 0.35 0.4]
+    r = [0.4 0.45]
+    for i in eachindex(r)
+        main((x = 100, y = 100), r[i])
+    end
 end

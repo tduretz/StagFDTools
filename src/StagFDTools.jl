@@ -37,7 +37,7 @@ end
 module TwoPhases
     using StaticArrays, ExtendableSparse, StaticArrays
     include("TwoPhases.jl")
-    export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx!, SetBCVy!
+    export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution! #, SetBCVx!, SetBCVy!
 end
 
 module Rheology

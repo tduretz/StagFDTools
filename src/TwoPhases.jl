@@ -13,13 +13,17 @@ function Base.getindex(x::Fields, i::Int64)
     i == 4 && return x.Pf
 end
 
+function Ranges(nc)     
+    return (inx_Vx = 2:nc.x+2, iny_Vx = 3:nc.y+2, inx_Vy = 3:nc.x+2, iny_Vy = 2:nc.y+2, inx_c = 2:nc.x+1, iny_c = 2:nc.y+1, inx_v = 2:nc.x+2, iny_v = 2:nc.y+2, size_x = (nc.x+3, nc.y+4), size_y = (nc.x+4, nc.y+3), size_c = (nc.x+2, nc.y+2), size_v = (nc.x+3, nc.y+3))
+end
+
 function Numbering!(N, type, nc)
     
     ndof  = 0
     neq   = 0
     noisy = false
 
-    ############ Fields Vx ############
+    ############ Numbering Vx ############
     periodic_west  = sum(any(i->i==:periodic, type.Vx[2,:], dims=2)) > 0
     periodic_south = sum(any(i->i==:periodic, type.Vx[:,2], dims=1)) > 0
 
@@ -52,7 +56,7 @@ function Numbering!(N, type, nc)
 
     neq = maximum(N.Vx)
 
-    ############ Fields Vy ############
+    ############ Numbering Vy ############
     ndof  = 0
     periodic_west  = sum(any(i->i==:periodic, type.Vy[2,:], dims=2)) > 0
     periodic_south = sum(any(i->i==:periodic, type.Vy[:,2], dims=1)) > 0
@@ -85,7 +89,7 @@ function Numbering!(N, type, nc)
 
     neq = maximum(N.Vy)
 
-    ############ Fields Pt ############
+    ############ Numbering Pt ############
     neq_Pt                     = nc.x * nc.y
     N.Pt[2:end-1,2:end-1] .= reshape((1:neq_Pt) .+ 0*neq, nc.x, nc.y)
 
@@ -102,7 +106,7 @@ function Numbering!(N, type, nc)
 
     neq = maximum(N.Pt)
 
-    ############ Fields Pf ############
+    ############ Numbering Pf ############
 
     neq_Pf                    = nc.x * nc.y
     N.Pf[2:end-1,2:end-1] .= reshape(1:neq_Pf, nc.x, nc.y)
@@ -128,6 +132,182 @@ function Numbering!(N, type, nc)
     end
 
 end
+
+function SetRHS!(r, R, number, type, nc)
+
+    nVx, nVy, nPt   = maximum(number.Vx), maximum(number.Vy), maximum(number.Pt)
+
+    for j=2:nc.y+3-1, i=3:nc.x+4-2
+        if type.Vx[i,j] == :in
+            ind = number.Vx[i,j]
+            r[ind] = R.x[i,j]
+        end
+    end
+    for j=3:nc.y+4-2, i=2:nc.x+3-1
+        if type.Vy[i,j] == :in
+            ind = number.Vy[i,j] + nVx
+            r[ind] = R.y[i,j]
+        end
+    end
+    for j=2:nc.y+1, i=2:nc.x+1
+        if type.Pt[i,j] == :in
+            ind = number.Pt[i,j] + nVx + nVy
+            r[ind] = R.pt[i,j]
+        end
+    end
+    for j=2:nc.y+1, i=2:nc.x+1
+        if type.Pf[i,j] == :in
+            ind = number.Pf[i,j] + nVx + nVy + nPt
+            r[ind] = R.pf[i,j]
+        end
+    end
+end
+
+function UpdateSolution!(V, P, dx, number, type, nc)
+
+    nVx, nVy, nPt   = maximum(number.Vx), maximum(number.Vy), maximum(number.Pt)
+
+    for j=2:nc.y+3-1, i=3:nc.x+4-2
+        if type.Vx[i,j] == :in
+            ind = number.Vx[i,j]
+            V.x[i,j] += dx[ind] 
+        end
+    end
+    for j=3:nc.y+4-2, i=2:nc.x+3-1
+        if type.Vy[i,j] == :in
+            ind = number.Vy[i,j] + nVx
+            V.y[i,j] += dx[ind]
+        end
+    end
+    for j=2:nc.y+1, i=2:nc.x+1
+        if type.Pt[i,j] == :in
+            ind = number.Pt[i,j] + nVx + nVy
+            P.t[i,j] += dx[ind]
+        end
+    end
+    for j=2:nc.y+1, i=2:nc.x+1
+        if type.Pf[i,j] == :in
+            ind = number.Pf[i,j] + nVx + nVy + nPt
+            P.f[i,j] += dx[ind]
+        end
+    end
+end
+
+# function Numbering!(N, type, nc)
+    
+#     ndof  = 0
+#     neq   = 0
+#     noisy = false
+
+#     ############ Fields Vx ############
+#     periodic_west  = sum(any(i->i==:periodic, type.Vx[2,:], dims=2)) > 0
+#     periodic_south = sum(any(i->i==:periodic, type.Vx[:,2], dims=1)) > 0
+
+#     shift  = (periodic_west) ? 1 : 0 
+#     # Loop through inner nodes of the mesh
+#     for j=3:nc.y+4-2, i=2:nc.x+3-1
+#         if type.Vx[i,j] == :Dirichlet_normal || (type.Vx[i,j] != :periodic && i==nc.x+3-1)
+#             # Avoid nodes with constant velocity or redundant periodic nodes
+#         else
+#             ndof+=1
+#             N.Vx[i,j] = ndof  
+#         end
+#     end
+
+#     # Copy equation indices for periodic cases
+#     if periodic_west
+#         N.Vx[1,:] .= N.Vx[end-2,:]
+#     end
+
+#     # Copy equation indices for periodic cases
+#     if periodic_south
+#         # South
+#         N.Vx[:,1] .= N.Vx[:,end-3]
+#         N.Vx[:,2] .= N.Vx[:,end-2]
+#         # North
+#         N.Vx[:,end]   .= N.Vx[:,4]
+#         N.Vx[:,end-1] .= N.Vx[:,3]
+#     end
+#     noisy ? printxy(N.Vx) : nothing
+
+#     neq = maximum(N.Vx)
+
+#     ############ Fields Vy ############
+#     ndof  = 0
+#     periodic_west  = sum(any(i->i==:periodic, type.Vy[2,:], dims=2)) > 0
+#     periodic_south = sum(any(i->i==:periodic, type.Vy[:,2], dims=1)) > 0
+#     shift = periodic_south ? 1 : 0
+#     # Loop through inner nodes of the mesh
+#     for j=2:nc.y+3-1, i=3:nc.x+4-2
+#         if type.Vy[i,j] == :Dirichlet_normal || (type.Vy[i,j] != :periodic && j==nc.y+3-1)
+#             # Avoid nodes with constant velocity or redundant periodic nodes
+#         else
+#             ndof+=1
+#             N.Vy[i,j] = ndof  
+#         end
+#     end
+
+#     # Copy equation indices for periodic cases
+#     if periodic_south
+#         N.Vy[:,1] .= N.Vy[:,end-2]
+#     end
+
+#     # Copy equation indices for periodic cases
+#     if periodic_west
+#         # West
+#         N.Vy[1,:] .= N.Vy[end-3,:]
+#         N.Vy[2,:] .= N.Vy[end-2,:]
+#         # East
+#         N.Vy[end,:]   .= N.Vy[4,:]
+#         N.Vy[end-1,:] .= N.Vy[3,:]
+#     end
+#     noisy ? printxy(N.Vy) : nothing
+
+#     neq = maximum(N.Vy)
+
+#     ############ Fields Pt ############
+#     neq_Pt                     = nc.x * nc.y
+#     N.Pt[2:end-1,2:end-1] .= reshape((1:neq_Pt) .+ 0*neq, nc.x, nc.y)
+
+#     if periodic_west
+#         N.Pt[1,:]   .= N.Pt[end-1,:]
+#         N.Pt[end,:] .= N.Pt[2,:]
+#     end
+
+#     if periodic_south
+#         N.Pt[:,1]   .= N.Pt[:,end-1]
+#         N.Pt[:,end] .= N.Pt[:,2]
+#     end
+#     noisy ? printxy(N.Pt) : nothing
+
+#     neq = maximum(N.Pt)
+
+#     ############ Fields Pf ############
+
+#     neq_Pf                    = nc.x * nc.y
+#     N.Pf[2:end-1,2:end-1] .= reshape(1:neq_Pf, nc.x, nc.y)
+
+#     # Make periodic in x
+#     for j in axes(type.Pf,2)
+#         if type.Pf[1,j] === :periodic
+#             N.Pf[1,j] = N.Pf[end-1,j]
+#         end
+#         if type.Pf[end,j] === :periodic
+#             N.Pf[end,j] = N.Pf[2,j]
+#         end
+#     end
+
+#     # Make periodic in y
+#     for i in axes(type.Pf,1)
+#         if type.Pf[i,1] === :periodic
+#             N.Pf[i,1] = N.Pf[i,end-1]
+#         end
+#         if type.Pf[i,end] === :periodic
+#             N.Pf[i,end] = N.Pf[i,2]
+#         end
+#     end
+
+# end
 
 @views function SparsityPattern!(K, num, pattern, nc) 
     ############ Fields Vx ############
