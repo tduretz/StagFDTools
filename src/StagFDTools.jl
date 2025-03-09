@@ -35,9 +35,16 @@ module StokesFSG
 end
 
 module TwoPhases
-    using StaticArrays, ExtendableSparse, StaticArrays
+    using StaticArrays, ExtendableSparse, StaticArrays, Enzyme
     include("TwoPhases.jl")
     export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution! #, SetBCVx!, SetBCVy!
+    export AssembleFluidContinuity2D!, ResidualFluidContinuity2D!, FluidContinuity
+    export AssembleContinuity2D!, ResidualContinuity2D!, Continuity
+    export AssembleMomentum2D_y!, ResidualMomentum2D_y!, Momentum_y
+    export AssembleMomentum2D_x!, ResidualMomentum2D_x!, Momentum_x
+    include("TwoPhases_VE.jl")
+    export AssembleFluidContinuity2D_VE!, ResidualFluidContinuity2D_VE!, FluidContinuity_VE
+    export AssembleContinuity2D_VE!, ResidualContinuity2D_VE!, Continuity_VE
 end
 
 module Rheology
