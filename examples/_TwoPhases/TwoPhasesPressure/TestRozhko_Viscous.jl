@@ -50,7 +50,7 @@ end
     @show ηb0      = 40*ηs0       # Bulk viscosity
     ηϕi      = ηb0*20000
     ηϕo      = ηb0/20000
-    k_ηf0    = 1e10 # Permeability / fluid viscosity
+    k_ηf0    = 1e0 # Permeability / fluid viscosity
     kμfi     = 1e1
     r_in     = 1.        # Inclusion radius 
     r_out    = 3.5*r_in
@@ -239,13 +239,19 @@ end
 
     Ur_ana = zero(BC.Pf)
     Ut_ana = zero(BC.Pf)
+    Pf_ana = zero(BC.Pf)
+    Pt_ana = zero(BC.Pf)
+    ϵ_Ur   = zero(BC.Pf)
+    ϵ_Pf   = zero(BC.Pf)
 
     for i=1:size(BC.Pf,1), j=1:size(BC.Pf,2)
         # coordinate transform
         ro  = sqrt(xce[i]^2 + yce[j]^2)
         phi = atan(yce[j], xce[i])
         sol = Rozhko2008(ro, phi, r_in, r_out, Pf_out, dPf, m, G_anal, ν_anal)
-        BC.Pf[i,j] = sol.pf
+        BC.Pf[i,j]  = sol.pf
+        Pf_ana[i,j] = sol.pf
+        Pt_ana[i,j] = sol.pf
         Ur_ana[i,j] = sol.ur
         Ut_ana[i,j] = sol.ut
     end
@@ -370,18 +376,22 @@ end
         Vr[i,j] = V_pol[1]
         Vt[i,j] = V_pol[2]
 
-        if (xce[i].^2 .+ yce[j].^2) < r_in^2 ||  (xce[i].^2 .+ yce[j].^2) > r_out^2
+        if (xce[i].^2 .+ yce[j].^2) <= r_in^2 ||  (xce[i].^2 .+ yce[j].^2) >= r_out^2
             Vr[i,j]     = NaN
             Vt[i,j]     = NaN
             P.f[i,j]    = NaN
             P.t[i,j]    = NaN
             # Ur_ana[i,j] = NaN
             # Ut_ana[i,j] = NaN
+        else
+            ϵ_Ur[i,j] = abs(Ur_ana[i,j] - Vr[i,j] )
+            ϵ_Pf[i,j] = abs(Pf_ana[i,j] - P.f[i,j])
         end
         
     end
 
-    @show size(Vr),  size(xce)
+    @show mean(ϵ_Ur)
+    @show mean(ϵ_Pf)
 
     # p1 = heatmap(xc, yc, Vs[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Vs")
     # p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, title="Ux", xlims=(-5,5), ylims=(-5,5))
@@ -414,7 +424,7 @@ function Run()
     # Mode 0   
     Ωl = 0.1
     Ωη = 10.
-    main(nc,  Ωl, Ωη)
+    main(nc,  Ωl, Ωη);
 
 end
 

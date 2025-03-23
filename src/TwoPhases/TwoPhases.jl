@@ -30,7 +30,7 @@ function Numbering!(N, type, nc)
     shift  = (periodic_west) ? 1 : 0 
     # Loop through inner nodes of the mesh
     for j=3:nc.y+4-2, i=2:nc.x+3-1
-        if type.Vx[i,j] == :Dirichlet_normal || (type.Vx[i,j] != :periodic && i==nc.x+3-1)
+        if type.Vx[i,j] == :Dirichlet_normal || (type.Vx[i,j] != :periodic && i==nc.x+3-1) || type.Vx[i,j] == :constant 
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof+=1
@@ -63,7 +63,7 @@ function Numbering!(N, type, nc)
     shift = periodic_south ? 1 : 0
     # Loop through inner nodes of the mesh
     for j=2:nc.y+3-1, i=3:nc.x+4-2
-        if type.Vy[i,j] == :Dirichlet_normal || (type.Vy[i,j] != :periodic && j==nc.y+3-1)
+        if type.Vy[i,j] == :Dirichlet_normal || (type.Vy[i,j] != :periodic && j==nc.y+3-1) || type.Vy[i,j] == :constant 
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof+=1
@@ -206,122 +206,6 @@ function UpdateSolution!(V, P, dx, number, type, nc)
         end
     end
 end
-
-# function Numbering!(N, type, nc)
-    
-#     ndof  = 0
-#     neq   = 0
-#     noisy = false
-
-#     ############ Fields Vx ############
-#     periodic_west  = sum(any(i->i==:periodic, type.Vx[2,:], dims=2)) > 0
-#     periodic_south = sum(any(i->i==:periodic, type.Vx[:,2], dims=1)) > 0
-
-#     shift  = (periodic_west) ? 1 : 0 
-#     # Loop through inner nodes of the mesh
-#     for j=3:nc.y+4-2, i=2:nc.x+3-1
-#         if type.Vx[i,j] == :Dirichlet_normal || (type.Vx[i,j] != :periodic && i==nc.x+3-1)
-#             # Avoid nodes with constant velocity or redundant periodic nodes
-#         else
-#             ndof+=1
-#             N.Vx[i,j] = ndof  
-#         end
-#     end
-
-#     # Copy equation indices for periodic cases
-#     if periodic_west
-#         N.Vx[1,:] .= N.Vx[end-2,:]
-#     end
-
-#     # Copy equation indices for periodic cases
-#     if periodic_south
-#         # South
-#         N.Vx[:,1] .= N.Vx[:,end-3]
-#         N.Vx[:,2] .= N.Vx[:,end-2]
-#         # North
-#         N.Vx[:,end]   .= N.Vx[:,4]
-#         N.Vx[:,end-1] .= N.Vx[:,3]
-#     end
-#     noisy ? printxy(N.Vx) : nothing
-
-#     neq = maximum(N.Vx)
-
-#     ############ Fields Vy ############
-#     ndof  = 0
-#     periodic_west  = sum(any(i->i==:periodic, type.Vy[2,:], dims=2)) > 0
-#     periodic_south = sum(any(i->i==:periodic, type.Vy[:,2], dims=1)) > 0
-#     shift = periodic_south ? 1 : 0
-#     # Loop through inner nodes of the mesh
-#     for j=2:nc.y+3-1, i=3:nc.x+4-2
-#         if type.Vy[i,j] == :Dirichlet_normal || (type.Vy[i,j] != :periodic && j==nc.y+3-1)
-#             # Avoid nodes with constant velocity or redundant periodic nodes
-#         else
-#             ndof+=1
-#             N.Vy[i,j] = ndof  
-#         end
-#     end
-
-#     # Copy equation indices for periodic cases
-#     if periodic_south
-#         N.Vy[:,1] .= N.Vy[:,end-2]
-#     end
-
-#     # Copy equation indices for periodic cases
-#     if periodic_west
-#         # West
-#         N.Vy[1,:] .= N.Vy[end-3,:]
-#         N.Vy[2,:] .= N.Vy[end-2,:]
-#         # East
-#         N.Vy[end,:]   .= N.Vy[4,:]
-#         N.Vy[end-1,:] .= N.Vy[3,:]
-#     end
-#     noisy ? printxy(N.Vy) : nothing
-
-#     neq = maximum(N.Vy)
-
-#     ############ Fields Pt ############
-#     neq_Pt                     = nc.x * nc.y
-#     N.Pt[2:end-1,2:end-1] .= reshape((1:neq_Pt) .+ 0*neq, nc.x, nc.y)
-
-#     if periodic_west
-#         N.Pt[1,:]   .= N.Pt[end-1,:]
-#         N.Pt[end,:] .= N.Pt[2,:]
-#     end
-
-#     if periodic_south
-#         N.Pt[:,1]   .= N.Pt[:,end-1]
-#         N.Pt[:,end] .= N.Pt[:,2]
-#     end
-#     noisy ? printxy(N.Pt) : nothing
-
-#     neq = maximum(N.Pt)
-
-#     ############ Fields Pf ############
-
-#     neq_Pf                    = nc.x * nc.y
-#     N.Pf[2:end-1,2:end-1] .= reshape(1:neq_Pf, nc.x, nc.y)
-
-#     # Make periodic in x
-#     for j in axes(type.Pf,2)
-#         if type.Pf[1,j] === :periodic
-#             N.Pf[1,j] = N.Pf[end-1,j]
-#         end
-#         if type.Pf[end,j] === :periodic
-#             N.Pf[end,j] = N.Pf[2,j]
-#         end
-#     end
-
-#     # Make periodic in y
-#     for i in axes(type.Pf,1)
-#         if type.Pf[i,1] === :periodic
-#             N.Pf[i,1] = N.Pf[i,end-1]
-#         end
-#         if type.Pf[i,end] === :periodic
-#             N.Pf[i,end] = N.Pf[i,2]
-#         end
-#     end
-
-# end
 
 @views function SparsityPattern!(K, num, pattern, nc) 
     ############ Fields Vx ############
@@ -953,4 +837,61 @@ function AssembleFluidContinuity2D!(K, V, P, rheo, num, pattern, type, BC, nc, �
            
     end
     return nothing
+end
+
+function SetBCVx1(Vx, typex, bcx, Δ)
+
+    MVx = MMatrix(Vx)
+    # N/S
+    for ii in axes(typex, 1)
+        if typex[ii,1] == :Dirichlet_tangent
+            MVx[ii,1] = fma(2, bcx[ii,1], -Vx[ii,2])
+        elseif typex[ii,1] == :Neumann_tangent
+            MVx[ii,1] = fma(Δ.y, bcx[ii,1], Vx[ii,2])
+        end
+
+        if typex[ii,end] == :Dirichlet_tangent
+            MVx[ii,end] = fma(2, bcx[ii,end], -Vx[ii,end-1])
+        elseif typex[ii,end] == :Neumann_tangent
+            MVx[ii,end] = fma(Δ.y, bcx[ii,end], Vx[ii,end-1])
+        end
+    end
+    # E/W
+    for jj in axes(typex, 2)
+        if typex[1,jj] == :Neumann_normal
+            MVx[1,jj] = fma(2, Δ.x*bcx[1,jj], Vx[2,jj])
+        end
+        if typex[end,jj] == :Neumann_normal
+            MVx[end,jj] = fma(2,-Δ.x*bcx[end,jj], Vx[end-1,jj])
+        end
+    end
+    return SMatrix(MVx)
+end
+
+function SetBCVy1(Vy, typey, bcy, Δ)
+    MVy = MMatrix(Vy)
+    # E/W
+    for jj in axes(typey, 2)
+        if typey[1,jj] == :Dirichlet_tangent
+            MVy[1,jj] = fma(2, bcy[1,jj], -Vy[2,jj])
+        elseif typey[1,jj] == :Neumann_tangent
+            MVy[1,jj] = fma(Δ.y, bcy[1,jj], Vy[2,jj])
+        end
+
+        if typey[end,jj] == :Dirichlet_tangent
+            MVy[end,jj] = fma(2, bcy[end,jj], -Vy[end-1,jj])
+        elseif typey[end,jj] == :Neumann_tangent
+            MVy[end,jj] = fma(Δ.y, bcy[end,jj], Vy[end-1,jj])
+        end
+    end
+    # N/S
+    for ii in axes(typey, 1)
+        if typey[ii,1] == :Neumann_normal
+            MVy[ii,1] = fma(2, Δ.y*bcy[ii,1], Vy[ii,2])
+        end
+        if typey[ii,end] == :Neumann_normal
+            MVy[ii,end] = fma(2,-Δ.y*bcy[ii,end], Vy[ii,end-1])
+        end
+    end
+    return SMatrix(MVy)
 end

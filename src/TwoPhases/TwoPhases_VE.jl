@@ -4,7 +4,9 @@ function Continuity_VE(Vx, Vy, Pt, Pt0, Pf, Pf0, ηϕ, Kd, α, ϕ, type_loc, bcv
     # fp = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy + (Pt[1] - Pf[2,2])/((1-ϕ)*ηϕ) + ((Pt[1]-Pt0[1])/Δ.t - α*(Pf[2,2]-Pf0[1])/Δ.t)/Kd
     
     
-    fp = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy  + (Pt[1] - Pf[2,2])/((1-ϕ)*ηϕ) + ((Pt[1]-Pt0[1])/Δ.t - α*(Pf[2,2]-Pf0[1])/Δ.t)/Kd
+    # fp = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy  + (Pt[1] - Pf[2,2])/((1-ϕ)*ηϕ) + ((Pt[1]-Pt0[1])/Δ.t - α*(Pf[2,2]-Pf0[1])/Δ.t)/Kd
+
+    fp = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy  + ((Pt[1]-Pt0[1]) - (Pf[2,2]-Pf0[1]))/Kd/Δ.t
 
     # fp *= η/(Δ.x+Δ.y)
     return fp
@@ -58,7 +60,9 @@ function FluidContinuity_VE(Vx, Vy, Pt, Pt0, Pf, Pf0, ηϕ, Kd, α, B, ϕ, kμ, 
     qxE = -kμ.xx[2]*(PfE - PfC)/Δ.x
     qyS = -kμ.yy[1]*(PfC - PfS)/Δ.y
     qyN = -kμ.yy[2]*(PfN - PfC)/Δ.y
-    F   = (qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y - (Pt[1]-Pf[2,2])/((1-ϕ)*ηϕ) - α/Kd*((Pt[1]-Pt0[1])/Δ.t - (Pf[2,2]-Pf0[1])/Δ.t/B)
+    # F   = (qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y - (Pt[1]-Pf[2,2])/((1-ϕ)*ηϕ) - α/Kd*((Pt[1]-Pt0[1])/Δ.t - (Pf[2,2]-Pf0[1])/Δ.t/B)
+
+    F   = (qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y - 0*((Pt[1]-Pt0[1]) - (Pf[2,2]-Pf0[1]))/Kd/Δ.t
 
 
     # F   = (qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y
