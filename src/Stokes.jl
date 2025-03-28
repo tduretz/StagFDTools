@@ -180,7 +180,7 @@ function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materia
     fx  = ( τxx[2]  - τxx[1] ) * invΔx
     fx += ( τxy[2]  - τxy[1] ) * invΔy
     fx -= ( Ptc[2]  - Ptc[1] ) * invΔx
-    # fx *= -1 * Δ.x * Δ.y
+    fx *= -1 #* Δ.x * Δ.y
 
     return fx
 end
@@ -243,7 +243,7 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materia
     fy  = ( τyy[2]  -  τyy[1] ) * invΔy
     fy += ( τxy[2]  -  τxy[1] ) * invΔx
     fy -= ( Ptc[2]  -  Ptc[1])  * invΔy
-    # fy *= -1 * Δ.x * Δ.y
+    fy *= -1 # * Δ.x * Δ.y
     
     return fy
 end
