@@ -252,25 +252,43 @@ let
     pattern = Fields( Fields( @SMatrix([0 1 0; 1 1 1; 0 1 0]) ) )  # Ooops this is done twice, you can remove it :D
 
     # Parameters
-    L     = 1.
+    L     = 1.                   # Domain extent
     # Arrays
-    r   = zeros(nc.x+2, nc.y+2)
-    s   = zeros(nc.x+2, nc.y+2)
-    u   = zeros(nc.x+2, nc.y+2)
-    k   = (x = (xx= ones(nc.x+1,nc.y), xy=zeros(nc.x+1,nc.y)), 
+    # div( q ) - s = 0
+    # q = - k * grad(u) --> k is a tensor               k = kxx kxy            grad(u) = dudx
+    #                                                       kyx kyy                      dudy
+    # q = -( kxx*dudx + kxy*dudy )
+    #     -( kyx*dudx + kyy*dudy )
+
+    #      |                  |
+    #      |        uN        |
+    #      |                  |
+    #----- x -- kyyN, kyxN -- x -----
+    #      |                  |
+    # uW  kxxW, kxyW  uC kxxE, kxyE  uE
+    #      |                  |
+    #----- x -- kyyS, kyxS -- x -----
+    #      |                  |
+    #      |        uS        |
+    #      |                  |
+    
+    r   = zeros(nc.x+2, nc.y+2)  # residual of the equation (right-hand side)
+    s   = zeros(nc.x+2, nc.y+2)  # forcing term
+    u   = zeros(nc.x+2, nc.y+2)  # solution
+    k   = (x = (xx= ones(nc.x+1,nc.y), xy=zeros(nc.x+1,nc.y)), # conductivity tensor (can be simplidied)
            y = (yx=zeros(nc.x,nc.y+1), yy= ones(nc.x,nc.y+1)))
     Δ   = (x=L/nc.x, y=L/nc.y)
     xc  = LinRange(-L/2-Δ.x/2, L/2+Δ.x/2, nc.x+2)
     yc  = LinRange(-L/2-Δ.y/2, L/2+Δ.y/2, nc.y+2)
     # Configuration
     s  .= 50*exp.(-(xc.^2 .+ (yc').^2)./0.4^2)
-    # Residual check
+    # Residual check: div( q ) - s = r
     @timeit to "Residual" ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ) 
     @info norm(r)/sqrt(length(r))
     
     # Sparse matrix assembly
     nu  = maximum(number.u)
-    M   = Fields( Fields( ExtendableSparseMatrix(nu, nu) ))
+    M   = Fields( Fields( ExtendableSparseMatrix(nu, nu) )) 
   
     @timeit to "Assembly Enzyme" begin
         AssemblyPoisson_Enzyme!(M, u, k, s, number, type, pattern, bc_val, nc, Δ)
@@ -281,12 +299,14 @@ let
 
     @info "Symmetry"
     @show norm(M.u.u - M.u.u')
-    b  = r[inx,iny][:]
+    # A one-step Newton iteration - the problem is linear: only one step is needed to reach maximum accurracy
+    b  = r[inx,iny][:]                  # creates a 1D rhight hand side vector (whitout ghosts), values are the current residual
     # Solve
-    du           = M.u.u\b
-    u[inx,iny] .-= reshape(du, nc...)
+    du           = M.u.u\b              # apply inverse of matrix M.u.u to residual vector 
+    u[inx,iny] .-= reshape(du, nc...)   # update the solution u using the correction du
     # Residual check
-    ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ)     # @info norm(r)/sqrt(length(r))
+    ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ)     
+    @info norm(r)/sqrt(length(r))
     # Visualization
     p1 = heatmap(xc[inx], yc[iny], u[inx,iny]', aspect_ratio=1, xlim=extrema(xc))
     qx = -diff(u[inx,iny],dims=1)/Δ.x
