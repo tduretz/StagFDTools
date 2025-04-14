@@ -23,7 +23,7 @@ using ForwardDiff, Enzyme  # AD backends you want to use
 #      |     uS    |
 #      |           |
 
-function Poisson2D(u_loc, k, s, type_loc, bcv_loc, Δ, u0, material)
+function Diffusion2D(u_loc, k, s, type_loc, bcv_loc, Δ, u0, material)
 
     # u_loc is 3*3 matrix containing the current values of u for the whole stencil
     #             0   uN  0
@@ -78,7 +78,7 @@ function Poisson2D(u_loc, k, s, type_loc, bcv_loc, Δ, u0, material)
     qyN = -k.yy[2]*(uN - uC)/Δ.y  # North
 
     # Return the residual function based on finite differences
-    return -(-(qxE - qxW)/Δ.x - (qyN - qyS)/Δ.y + s + material.ρ*material.cp*(uC - u0)/Δ.t)  
+    return -(-(qxE - qxW)/Δ.x - (qyN - qyS)/Δ.y + s - material.ρ*material.cp*(uC - u0)/Δ.t)  
 end
 
 # This function loop over the whole set of 2D cells and computes the residual in each cells
@@ -111,7 +111,7 @@ function ResidualPoisson2D!(R, u, k, s, num, type, bc_val, nc, Δ, u0, material)
         type_loc  = SMatrix{3,3}(  type.u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
 
         # This calls the residual function
-        R[i,j]    = Poisson2D(u_loc, k_loc, s[i,j], type_loc, bcv_loc, Δ, u0[i,j], material)
+        R[i,j]    = Diffusion2D(u_loc, k_loc, s[i,j], type_loc, bcv_loc, Δ, u0[i,j], material)
     end
     return nothing
 end
@@ -163,7 +163,7 @@ function AssemblyPoisson_Enzyme!(K, u, k, s, number, type, pattern, bc_val, nc, 
         ∂R∂u     .= 0e0
 
         # Here the magic happens: we call a function from Enzyme that computes all, partial derivatives for the current stencil block 
-        autodiff(Enzyme.Reverse, Poisson2D, Duplicated(u_loc, ∂R∂u), Const(k_loc), Const(s[i,j]), Const(type_loc), Const(bcv_loc), Const(Δ), Const(u0[i,j]), Const(material))
+        autodiff(Enzyme.Reverse, Diffusion2D, Duplicated(u_loc, ∂R∂u), Const(k_loc), Const(s[i,j]), Const(type_loc), Const(bcv_loc), Const(Δ), Const(u0[i,j]), Const(material))
 
         # This loops through the 2*2 stencil block and sets the coefficient ∂R∂u into the sparse matrix K.u.u
         num_ij = number.u[i,j]
@@ -191,18 +191,18 @@ let
     # Define node types 
     type = Fields( fill(:out, (nc.x+2, nc.y+2)) )   # Achtung: geist nodes
     type.u[2:end-1,2:end-1].= :in                   # inside nodes are all type :in
-    type.u[1,:]            .= :Dirichlet            # one BC type is :Dirichlet # West
-    type.u[end,:]          .= :Dirichlet            # East
+    type.u[1,:]            .= :Neumann              # one BC type is :Dirichlet # West
+    type.u[end,:]          .= :Neumann              # East
     type.u[:,1]            .= :Dirichlet            # South
     type.u[:,end]          .= :Dirichlet            # North
 
     # Define values of the boundary conditions
     bc_val = Fields( fill(0., (nc.x+2, nc.y+2)) )   # Achtung: geist nodes
     bc_val.u        .= zeros(nc.x+2, nc.y+2)        # useless ?!
-    bc_val.u[1,:]   .= 1.0                          # Boundary value is 1.0 and this will be a Dirichlet (u at West = 1) # West
-    bc_val.u[end,:] .= 1.0                          # East
+    bc_val.u[1,:]   .= 0.0                          # Boundary value is 1.0 and this will be a Dirichlet (u at West = 1) # West
+    bc_val.u[end,:] .= 0.0                          # East
     bc_val.u[:,1]   .= 1.0                          # South
-    bc_val.u[:,end] .= 1.0                          # North
+    bc_val.u[:,end] .= 0.0                          # North
 
     # 5-point stencil, this is the definition of the stencil block. 
     # It basically states which points are being included in the stencil
@@ -215,12 +215,9 @@ let
     @info "Node types"
     printxy(number.u) 
 
-    # 5-point stencil
-    pattern = Fields( Fields( @SMatrix([0 1 0; 1 1 1; 0 1 0]) ) )  # Ooops this is done twice, you can remove it :D
-
     # Parameters
-    nt = 1e3
-    Δt0 = 0.1
+    nt  = 20
+    Δt0 = 0.01
     # niter = 3
     L     = 1.                   # Domain extent
     # Arrays
@@ -242,8 +239,8 @@ let
     #      |        uS        |
     #      |                  |
     material = (
-        ρ = 1.0,
-        cp = 1e-6,
+        ρ  = 1.0,
+        cp = 1.0,
     )
     r   = zeros(nc.x+2, nc.y+2)  # residual of the equation (right-hand side)
     s   = zeros(nc.x+2, nc.y+2)  # forcing term
@@ -255,9 +252,9 @@ let
     xc  = LinRange(-L/2-Δ.x/2, L/2+Δ.x/2, nc.x+2)
     yc  = LinRange(-L/2-Δ.y/2, L/2+Δ.y/2, nc.y+2)
     # Configuration
-    s  .= 50*exp.(-(xc.^2 .+ (yc').^2)./0.4^2)
+    s  .= 0 * 50*exp.(-(xc.^2 .+ (yc').^2)./0.4^2)  # Set zero source
     # Initial condititon
-    # u  .= 200*exp.(-(xc.^2 .+ (yc').^2)./0.4^2)
+    u  .= 0 * 200*exp.(-(xc.^2 .+ (yc').^2)./0.4^2)
     
     # Sparse matrix assembly
     nu  = maximum(number.u)
@@ -270,24 +267,26 @@ let
         @timeit to "Residual" ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ, u0, material) 
         @info norm(r)/sqrt(length(r))
         
-  
         @timeit to "Assembly Enzyme" begin
             AssemblyPoisson_Enzyme!(M, u, k, s, number, type, pattern, bc_val, nc, Δ, u0, material)
         end
 
         @info "Symmetry"
         @show norm(M.u.u - M.u.u')
+
         # A one-step Newton iteration - the problem is linear: only one step is needed to reach maximum accurracy
         b  = r[inx,iny][:]                  # creates a 1D rhight hand side vector (whitout ghosts), values are the current residual
+        
         # Solve
         du           = M.u.u\b              # apply inverse of matrix M.u.u to residual vector 
         u[inx,iny] .-= reshape(du, nc...)   # update the solution u using the correction du
+        
         # Residual check
         ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ, u0, material)     
         @info norm(r)/sqrt(length(r))
 
         # Visualization
-        if mod(it, 100) == 0
+        if mod(it, 1) == 0
             p1 = heatmap(xc[inx], yc[iny], u[inx,iny]', aspect_ratio=1, xlim=extrema(xc))
             qx = -diff(u[inx,iny],dims=1)/Δ.x
             qy = -diff(u[inx,iny],dims=2)/Δ.y
