@@ -23,7 +23,7 @@ using ForwardDiff, Enzyme  # AD backends you want to use
 #      |     uS    |
 #      |           |
 
-function Diffusion2D(u_loc, k, s, type_loc, bcv_loc, Δ, u0, material)
+function Diffusion2D(u_loc, k, s, type_loc, bcv_loc, Δ, u0, ρ, cp)
 
     # u_loc is 3*3 matrix containing the current values of u for the whole stencil
     #             0   uN  0
@@ -78,11 +78,11 @@ function Diffusion2D(u_loc, k, s, type_loc, bcv_loc, Δ, u0, material)
     qyN = -k.yy[2]*(uN - uC)/Δ.y  # North
 
     # Return the residual function based on finite differences
-    return -(-(qxE - qxW)/Δ.x - (qyN - qyS)/Δ.y + s - material.ρ*material.cp*(uC - u0)/Δ.t)  
+    return -(-(qxE - qxW)/Δ.x - (qyN - qyS)/Δ.y + s - ρ*cp*(uC - u0)/Δ.t)  
 end
 
 # This function loop over the whole set of 2D cells and computes the residual in each cells
-function ResidualPoisson2D!(R, u, k, s, num, type, bc_val, nc, Δ, u0, material)  # u_loc, s, type_loc, Δ
+function ResidualPoisson2D!(R, u, k, s, num, type, bc_val, nc, Δ, u0, ρ, cp)  # u_loc, s, type_loc, Δ
 
     # This is just a vector of zeros (off-diagonal terms of the conductivity tensor are 0 in the isotropic case)
     # Here StaticArrays are being used a bit everywhere. This is a Julia Library which is used for achieving good performance.
@@ -111,7 +111,7 @@ function ResidualPoisson2D!(R, u, k, s, num, type, bc_val, nc, Δ, u0, material)
         type_loc  = SMatrix{3,3}(  type.u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
 
         # This calls the residual function
-        R[i,j]    = Diffusion2D(u_loc, k_loc, s[i,j], type_loc, bcv_loc, Δ, u0[i,j], material)
+        R[i,j]    = Diffusion2D(u_loc, k_loc, s[i,j], type_loc, bcv_loc, Δ, u0[i,j], ρ[i,j], cp[i,j])
     end
     return nothing
 end
@@ -121,7 +121,7 @@ end
 # The other does it with Enzyme: https://github.com/EnzymeAD/Enzyme.jl
 
 # Computation of the partial derivatives of the residual function. Sets the coefficient in the system matrix.
-function AssemblyPoisson_Enzyme!(K, u, k, s, number, type, pattern, bc_val, nc, Δ, u0, material)
+function AssemblyPoisson_Enzyme!(K, u, k, s, number, type, pattern, bc_val, nc, Δ, u0, ρ, cp)
 
     # This is aocal matrix that stores the partial derivatives.
      
@@ -163,7 +163,7 @@ function AssemblyPoisson_Enzyme!(K, u, k, s, number, type, pattern, bc_val, nc, 
         ∂R∂u     .= 0e0
 
         # Here the magic happens: we call a function from Enzyme that computes all, partial derivatives for the current stencil block 
-        autodiff(Enzyme.Reverse, Diffusion2D, Duplicated(u_loc, ∂R∂u), Const(k_loc), Const(s[i,j]), Const(type_loc), Const(bcv_loc), Const(Δ), Const(u0[i,j]), Const(material))
+        autodiff(Enzyme.Reverse, Diffusion2D, Duplicated(u_loc, ∂R∂u), Const(k_loc), Const(s[i,j]), Const(type_loc), Const(bcv_loc), Const(Δ), Const(u0[i,j]), Const(ρ[i,j]), Const(cp[i,j]))
 
         # This loops through the 2*2 stencil block and sets the coefficient ∂R∂u into the sparse matrix K.u.u
         num_ij = number.u[i,j]
@@ -218,7 +218,6 @@ let
     # Parameters
     nt  = 20
     Δt0 = 0.01
-    # niter = 3
     L     = 1.                   # Domain extent
     # Arrays
     # div( q ) - s = 0
@@ -238,10 +237,8 @@ let
     #      |                  |
     #      |        uS        |
     #      |                  |
-    material = (
-        ρ  = 1.0,
-        cp = 1.0,
-    )
+    ρ   = zeros(nc.x+2, nc.y+2)  # density
+    cp  = zeros(nc.x+2, nc.y+2)  # specific heat capacity
     r   = zeros(nc.x+2, nc.y+2)  # residual of the equation (right-hand side)
     s   = zeros(nc.x+2, nc.y+2)  # forcing term
     u   = zeros(nc.x+2, nc.y+2)  # solution
@@ -253,6 +250,9 @@ let
     yc  = LinRange(-L/2-Δ.y/2, L/2+Δ.y/2, nc.y+2)
     # Configuration
     s  .= 0 * 50*exp.(-(xc.^2 .+ (yc').^2)./0.4^2)  # Set zero source
+    ρ  .= 1.0
+    cp .= 1.0
+    
     # Initial condititon
     u  .= 0 * 200*exp.(-(xc.^2 .+ (yc').^2)./0.4^2)
     
@@ -264,11 +264,11 @@ let
         u0 .= u  # store the previous solution
 
         # Residual check: div( q ) - s = r
-        @timeit to "Residual" ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ, u0, material) 
+        @timeit to "Residual" ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ, u0, ρ, cp) 
         @info norm(r)/sqrt(length(r))
         
         @timeit to "Assembly Enzyme" begin
-            AssemblyPoisson_Enzyme!(M, u, k, s, number, type, pattern, bc_val, nc, Δ, u0, material)
+            AssemblyPoisson_Enzyme!(M, u, k, s, number, type, pattern, bc_val, nc, Δ, u0, ρ, cp)
         end
 
         @info "Symmetry"
@@ -282,7 +282,7 @@ let
         u[inx,iny] .-= reshape(du, nc...)   # update the solution u using the correction du
         
         # Residual check
-        ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ, u0, material)     
+        ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ, u0, ρ, cp)     
         @info norm(r)/sqrt(length(r))
 
         # Visualization
