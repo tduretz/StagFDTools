@@ -17,6 +17,217 @@ function Ranges(nc)
     return (inx_Vx = 2:nc.x+2, iny_Vx = 3:nc.y+2, inx_Vy = 3:nc.x+2, iny_Vy = 2:nc.y+2, inx_c = 2:nc.x+1, iny_c = 2:nc.y+1, inx_v = 2:nc.x+2, iny_v = 2:nc.y+2, size_x = (nc.x+3, nc.y+4), size_y = (nc.x+4, nc.y+3), size_c = (nc.x+2, nc.y+2), size_v = (nc.x+3, nc.y+3))
 end
 
+function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, Pf, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δ)
+    
+    invΔx, invΔy = 1 / Δ.x, 1 / Δ.y
+
+    # BC
+    Vx = SetBCVx1(Vx_loc, type.x, bcv.x, Δ)
+    Vy = SetBCVy1(Vy_loc, type.y, bcv.y, Δ)
+
+    # Velocity gradient
+    Dxx = ∂x(Vx) * invΔx
+    Dyy = ∂y_inn(Vy) * invΔy
+    Dxy = ∂y(Vx) * invΔy
+    Dyx = ∂x_inn(Vy) * invΔx
+
+    # Strain rate
+    ε̇kk = @. Dxx + Dyy
+    ε̇xx = @. Dxx - 1/3*ε̇kk
+    ε̇yy = @. Dyy - 1/3*ε̇kk
+    ε̇xy = @. 1/2 * ( Dxy + Dyx )
+
+    # Average vertex to centroid
+    ε̇̄xy  = av(ε̇xy)
+    # Average centroid to vertex
+    ε̇̄xx  = av(ε̇xx)
+    ε̇̄yy  = av(ε̇yy)
+    P̄t   = av(Pt)
+    τ̄0xx = av(τ0.xx)
+    τ̄0yy = av(τ0.yy)
+    τ̄0xy = av(τ0.xy)
+
+    # Effective strain rate
+    Gc   = SVector{2, Float64}( materials.G[phases.c] )
+    Gv   = SVector{2, Float64}( materials.G[phases.v] )
+    tmpc = @. inv(2 * Gc * Δ.t)
+    tmpv = @. inv(2 * Gv * Δ.t)
+    ϵ̇xx  = @. ε̇xx[:,2] + τ0.xx[:,2] * tmpc
+    ϵ̇yy  = @. ε̇yy[:,2] + τ0.yy[:,2] * tmpc
+    ϵ̇̄xy  = @. ε̇̄xy[:]   + τ̄0xy[:]    * tmpc
+    ϵ̇̄xx  = @. ε̇̄xx[:]   + τ̄0xx[:]    * tmpv
+    ϵ̇̄yy  = @. ε̇̄yy[:]   + τ̄0yy[:]    * tmpv
+    ϵ̇xy  = @. ε̇xy[2,:] + τ0.xy[2,:] * tmpv
+
+    # Corrected pressure
+    comp = materials.compressible
+    Ptc  = SVector{2, Float64}( @. Pt[:,2] + comp * ΔP[:] )
+
+    # Stress
+    τxx = @MVector zeros(2)
+    τxy = @MVector zeros(2)
+    for i=1:2
+        τxx[i] = (𝐷.c[i][1,1] - 𝐷.c[i][4,1]) * ϵ̇xx[i] + (𝐷.c[i][1,2] - 𝐷.c[i][4,2]) * ϵ̇yy[i] + (𝐷.c[i][1,3] - 𝐷.c[i][4,3]) * ϵ̇̄xy[i] + (𝐷.c[i][1,4] - (𝐷.c[i][4,4] - 1)) * Pt[i,2]
+        τxy[i] = 𝐷.v[i][3,1]                 * ϵ̇̄xx[i] + 𝐷.v[i][3,2]                 * ϵ̇̄yy[i] + 𝐷.v[i][3,3]                  * ϵ̇xy[i] + 𝐷.v[i][3,4]                       * P̄t[i]
+    end
+
+    # Residual
+    fx  = ( τxx[2]  - τxx[1] ) * invΔx
+    fx += ( τxy[2]  - τxy[1] ) * invΔy
+    fx -= ( Ptc[2]  - Ptc[1] ) * invΔx
+    fx *= -1 #* Δ.x * Δ.y
+
+    return fx
+end
+
+function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, Pf, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δ)
+    
+    invΔx, invΔy = 1 / Δ.x, 1 / Δ.y
+
+    # BC
+    Vx = SetBCVx1(Vx_loc, type.x, bcv.x, Δ)
+    Vy = SetBCVy1(Vy_loc, type.y, bcv.y, Δ)
+
+    # Velocity gradient
+    Dxx = ∂x_inn(Vx) * invΔx
+    Dyy = ∂y(Vy) * invΔy
+    Dxy = ∂y_inn(Vx) * invΔy
+    Dyx = ∂x(Vy) * invΔx
+
+    # Strain rate
+    ε̇kk = @. Dxx + Dyy
+    ε̇xx = @. Dxx - 1/3*ε̇kk      
+    ε̇yy = @. Dyy - 1/3*ε̇kk      
+    ε̇xy = @. 1/2 * (Dxy + Dyx)
+
+    # Average vertex to centroid
+    ε̇̄xy  = av(ε̇xy)
+    # Average centroid to vertex
+    ε̇̄xx  = av(ε̇xx)
+    ε̇̄yy  = av(ε̇yy)
+    P̄t   = av( Pt)
+    τ̄0xx = av(τ0.xx)
+    τ̄0yy = av(τ0.yy)
+    τ̄0xy = av(τ0.xy)
+    
+    # Effective strain rate
+    Gc   = SVector{2, Float64}( materials.G[phases.c])
+    Gv   = SVector{2, Float64}( materials.G[phases.v])
+    tmpc = (2*Gc.*Δ.t)
+    tmpv = (2*Gv.*Δ.t)
+    ϵ̇xx  = @. ε̇xx[2,:] + τ0.xx[2,:] / tmpc
+    ϵ̇yy  = @. ε̇yy[2,:] + τ0.yy[2,:] / tmpc
+    ϵ̇̄xy  = @. ε̇̄xy[:]   + τ̄0xy[:]    / tmpc
+    ϵ̇̄xx  = @. ε̇̄xx[:]   + τ̄0xx[:]    / tmpv
+    ϵ̇̄yy  = @. ε̇̄yy[:]   + τ̄0yy[:]    / tmpv
+    ϵ̇xy  = @. ε̇xy[:,2] + τ0.xy[:,2] / tmpv
+
+    # Corrected pressure
+    comp = materials.compressible
+    Ptc  = SVector{2, Float64}( @. Pt[2,:] + comp * ΔP[:] )
+
+    # Stress
+    τyy = @MVector zeros(2)
+    τxy = @MVector zeros(2)
+    for i=1:2
+        τyy[i] = (𝐷.c[i][2,1] - 𝐷.c[i][4,1]) * ϵ̇xx[i] + (𝐷.c[i][2,2] - 𝐷.c[i][4,2]) * ϵ̇yy[i] + (𝐷.c[i][2,3] - 𝐷.c[i][4,3]) * ϵ̇̄xy[i] + (𝐷.c[i][2,4] - (𝐷.c[i][4,4] - 1.)) * Pt[2,i]
+        τxy[i] = 𝐷.v[i][3,1]                 * ϵ̇̄xx[i] + 𝐷.v[i][3,2]                 * ϵ̇̄yy[i] + 𝐷.v[i][3,3]                  * ϵ̇xy[i] + 𝐷.v[i][3,4]                        * P̄t[i]
+    end
+
+    # Residual
+    fy  = ( τyy[2]  -  τyy[1] ) * invΔy
+    fy += ( τxy[2]  -  τxy[1] ) * invΔx
+    fy -= ( Ptc[2]  -  Ptc[1])  * invΔy
+    fy *= -1 #* Δ.x * Δ.y
+    
+    return fy
+end
+
+function Continuity(Vx, Vy, Pt, Pt0, Pf, Pf0, ϕ, phase, materials, type_loc, bcv_loc, Δ)
+    invΔx    = 1 / Δ.x
+    invΔy    = 1 / Δ.y
+    ηϕ       = materials.ηb[phase]
+    Kd       = materials.Kd[phase]
+    Kϕ       = materials.Kϕ[phase]
+    Ks       = materials.Ks[phase]
+    Kf       = materials.Kf[phase]
+    Kd = (1-ϕ) * ( 1 / Kϕ + 1 / Ks)^-1
+    α  = ( 1 - Kd / Ks )
+    # B  = (Kd^-1 - Ks^-1) / (Kd^-1 - Ks^-1 + ϕ.*(Kf^-1 - Ks^-1))
+    # fp = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy + (Pt[1] - Pf[2,2])/((1-ϕ)*ηϕ))
+    # fp = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy  + (Pt[1] - Pf[2,2])/((1-ϕ)*ηϕ) + ((Pt[1]-Pt0[1]) - (Pf[2,2]-Pf0[1]))/Kd/Δ.t 
+    fp = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy  + (Pt[1] - Pf[2,2])/((1-ϕ)*ηϕ) + ((Pt[1]-Pt0[1]) - α*(Pf[2,2]-Pf0[1]))/Kd/Δ.t 
+    # fp *= η/(Δ.x+Δ.y)
+    return fp
+end
+
+function FluidContinuity(Vx, Vy, Pt, Pt0, Pf, Pf0, ϕ, phase, materials, kμ, type_loc, bcv_loc, Δ)
+    
+    ηϕ       = materials.ηb[phase]
+    Kd       = materials.Kd[phase]
+    Kϕ       = materials.Kϕ[phase]
+    Ks       = materials.Ks[phase]
+    Kf       = materials.Kf[phase]
+    Kd = (1-ϕ) * ( 1 / Kϕ + 1 / Ks)^-1
+    α  = ( 1 - Kd / Ks )
+    B  = (Kd^-1 - Ks^-1) / (Kd^-1 - Ks^-1 + ϕ.*(Kf^-1 - Ks^-1))
+
+    PfC       = Pf[2,2]
+
+    if type_loc[1,2] === :Dirichlet
+        PfW = 2*bcv_loc[1,2] - PfC
+    elseif type_loc[1,2] === :Neumann
+        PfW = Δ.x*bcv_loc[1,2] + PfC
+    elseif type_loc[1,2] === :periodic || type_loc[1,2] === :in || type_loc[1,2] === :constant
+        PfW = Pf[1,2] 
+    else
+        PfW =  1.
+    end
+
+    if type_loc[3,2] === :Dirichlet
+        PfE = 2*bcv_loc[3,2] - PfC
+    elseif type_loc[3,2] === :Neumann
+        PfE = -Δ.x*bcv_loc[3,2] + PfC
+    elseif type_loc[3,2] === :periodic || type_loc[3,2] === :in || type_loc[3,2] === :constant
+        PfE = Pf[3,2] 
+    else
+        PfE =  1.
+    end
+
+    if type_loc[2,1] === :Dirichlet
+        PfS = 2*bcv_loc[2,1] - PfC
+    elseif type_loc[2,1] === :Neumann
+        PfS = Δ.y*bcv_loc[2,1] + PfC
+    elseif type_loc[2,1] === :periodic || type_loc[2,1] === :in || type_loc[2,1] === :constant
+        PfS = Pf[2,1] 
+    else
+        PfS =  1.
+    end
+
+    if type_loc[2,3] === :Dirichlet
+        PfN = 2*bcv_loc[2,3] - PfC
+    elseif type_loc[2,3] === :Neumann
+        PfN = -Δ.y*bcv_loc[2,3] + PfC
+    elseif type_loc[2,3] === :periodic || type_loc[2,3] === :in || type_loc[2,3] === :constant
+        PfN = Pf[2,3] 
+    else
+        PfN =  1.
+    end
+
+    qxW = -kμ.xx[1]*(PfC - PfW)/Δ.x
+    qxE = -kμ.xx[2]*(PfE - PfC)/Δ.x
+    qyS = -kμ.yy[1]*(PfC - PfS)/Δ.y
+    qyN = -kμ.yy[2]*(PfN - PfC)/Δ.y
+    if materials.oneway
+        F   = (qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y
+    else
+        # F   = (qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y - (Pt[1]-Pf[2,2])/((1-ϕ)*ηϕ) - ((Pt[1]-Pt0[1]) - (Pf[2,2]-Pf0[1]))/Kd/Δ.t
+        F   = (qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y - (Pt[1]-Pf[2,2])/((1-ϕ)*ηϕ) - α/Kd*((Pt[1]-Pt0[1]) - (Pf[2,2]-Pf0[1])/B )/Δ.t
+    end
+
+    return F
+end
+
 function Numbering!(N, type, nc)
     
     ndof  = 0
@@ -337,218 +548,6 @@ end
         end
     end
     ############ End ############
-end
-
-
-function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, Pf, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δ)
-    
-    invΔx, invΔy = 1 / Δ.x, 1 / Δ.y
-
-    # BC
-    Vx = SetBCVx1(Vx_loc, type.x, bcv.x, Δ)
-    Vy = SetBCVy1(Vy_loc, type.y, bcv.y, Δ)
-
-    # Velocity gradient
-    Dxx = ∂x(Vx) * invΔx
-    Dyy = ∂y_inn(Vy) * invΔy
-    Dxy = ∂y(Vx) * invΔy
-    Dyx = ∂x_inn(Vy) * invΔx
-
-    # Strain rate
-    ε̇kk = @. Dxx + Dyy
-    ε̇xx = @. Dxx - 1/3*ε̇kk
-    ε̇yy = @. Dyy - 1/3*ε̇kk
-    ε̇xy = @. 1/2 * ( Dxy + Dyx )
-
-    # Average vertex to centroid
-    ε̇̄xy  = av(ε̇xy)
-    # Average centroid to vertex
-    ε̇̄xx  = av(ε̇xx)
-    ε̇̄yy  = av(ε̇yy)
-    P̄t   = av(Pt)
-    τ̄0xx = av(τ0.xx)
-    τ̄0yy = av(τ0.yy)
-    τ̄0xy = av(τ0.xy)
-
-    # Effective strain rate
-    Gc   = SVector{2, Float64}( materials.G[phases.c] )
-    Gv   = SVector{2, Float64}( materials.G[phases.v] )
-    tmpc = @. inv(2 * Gc * Δ.t)
-    tmpv = @. inv(2 * Gv * Δ.t)
-    ϵ̇xx  = @. ε̇xx[:,2] + τ0.xx[:,2] * tmpc
-    ϵ̇yy  = @. ε̇yy[:,2] + τ0.yy[:,2] * tmpc
-    ϵ̇̄xy  = @. ε̇̄xy[:]   + τ̄0xy[:]    * tmpc
-    ϵ̇̄xx  = @. ε̇̄xx[:]   + τ̄0xx[:]    * tmpv
-    ϵ̇̄yy  = @. ε̇̄yy[:]   + τ̄0yy[:]    * tmpv
-    ϵ̇xy  = @. ε̇xy[2,:] + τ0.xy[2,:] * tmpv
-
-    # Corrected pressure
-    comp = materials.compressible
-    Ptc  = SVector{2, Float64}( @. Pt[:,2] + comp * ΔP[:] )
-
-    # Stress
-    τxx = @MVector zeros(2)
-    τxy = @MVector zeros(2)
-    for i=1:2
-        τxx[i] = (𝐷.c[i][1,1] - 𝐷.c[i][4,1]) * ϵ̇xx[i] + (𝐷.c[i][1,2] - 𝐷.c[i][4,2]) * ϵ̇yy[i] + (𝐷.c[i][1,3] - 𝐷.c[i][4,3]) * ϵ̇̄xy[i] + (𝐷.c[i][1,4] - (𝐷.c[i][4,4] - 1)) * Pt[i,2]
-        τxy[i] = 𝐷.v[i][3,1]                 * ϵ̇̄xx[i] + 𝐷.v[i][3,2]                 * ϵ̇̄yy[i] + 𝐷.v[i][3,3]                  * ϵ̇xy[i] + 𝐷.v[i][3,4]                       * P̄t[i]
-    end
-
-    # Residual
-    fx  = ( τxx[2]  - τxx[1] ) * invΔx
-    fx += ( τxy[2]  - τxy[1] ) * invΔy
-    fx -= ( Ptc[2]  - Ptc[1] ) * invΔx
-    fx *= -1 #* Δ.x * Δ.y
-
-    return fx
-end
-
-function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, Pf, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δ)
-    
-    invΔx, invΔy = 1 / Δ.x, 1 / Δ.y
-
-    # BC
-    Vx = SetBCVx1(Vx_loc, type.x, bcv.x, Δ)
-    Vy = SetBCVy1(Vy_loc, type.y, bcv.y, Δ)
-
-    # Velocity gradient
-    Dxx = ∂x_inn(Vx) * invΔx
-    Dyy = ∂y(Vy) * invΔy
-    Dxy = ∂y_inn(Vx) * invΔy
-    Dyx = ∂x(Vy) * invΔx
-
-    # Strain rate
-    ε̇kk = @. Dxx + Dyy
-    ε̇xx = @. Dxx - 1/3*ε̇kk      
-    ε̇yy = @. Dyy - 1/3*ε̇kk      
-    ε̇xy = @. 1/2 * (Dxy + Dyx)
-
-    # Average vertex to centroid
-    ε̇̄xy  = av(ε̇xy)
-    # Average centroid to vertex
-    ε̇̄xx  = av(ε̇xx)
-    ε̇̄yy  = av(ε̇yy)
-    P̄t   = av( Pt)
-    τ̄0xx = av(τ0.xx)
-    τ̄0yy = av(τ0.yy)
-    τ̄0xy = av(τ0.xy)
-    
-    # Effective strain rate
-    Gc   = SVector{2, Float64}( materials.G[phases.c])
-    Gv   = SVector{2, Float64}( materials.G[phases.v])
-    tmpc = (2*Gc.*Δ.t)
-    tmpv = (2*Gv.*Δ.t)
-    ϵ̇xx  = @. ε̇xx[2,:] + τ0.xx[2,:] / tmpc
-    ϵ̇yy  = @. ε̇yy[2,:] + τ0.yy[2,:] / tmpc
-    ϵ̇̄xy  = @. ε̇̄xy[:]   + τ̄0xy[:]    / tmpc
-    ϵ̇̄xx  = @. ε̇̄xx[:]   + τ̄0xx[:]    / tmpv
-    ϵ̇̄yy  = @. ε̇̄yy[:]   + τ̄0yy[:]    / tmpv
-    ϵ̇xy  = @. ε̇xy[:,2] + τ0.xy[:,2] / tmpv
-
-    # Corrected pressure
-    comp = materials.compressible
-    Ptc  = SVector{2, Float64}( @. Pt[2,:] + comp * ΔP[:] )
-
-    # Stress
-    τyy = @MVector zeros(2)
-    τxy = @MVector zeros(2)
-    for i=1:2
-        τyy[i] = (𝐷.c[i][2,1] - 𝐷.c[i][4,1]) * ϵ̇xx[i] + (𝐷.c[i][2,2] - 𝐷.c[i][4,2]) * ϵ̇yy[i] + (𝐷.c[i][2,3] - 𝐷.c[i][4,3]) * ϵ̇̄xy[i] + (𝐷.c[i][2,4] - (𝐷.c[i][4,4] - 1.)) * Pt[2,i]
-        τxy[i] = 𝐷.v[i][3,1]                 * ϵ̇̄xx[i] + 𝐷.v[i][3,2]                 * ϵ̇̄yy[i] + 𝐷.v[i][3,3]                  * ϵ̇xy[i] + 𝐷.v[i][3,4]                        * P̄t[i]
-    end
-
-    # Residual
-    fy  = ( τyy[2]  -  τyy[1] ) * invΔy
-    fy += ( τxy[2]  -  τxy[1] ) * invΔx
-    fy -= ( Ptc[2]  -  Ptc[1])  * invΔy
-    fy *= -1 #* Δ.x * Δ.y
-    
-    return fy
-end
-
-function Continuity(Vx, Vy, Pt, Pt0, Pf, Pf0, ϕ, phase, materials, type_loc, bcv_loc, Δ)
-    invΔx    = 1 / Δ.x
-    invΔy    = 1 / Δ.y
-    ηϕ       = materials.ηb[phase]
-    Kd       = materials.Kd[phase]
-    Kϕ       = materials.Kϕ[phase]
-    Ks       = materials.Ks[phase]
-    Kf       = materials.Kf[phase]
-    # Kd = Ks # (1-ϕ0) .* ( 1 ./ Kϕ + 1 ./ Ks).^-1
-    # α  = 0*( 1 .- Kd ./ Ks )
-    # B  = 0* @. (Kd.^-1 - Ks.^-1) ./ (Kd.^-1 - Ks.^-1 + ϕ.*(Kf.^-1 .- Ks.^-1))
-
-
-    # fp = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy + (Pt[1] - Pf[2,2])/((1-ϕ)*ηϕ))
-    fp = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy  + (Pt[1] - Pf[2,2])/((1-ϕ)*ηϕ) #+ ((Pt[1]-Pt0[1]) - (Pf[2,2]-Pf0[1]))/Kd/Δ.t 
-    # fp *= η/(Δ.x+Δ.y)
-    return fp
-end
-
-function FluidContinuity(Vx, Vy, Pt, Pt0, Pf, Pf0, ϕ, phase, materials, kμ, type_loc, bcv_loc, Δ)
-    
-    ηϕ       = materials.ηb[phase]
-    Kd       = materials.Kd[phase]
-    Kϕ       = materials.Kϕ[phase]
-    Ks       = materials.Ks[phase]
-    Kf       = materials.Kf[phase]
-    # Kd = Ks # (1-ϕ0) .* ( 1 ./ Kϕ + 1 ./ Ks).^-1
-    # α  = 0*( 1 .- Kd ./ Ks )
-    # B  = 0* @. (Kd.^-1 - Ks.^-1) ./ (Kd.^-1 - Ks.^-1 + ϕ.*(Kf.^-1 .- Ks.^-1))
-
-    PfC       = Pf[2,2]
-
-    if type_loc[1,2] === :Dirichlet
-        PfW = 2*bcv_loc[1,2] - PfC
-    elseif type_loc[1,2] === :Neumann
-        PfW = Δ.x*bcv_loc[1,2] + PfC
-    elseif type_loc[1,2] === :periodic || type_loc[1,2] === :in || type_loc[1,2] === :constant
-        PfW = Pf[1,2] 
-    else
-        PfW =  1.
-    end
-
-    if type_loc[3,2] === :Dirichlet
-        PfE = 2*bcv_loc[3,2] - PfC
-    elseif type_loc[3,2] === :Neumann
-        PfE = -Δ.x*bcv_loc[3,2] + PfC
-    elseif type_loc[3,2] === :periodic || type_loc[3,2] === :in || type_loc[3,2] === :constant
-        PfE = Pf[3,2] 
-    else
-        PfE =  1.
-    end
-
-    if type_loc[2,1] === :Dirichlet
-        PfS = 2*bcv_loc[2,1] - PfC
-    elseif type_loc[2,1] === :Neumann
-        PfS = Δ.y*bcv_loc[2,1] + PfC
-    elseif type_loc[2,1] === :periodic || type_loc[2,1] === :in || type_loc[2,1] === :constant
-        PfS = Pf[2,1] 
-    else
-        PfS =  1.
-    end
-
-    if type_loc[2,3] === :Dirichlet
-        PfN = 2*bcv_loc[2,3] - PfC
-    elseif type_loc[2,3] === :Neumann
-        PfN = -Δ.y*bcv_loc[2,3] + PfC
-    elseif type_loc[2,3] === :periodic || type_loc[2,3] === :in || type_loc[2,3] === :constant
-        PfN = Pf[2,3] 
-    else
-        PfN =  1.
-    end
-
-    qxW = -kμ.xx[1]*(PfC - PfW)/Δ.x
-    qxE = -kμ.xx[2]*(PfE - PfC)/Δ.x
-    qyS = -kμ.yy[1]*(PfC - PfS)/Δ.y
-    qyN = -kμ.yy[2]*(PfN - PfC)/Δ.y
-    if materials.oneway
-        F   = (qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y
-    else
-        F   = (qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y - (Pt[1]-Pf[2,2])/((1-ϕ)*ηϕ) #- ((Pt[1]-Pt0[1]) - (Pf[2,2]-Pf0[1]))/Kd/Δ.t
-    end
-
-    return F
 end
 
 function ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 

@@ -2,7 +2,7 @@ using SparseArrays
 
 function DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:chol,  ηb=1e3, niter_l=10, ϵ_l=1e-11, 𝐊_PC=I(size(𝐊,1)))
     
-    ϵ_ref = 1e-9
+    ϵ_ref = 1e-7
 
     if nnz(𝐏) == 0 # incompressible limit
         𝐏inv  = -ηb .* I(size(𝐏,1))
@@ -45,14 +45,14 @@ function DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:chol,  ηb=1e3
         fusc .= fu  .- 𝐐*(𝐏inv*fp .+ p)
         u    .= 𝐊fact\(L_PC*fusc)
 
-        # Iterative refinement
-        for iter_ref=1:10
-            ru .= 𝐊sc*u .- fusc
-            @printf("  --> Iterative refinement %02d\n res.   = %2.2e\n", iter_ref, norm(ru)/sqrt(length(ru)))
-            norm(ru)/sqrt(length(ru)) < ϵ_ref && break
-            du  = 𝐊fact\(L_PC*ru)
-            u  .-= du
-        end
+        # # Iterative refinement
+        # for iter_ref=1:10
+        #     ru .= 𝐊sc*u .- fusc
+        #     @printf("  --> Iterative refinement %02d\n res.   = %2.2e\n", iter_ref, norm(ru)/sqrt(length(ru)))
+        #     norm(ru)/sqrt(length(ru)) < ϵ_ref && break
+        #     du  = 𝐊fact\(L_PC*ru)
+        #     u  .-= du
+        # end
    
         p   .+= 𝐏inv*(fp .- 𝐐ᵀ*u .- 𝐏*p)
     end

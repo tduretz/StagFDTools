@@ -5,61 +5,19 @@ using Enzyme  # AD backends you want to use
 using TimerOutputs
 
 
-@views function PorousMediumCircles!(phase, inx, iny, X, Y)
-    # Ellipse 1
-    x0, y0 = 0., 0.
-    α  = 30.0
-    ar = 1.0
-    r  = 0.007
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 1
-    x0, y0 = 0.25, 0.
-    α  = -80.0
-    ar = 1.0
-    r  = 0.005
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 3
-    x0, y0 = -0.15, 0.
-    α  = -30.0
-    ar = 1.0
-    r  = 0.005
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 4
-    x0, y0 = 0.35, -0.3
-    α  = 86.0
-    ar = 200.0
-    r  = 0.005
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 5
-    x0, y0 = 0.35, -0.3
-    α  = -20.0
-    ar = 1.0
-    r  = 0.01
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 5
-    x0, y0 = -0.35, -0.3
-    α  = 15.0
-    ar = 1.0
-    r  = 0.004
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
+@views function PorousMediumCircles!(phase, inx, iny, X, Y, ell_params)
+    
+    for i in eachindex(ell_params.x0)
+        # Ellipse n
+        x0 = ell_params.x0[i]
+        y0 = ell_params.y0[i]
+        α  = ell_params.α[i] 
+        ar = ell_params.ar[i]
+        r  = ell_params.r[i] 
+        𝑋 = cosd(α)*X .- sind(α).*Y'
+        𝑌 = sind(α)*X .+ cosd(α).*Y'
+        phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
+    end
 end
 
 @views function PorousMediumEllipses!(phase, inx, iny, X, Y)
@@ -129,6 +87,7 @@ end
     # Boundary loading type
     config = :free_slip
     ε̇bg    = -1e-12*sc.t
+    P0     = 5e7/sc.σ
     D_BC   = @SMatrix( [ -ε̇bg 0.;
                           0.  ε̇bg ])
 
@@ -137,11 +96,17 @@ end
         compressible = true,
         plasticity   = :DruckerPrager,
         n    = [1.0    1.0  ],
-        η0   = [1e22   1e10 ]./(sc.σ * sc.t), 
-        G    = [3e10   1e5  ]./(sc.σ),
+        η0   = [1e25   1e4  ]./(sc.σ * sc.t), 
+        G    = [3e10   1e50 ]./(sc.σ),
         C    = [50e6   1e60 ]./(sc.σ),
-        ϕ    = [30.    0.   ],
-        ηvp  = [1e17   0.   ]./(sc.σ * sc.t),
+        ϕ    = [35.    0.   ],
+        σT   = [50.0   50.0 ], # Kiss2023
+        δσT  = [10.0   10.0 ], # Kiss2023
+        P1   = [0.0    0.0  ], # Kiss2023
+        τ1   = [0.0    0.0  ], # Kiss2023
+        P2   = [0.0    0.0  ], # Kiss2023
+        τ2   = [0.0    0.0  ], # Kiss2023
+        ηvp  = [5e18   0.   ]./(sc.σ * sc.t),
         β    = [1e-11  4e-10].*(sc.σ),
         ψ    = [0.0    0.0  ],
         B    = [0.0    0.0  ],
@@ -157,8 +122,14 @@ end
     @. materials.sinϕ  = sind(materials.ϕ)
     @. materials.sinψ  = sind(materials.ψ)
 
+    # For Kiss2023: calculate corner coordinates 
+    @. materials.P1 = -(materials.σT - materials.δσT)                                         # p at the intersection of cutoff and Mode-1
+    @. materials.τ1 = materials.δσT                                                           # τII at the intersection of cutoff and Mode-1
+    @. materials.P2 = -(materials.σT - materials.C*cosd(materials.ϕ))/(1.0-sind(materials.ϕ)) # p at the intersection of Drucker-Prager and Mode-1
+    @. materials.τ2 = materials.P2 + materials.σT                                             # τII at the intersection of Drucker-Prager and Mode-1
+    
     # Time steps
-    Δt0   = 1e8/sc.t
+    Δt0   = 2e8/sc.t
     nt    = nc.t
 
     # Newton solver
@@ -258,7 +229,7 @@ end
     # Initial velocity & pressure field
     @views V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
     @views V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
-    @views Pt[inx_c, iny_c ]  .= 1e7/sc.σ                 
+    @views Pt[inx_c, iny_c ]  .= P0                 
     UpdateSolution!(V, Pt, dx, number, type, nc)
 
     # Boundary condition values
@@ -277,8 +248,26 @@ end
     # PorousMediumEllipses!(phases.c, inx_c, iny_c, xc, yc)
     # PorousMediumEllipses!(phases.v, inx_v, iny_v, xv, yv)
 
-    PorousMediumCircles!(phases.c, inx_c, iny_c, xc, yc)
-    PorousMediumCircles!(phases.v, inx_v, iny_v, xv, yv)
+    # !!!!!!!!!!!
+    n_ell = 100
+    ell_params = (
+        x0 = zeros(n_ell),
+        y0 = zeros(n_ell),
+        α  = zeros(n_ell),
+        ar = zeros(n_ell),
+        r  = zeros(n_ell),
+    )
+
+    for i in eachindex(ell_params.x0)
+        ell_params.x0[i] = rand()-0.3
+        ell_params.y0[i] = rand()-0.3
+        ell_params.α[i]  = rand()*360
+        ell_params.ar[i] = rand()*6
+        ell_params.r[i]  = 0.02
+    end
+     
+    PorousMediumCircles!(phases.c, inx_c, iny_c, xc, yc, ell_params)
+    PorousMediumCircles!(phases.v, inx_v, iny_v, xv, yv, ell_params)
 
     # # Set material geometry 
     # @views phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
@@ -290,15 +279,18 @@ end
     err  = (x = zeros(niter), y = zeros(niter), p = zeros(niter))
     
     ϕ = sum(phases.c.==2)/ *(size(phases.c)...)
-    @show ϕ
     
     probes = ( 
-        Pt =  zeros(nt),
-        Pf =  zeros(nt),
-        Ps =  zeros(nt),
-        τt =  zeros(nt),
-        τf =  zeros(nt),
-        τs =  zeros(nt),
+        Pt     =  zeros(nt),
+        Pf     =  zeros(nt),
+        Ps     =  zeros(nt),
+        τt     =  zeros(nt),
+        τf     =  zeros(nt),
+        τs     =  zeros(nt),
+        τ_sol  =  zeros(nt),
+        τ_tot  =  zeros(nt),
+        τ_Terz =  zeros(nt),
+        τ_Shi  =  zeros(nt),
     )
     to   = TimerOutput()
 
@@ -409,9 +401,10 @@ end
         τ_solid = sum(τII[solid[inx_c,iny_c]])/sum(solid)
         τ_total = ϕ*τ_fluid + (1-ϕ)*τ_solid
 
-        τ_dry  = materials.C[1]*cosd(materials.ϕ[1]) +            P_total *sind(materials.ϕ[1])
-        τ_terz = materials.C[1]*cosd(materials.ϕ[1]) + (P_total-  P_fluid)*sind(materials.ϕ[1])
-        τ_shi  = materials.C[1]*cosd(materials.ϕ[1]) + (P_total-ϕ*P_fluid)*sind(materials.ϕ[1])
+        probes.τ_sol[it]  = materials.C[1]*cosd(materials.ϕ[1]) +            P_solid *sind(materials.ϕ[1])
+        probes.τ_tot[it]  = materials.C[1]*cosd(materials.ϕ[1]) +            P_total *sind(materials.ϕ[1])
+        probes.τ_Terz[it] = (1-ϕ)*materials.C[1]*cosd(materials.ϕ[1]) + (P_total-  P_fluid)*sind(materials.ϕ[1])
+        probes.τ_Shi[it]  = materials.C[1]*cosd(materials.ϕ[1]) + (P_total-ϕ*P_fluid)*sind(materials.ϕ[1])
 
         @show (ϕ)
         @show (P_total)
@@ -427,24 +420,39 @@ end
         probes.τt[it] = τ_total
 
         # p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
-        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]'.*sc.σ, aspect_ratio=1, xlim=extrema(xc), title="Pt")
+        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]'.*sc.σ./1e6, aspect_ratio=1, xlim=extrema(xc), title="Pt [MPa]", c=:turbo)
+        p4 = heatmap(xc, yc,  τII'.*sc.σ./1e6, aspect_ratio=1, xlim=extrema(xc), title="τII [MPa]", c=:turbo)
         # p3 = heatmap(xc, yc,  log10.(ε̇II)', aspect_ratio=1, xlim=extrema(xc), title="ε̇II", c=:coolwarm)
+        
+        # p2 = heatmap(xc, yc,  log10.(η.c[2:end-1,2:end-1])', aspect_ratio=1, xlim=extrema(xv), title="ηc", c=:coolwarm)
+        # p4 = heatmap(xv, yv,  log10.(η.v[2:end-1,2:end-1])', aspect_ratio=1, xlim=extrema(xv), title="ηv", c=:coolwarm)
+        
         p3 = plot(xlabel="time", ylabel="stress")
-        p3 = plot!([1:it].*Δ.t,  probes.τf[1:it].*sc.σ, label="τ fluid")
-        p3 = plot!([1:it].*Δ.t,  probes.τs[1:it].*sc.σ, label="τ solid")
-        p3 = plot!([1:it].*Δ.t,  probes.τt[1:it].*sc.σ, label="τ total")
-        p3 = plot!([1:it].*Δ.t,  probes.Pf[1:it].*sc.σ, label="P fluid")
-        p3 = plot!([1:it].*Δ.t,  probes.Ps[1:it].*sc.σ, label="P solid")
-        p3 = plot!([1:it].*Δ.t,  probes.Pt[1:it].*sc.σ, label="P total")
-        p3 = plot!([1:it].*Δ.t,  τ_dry *ones(it).*sc.σ, label="τ dry",  linewidth=2)
-        p3 = plot!([1:it].*Δ.t,  τ_terz*ones(it).*sc.σ, label="τ Terz", linewidth=2)
-        p3 = plot!([1:it].*Δ.t,  τ_shi *ones(it).*sc.σ, label="τ Shi",  linewidth=2, legend=:outertopright)
+        p3 = plot!([1:it].*Δ.t,  probes.τf[1:it].*sc.σ./1e6, label="τ fluid")
+        p3 = plot!([1:it].*Δ.t,  probes.τs[1:it].*sc.σ./1e6, label="τ solid")
+        p3 = plot!([1:it].*Δ.t,  probes.τt[1:it].*sc.σ./1e6, label="τ total")
 
-        p4 = heatmap(xc, yc,  τII'.*sc.σ, aspect_ratio=1, xlim=extrema(xc), title="τII", c=:turbo)
-        p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright)
-        p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
-        p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
-        p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
+        p3 = plot!([1:it].*Δ.t,  (1-ϕ)*probes.τ_sol[1:it].*sc.σ./1e6, label="(1-ϕ)* τ sol",  linewidth=2, linestyle=:dot)
+        p3 = plot!([1:it].*Δ.t,  (1-ϕ)*probes.τ_tot[1:it].*sc.σ./1e6, label="(1-ϕ)* τ tot",  linewidth=2, linestyle=:dot)
+
+        p3 = plot!([1:it].*Δ.t,  probes.τ_sol[1:it].*sc.σ./1e6, label="τ sol",  linewidth=2)
+        p3 = plot!([1:it].*Δ.t,  probes.τ_tot[1:it].*sc.σ./1e6, label="τ tot",  linewidth=2)
+        p3 = plot!([1:it].*Δ.t,  probes.τ_Terz[1:it].*sc.σ./1e6, label="τ Terz", linewidth=2)
+        p3 = plot!([1:it].*Δ.t,  probes.τ_Shi[1:it].*sc.σ./1e6, label="τ Shi",  linewidth=2, legend=:outertopright)
+
+        p1 = plot(xlabel="time", ylabel="pressure", title="ϕ = $(@sprintf("%1.4f", ϕ))")
+        p1 = plot!([1:it].*Δ.t,  probes.Pf[1:it].*sc.σ./1e6, label="P fluid")
+        p1 = plot!([1:it].*Δ.t,  probes.Ps[1:it].*sc.σ./1e6, label="P solid")
+        p1 = plot!([1:it].*Δ.t,  probes.Pt[1:it].*sc.σ./1e6, label="P total", legend=:outertopright)
+
+        
+        # p2 = heatmap(xc, yc,   log10.(λ̇.c[2:end-1,2:end-1]'), aspect_ratio=1, xlim=extrema(xv), ylim=extrema(yv) )
+        # p2 = contour!(xc, yc,   phases.c[2:end-1,2:end-1]', levels=[1.0; 2.0], c=:black )
+        
+        # p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright)
+        # p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
+        # p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
+        # p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
         display(plot(p1, p2, p3, p4, layout=(2,2)))
 
         @show (3/materials.β[1] - 2*materials.G[1])/(2*(3/materials.β[1] + 2*materials.G[1]))
@@ -457,5 +465,5 @@ end
 end
 
 let
-    main((x = 200, y = 200, t=100))
+    main((x = 100, y = 100, t=250))
 end
