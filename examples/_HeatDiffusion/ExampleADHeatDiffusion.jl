@@ -177,22 +177,24 @@ function AssemblyPoisson_Enzyme!(K, u, k, s, number, type, pattern, bc_val, nc, 
     return nothing
 end
 
-function AnalyticalDiffusion2D(u_ana, x, y, t, nc, T0, K, σ)
+# Parameters of analytic are constant in space and time
+# We can create the tuple `params` once for all and then use it when we need 
+function AnalyticalDiffusion2D(u_ana, x, y, t, nc, params)
     shift = (x=1, y=1)
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
         X = @SVector[x[i]; y[j]; t]
-        params = (T0 = T0,K = K[i,j] ,σ = σ[i,j])
         sol  = Diffusion2D_Gaussian( X; params) 
         u_ana[i, j] = sol.u
     end
 end
 
-let
+function RunDiffusion(n) 
+
     # This is the main code that calls the above functions!
     to = TimerOutput()
 
     # Resolution in FD cells
-    nc = (x = 30, y = 40)
+    nc = (x = n*30, y = n*30)
 
     # Get ranges
     ranges = Ranges(nc)
@@ -208,11 +210,7 @@ let
 
     # Define values of the boundary conditions
     bc_val = Fields( fill(0., (nc.x+2, nc.y+2)) )   # Achtung: geist nodes
-    bc_val.u        .= zeros(nc.x+2, nc.y+2)        # useless ?!
-    bc_val.u[1,:]   .= 1.0                          # Boundary value is 1.0 and this will be a Dirichlet (u at West = 1) # West
-    bc_val.u[end,:] .= 1.0                          # East
-    bc_val.u[:,1]   .= 1.0                          # South
-    bc_val.u[:,end] .= 1.0                          # North
+    bc_val.u        .= zeros(nc.x+2, nc.y+2)        # useless ?!                         # North
 
     # 5-point stencil, this is the definition of the stencil block. 
     # It basically states which points are being included in the stencil
@@ -226,9 +224,18 @@ let
     printxy(number.u) 
 
     # Parameters
-    nt  = 20
-    Δt0 = 0.01
-    L     = 1.                   # Domain extent
+    K          = 1.0   # Is the parameter K in the function provided by ExactFieldSolutions k or κ? I'm also not sure about how to include possible anisotropy in Diffusion2D_Gaussian
+    # K in the solution is the diffusivity (kappa), it is constant and isotropic in the solution
+    σ          = 0.2   # σ and T0 are completely arbitrary values, so probably not the best to minimize the deviation
+    T0         = 50.0
+    params     = (T0 = T0, K = K, σ = σ) # Tuple of values  
+    L          = 1.                      # Domain extent
+    total_time = 0.2
+    nout       = 20 
+    Δt0        = 0.01/n
+    nt         = Int64(ceil(total_time/Δt0))
+    t          = 0.
+
     # Arrays
     # div( q ) - s = 0
     # q = - k * grad(u) --> k is a tensor               k = kxx kxy            grad(u) = dudx
@@ -249,8 +256,6 @@ let
     #      |                  |
     ρ      = zeros(nc.x+2, nc.y+2)     # density
     cp     = zeros(nc.x+2, nc.y+2)     # specific heat capacity
-    k_ana  = zeros(nc.x+2, nc.y+2)
-    σ      = zeros(nc.x+2, nc.y+2)
     r      = zeros(nc.x+2, nc.y+2)     # residual of the equation (right-hand side)
     s      = zeros(nc.x+2, nc.y+2)     # forcing term
     u      = zeros(nc.x+2, nc.y+2)     # solution
@@ -262,27 +267,45 @@ let
     Δ      = (x=L/nc.x, y=L/nc.y, t=Δt0)
     xc     = LinRange(-L/2-Δ.x/2, L/2+Δ.x/2, nc.x+2)
     yc     = LinRange(-L/2-Δ.y/2, L/2+Δ.y/2, nc.y+2)
-    time   = LinRange(Δ.t, nt*Δ.t, nt)
-    # Configuration
-    s     .= 0 * 50*exp.(-(xc.^2 .+ (yc').^2)./0.4^2)  # Set zero source
+
+    # Initial condititon
+    AnalyticalDiffusion2D(u, xc, yc, t, nc, params) 
+    u_ana .= u
     ρ     .= 1.0
     cp    .= 1.0
-    k_ana .= 1.0   # Is the parameter K in the function provided by ExactFieldSolutions k or κ? I'm also not sure about how to include possible anisotropy in Diffusion2D_Gaussian
-    σ     .= 0.2   # σ and T0 are completely arbitrary values, so probably not the best to minimize the deviation
-    T0     = 50.0
-    
-    # Initial condititon
-    # u  .= 0 * 200*exp.(-(xc.^2 .+ (yc').^2)./0.4^2)
-    AnalyticalDiffusion2D(u, xc, yc, 0.0, nc, T0, k_ana, σ) 
-    u_ana .= u
-
+    s     .= 0.0 # no source in the solution (just diffusion of initial Gaussian)
     
     # Sparse matrix assembly
     nu  = maximum(number.u)
     M   = Fields( Fields( ExtendableSparseMatrix(nu, nu) )) 
 
     for it=1:nt
+
+        t += Δ.t
+
         u0 .= u  # store the previous solution
+
+        # Update BC
+        for j in axes(bc_val.u, 2)
+            # West
+            X      = @SVector[-L/2; yc[j]; t]
+            sol    = Diffusion2D_Gaussian( X; params) 
+            bc_val.u[1,j]   = sol.u 
+            # East
+            X      = @SVector[ L/2; yc[j]; t]
+            sol    = Diffusion2D_Gaussian( X; params)                      
+            bc_val.u[end,j] = sol.u   
+        end                     
+        for i in axes(bc_val.u, 1)
+            # South
+            X      = @SVector[xc[i]; -L/2; t]
+            sol    = Diffusion2D_Gaussian( X; params) 
+            bc_val.u[i,1]   = sol.u 
+            # North
+            X      = @SVector[xc[i]; -L/2; t]
+            sol    = Diffusion2D_Gaussian( X; params)                       
+            bc_val.u[i,end] = sol.u  
+        end
 
         # Residual check: div( q ) - s = r
         @timeit to "Residual" ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ, u0, ρ, cp) 
@@ -306,52 +329,28 @@ let
         ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ, u0, ρ, cp)     
         @info norm(r)/sqrt(length(r))
 
-        
         # Analytic solution
-        AnalyticalDiffusion2D(u_ana, xc, yc, time[it], nc, T0, k_ana, σ)
+        AnalyticalDiffusion2D(u_ana, xc, yc, t, nc, params)
 
+        # Calculate error
         u_devi[inx,iny] .= u[inx,iny] .- u_ana[inx,iny]    # Deviation between the numerical and analtical solution
 
         # Visualization
-        if mod(it, 1) == 0
-            p1 = heatmap(xc[inx], yc[iny], u[inx,iny]', aspect_ratio=1, xlim=extrema(xc))
-            p2 = heatmap(xc[inx], yc[iny], u_ana[inx,iny]', aspect_ratio=1, xlim=extrema(xc))
-            p3 = heatmap(xc[inx], yc[iny], u_devi[inx,iny]', aspect_ratio=1, xlim=extrema(xc))
+        if mod(it, nout) == 0
+            p1 = heatmap(xc[inx], yc[iny], u[inx,iny]', aspect_ratio=1, xlim=extrema(xc), title="u")
+            p2 = heatmap(xc[inx], yc[iny], u_ana[inx,iny]', aspect_ratio=1, xlim=extrema(xc), title="u_exact")
+            p3 = heatmap(xc[inx], yc[iny], u_devi[inx,iny]', aspect_ratio=1, xlim=extrema(xc), title="u - u_exact")
             qx = -diff(u[inx,iny],dims=1)/Δ.x
             qy = -diff(u[inx,iny],dims=2)/Δ.y
-            # # @show     mean(qx[1,:])
-            # # @show     mean(qx[end,:])
-            # # @show     mean(qy[:,1])
-            # # @show     mean(qy[:,end])
             heatmap(xc[1:end-3], yc[iny], qx')
             heatmap(xc[inx], yc[1:end-3], qy')
             display(plot(p1,p2,p3, layout=(2,2)))
             display(to)
         end
+
+        @info "Error = ", mean(u .- u_ana)
     end
 
 end
 
-
-# ────────────────────────────────────────────────────────────────────────────
-#                                    Time                    Allocations      
-#                           ───────────────────────   ────────────────────────
-#     Tot / % measured:          676ms /  82.4%            177MiB /  89.2%    
-
-# Section           ncalls     time    %tot     avg     alloc    %tot      avg
-# ────────────────────────────────────────────────────────────────────────────
-# Assembly Enzyme        1    115μs   81.7%   137μs    388KiB  100.0%   388KiB
-# Residual               1   30.8μs   18.3%  30.8μs     32.0B    0.0%    32.0B
-# ────────────────────────────────────────────────────────────────────────────
-
-
-# ─────────────────────────────────────────────────────────────────────────────────
-#                                         Time                    Allocations      
-#                                ───────────────────────   ────────────────────────
-#        Tot / % measured:            438ms /  75.0%            147MiB /  87.0%    
-
-# Section                ncalls     time    %tot     avg     alloc    %tot      avg
-# ─────────────────────────────────────────────────────────────────────────────────
-# Assembly ForwardDiff        1   94.8μs   79.8%   139μs    294KiB  100.0%   294KiB
-# Residual                    1   35.2μs   20.2%  35.2μs     32.0B    0.0%    32.0B
-# ─────────────────────────────────────────────────────────────────────────────────
+RunDiffusion(1) 
