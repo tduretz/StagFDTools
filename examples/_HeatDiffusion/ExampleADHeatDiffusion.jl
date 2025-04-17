@@ -1,4 +1,4 @@
-using StagFDTools, StagFDTools.Poisson, ExtendableSparse, StaticArrays, LinearAlgebra, Statistics, UnPack, Plots
+using StagFDTools, StagFDTools.Poisson, ExtendableSparse, StaticArrays, LinearAlgebra, Statistics, UnPack, Plots, ExactFieldSolutions
 using TimerOutputs
 # using Enzyme
 using ForwardDiff, Enzyme  # AD backends you want to use 
@@ -177,6 +177,16 @@ function AssemblyPoisson_Enzyme!(K, u, k, s, number, type, pattern, bc_val, nc, 
     return nothing
 end
 
+function AnalyticalDiffusion2D(u_ana, x, y, t, nc, T0, K, σ)
+    shift = (x=1, y=1)
+    for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
+        X = @SVector[x[i]; y[j]; t]
+        params = (T0 = T0,K = K[i,j] ,σ = σ[i,j])
+        sol  = Diffusion2D_Gaussian( X; params) 
+        u_ana[i, j] = sol.u
+    end
+end
+
 let
     # This is the main code that calls the above functions!
     to = TimerOutput()
@@ -191,18 +201,18 @@ let
     # Define node types 
     type = Fields( fill(:out, (nc.x+2, nc.y+2)) )   # Achtung: geist nodes
     type.u[2:end-1,2:end-1].= :in                   # inside nodes are all type :in
-    type.u[1,:]            .= :Neumann              # one BC type is :Dirichlet # West
-    type.u[end,:]          .= :Neumann              # East
+    type.u[1,:]            .= :Dirichlet              # one BC type is :Dirichlet # West
+    type.u[end,:]          .= :Dirichlet              # East
     type.u[:,1]            .= :Dirichlet            # South
     type.u[:,end]          .= :Dirichlet            # North
 
     # Define values of the boundary conditions
     bc_val = Fields( fill(0., (nc.x+2, nc.y+2)) )   # Achtung: geist nodes
     bc_val.u        .= zeros(nc.x+2, nc.y+2)        # useless ?!
-    bc_val.u[1,:]   .= 0.0                          # Boundary value is 1.0 and this will be a Dirichlet (u at West = 1) # West
-    bc_val.u[end,:] .= 0.0                          # East
+    bc_val.u[1,:]   .= 1.0                          # Boundary value is 1.0 and this will be a Dirichlet (u at West = 1) # West
+    bc_val.u[end,:] .= 1.0                          # East
     bc_val.u[:,1]   .= 1.0                          # South
-    bc_val.u[:,end] .= 0.0                          # North
+    bc_val.u[:,end] .= 1.0                          # North
 
     # 5-point stencil, this is the definition of the stencil block. 
     # It basically states which points are being included in the stencil
@@ -237,24 +247,35 @@ let
     #      |                  |
     #      |        uS        |
     #      |                  |
-    ρ   = zeros(nc.x+2, nc.y+2)  # density
-    cp  = zeros(nc.x+2, nc.y+2)  # specific heat capacity
-    r   = zeros(nc.x+2, nc.y+2)  # residual of the equation (right-hand side)
-    s   = zeros(nc.x+2, nc.y+2)  # forcing term
-    u   = zeros(nc.x+2, nc.y+2)  # solution
-    u0  = zeros(nc.x+2, nc.y+2)  # solution of the previous time step
-    k   = (x = (xx= ones(nc.x+1,nc.y), xy=zeros(nc.x+1,nc.y)), # conductivity tensor (can be simplidied)
+    ρ      = zeros(nc.x+2, nc.y+2)     # density
+    cp     = zeros(nc.x+2, nc.y+2)     # specific heat capacity
+    k_ana  = zeros(nc.x+2, nc.y+2)
+    σ      = zeros(nc.x+2, nc.y+2)
+    r      = zeros(nc.x+2, nc.y+2)     # residual of the equation (right-hand side)
+    s      = zeros(nc.x+2, nc.y+2)     # forcing term
+    u      = zeros(nc.x+2, nc.y+2)     # solution
+    u0     = zeros(nc.x+2, nc.y+2)     # solution of the previous time step
+    u_ana  = zeros(nc.x+2, nc.y+2)     # analytical solution
+    u_devi = zeros(nc.x+2, nc.y+2)     # difference between the numerical and the analytic solution
+    k      = (x = (xx= ones(nc.x+1,nc.y), xy=zeros(nc.x+1,nc.y)), # conductivity tensor (can be simplidied)
            y = (yx=zeros(nc.x,nc.y+1), yy= ones(nc.x,nc.y+1)))
-    Δ   = (x=L/nc.x, y=L/nc.y, t=Δt0)
-    xc  = LinRange(-L/2-Δ.x/2, L/2+Δ.x/2, nc.x+2)
-    yc  = LinRange(-L/2-Δ.y/2, L/2+Δ.y/2, nc.y+2)
+    Δ      = (x=L/nc.x, y=L/nc.y, t=Δt0)
+    xc     = LinRange(-L/2-Δ.x/2, L/2+Δ.x/2, nc.x+2)
+    yc     = LinRange(-L/2-Δ.y/2, L/2+Δ.y/2, nc.y+2)
+    time   = LinRange(Δ.t, nt*Δ.t, nt)
     # Configuration
-    s  .= 0 * 50*exp.(-(xc.^2 .+ (yc').^2)./0.4^2)  # Set zero source
-    ρ  .= 1.0
-    cp .= 1.0
+    s     .= 0 * 50*exp.(-(xc.^2 .+ (yc').^2)./0.4^2)  # Set zero source
+    ρ     .= 1.0
+    cp    .= 1.0
+    k_ana .= 1.0   # Is the parameter K in the function provided by ExactFieldSolutions k or κ? I'm also not sure about how to include possible anisotropy in Diffusion2D_Gaussian
+    σ     .= 0.2   # σ and T0 are completely arbitrary values, so probably not the best to minimize the deviation
+    T0     = 50.0
     
     # Initial condititon
-    u  .= 0 * 200*exp.(-(xc.^2 .+ (yc').^2)./0.4^2)
+    # u  .= 0 * 200*exp.(-(xc.^2 .+ (yc').^2)./0.4^2)
+    AnalyticalDiffusion2D(u, xc, yc, 0.0, nc, T0, k_ana, σ) 
+    u_ana .= u
+
     
     # Sparse matrix assembly
     nu  = maximum(number.u)
@@ -285,9 +306,17 @@ let
         ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ, u0, ρ, cp)     
         @info norm(r)/sqrt(length(r))
 
+        
+        # Analytic solution
+        AnalyticalDiffusion2D(u_ana, xc, yc, time[it], nc, T0, k_ana, σ)
+
+        u_devi[inx,iny] .= u[inx,iny] .- u_ana[inx,iny]    # Deviation between the numerical and analtical solution
+
         # Visualization
         if mod(it, 1) == 0
             p1 = heatmap(xc[inx], yc[iny], u[inx,iny]', aspect_ratio=1, xlim=extrema(xc))
+            p2 = heatmap(xc[inx], yc[iny], u_ana[inx,iny]', aspect_ratio=1, xlim=extrema(xc))
+            p3 = heatmap(xc[inx], yc[iny], u_devi[inx,iny]', aspect_ratio=1, xlim=extrema(xc))
             qx = -diff(u[inx,iny],dims=1)/Δ.x
             qy = -diff(u[inx,iny],dims=2)/Δ.y
             # # @show     mean(qx[1,:])
@@ -296,7 +325,7 @@ let
             # # @show     mean(qy[:,end])
             heatmap(xc[1:end-3], yc[iny], qx')
             heatmap(xc[inx], yc[1:end-3], qy')
-            display(p1)
+            display(plot(p1,p2,p3, layout=(2,2)))
             display(to)
         end
     end
