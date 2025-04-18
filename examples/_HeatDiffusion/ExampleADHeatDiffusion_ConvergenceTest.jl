@@ -211,13 +211,13 @@ function BC_Analytical(bc_val, xc, yc, t, L, params)
     end
 end
 
-function RunDiffusion(n) 
+function RunDiffusion(nc, L, Δt0) 
 
     # This is the main code that calls the above functions!
     to = TimerOutput()
 
     # Resolution in FD cells
-    nc = (x = n*30, y = n*30)
+    # nc = (x = n*30, y = n*30)
 
     # Get ranges
     ranges = Ranges(nc)
@@ -250,11 +250,9 @@ function RunDiffusion(n)
     K          = 1.0   # diffusivity (kappa), it is constant and isotropic in the solution
     σ          = 0.2
     T0         = 50.0
-    params     = (T0 = T0, K = K, σ = σ) # Tuple of values  
-    L          = 1.                      # Domain extent
+    params     = (T0 = T0, K = K, σ = σ) # Tuple of values
     total_time = 0.2
-    nout       = 20 
-    Δt0        = 0.01/n
+    # nout       = 20
     nt         = Int64(ceil(total_time/Δt0))
     t          = 0.
 
@@ -338,22 +336,32 @@ function RunDiffusion(n)
         # Calculate error
         u_devi[inx,iny] .= u[inx,iny] .- u_ana[inx,iny]    # Deviation between the numerical and analtical solution
 
-        # Visualization
-        if mod(it, nout) == 0
-            p1 = heatmap(xc[inx], yc[iny], u[inx,iny]', aspect_ratio=1, xlim=extrema(xc), title="u")
-            p2 = heatmap(xc[inx], yc[iny], u_ana[inx,iny]', aspect_ratio=1, xlim=extrema(xc), title="u_exact")
-            p3 = heatmap(xc[inx], yc[iny], u_devi[inx,iny]', aspect_ratio=1, xlim=extrema(xc), title="u - u_exact")
-            qx = -diff(u[inx,iny],dims=1)/Δ.x
-            qy = -diff(u[inx,iny],dims=2)/Δ.y
-            heatmap(xc[1:end-3], yc[iny], qx')
-            heatmap(xc[inx], yc[1:end-3], qy')
-            display(plot(p1,p2,p3, layout=(2,2)))
-            display(to)
-        end
-
         @info "Error = ", mean(u .- u_ana)
     end
 
+    return mean(abs.(u .- u_ana))
 end
 
-RunDiffusion(1) 
+
+let
+    L   = 1.      # Domain extent
+    nc0 = 30
+    n   =  [1, 2, 4]
+
+    Δx  = L ./ (n*nc0)
+    Δt  = 0.01 ./ n
+    ϵu  = zero(Δx)      # error
+    
+    # Calculate the error for each resolution
+    for i in eachindex(n)
+        nc = (x = n[i]*nc0, y = n[i]*nc0)
+        ϵu[i] = RunDiffusion(nc, L, Δt[i])
+    end
+
+    # Visualization
+    p1 = plot(xlabel="log10(1/Δx)", ylabel="log10(ϵu)", title="Convergence Analysis")
+    p1 = scatter!(log10.(1.0./Δx), log10.(ϵu), label="ϵ")
+    p1 = plot!( log10.( 1.0./Δx ), log10.(ϵu[1]) .- 1.0* ( log10.( 1.0./Δx ) .- log10.( 1.0./Δx[1] ) ), label="O1"  ) 
+    p1 = plot!( log10.( 1.0./Δx ), log10.(ϵu[1]) .- 2.0* ( log10.( 1.0./Δx ) .- log10.( 1.0./Δx[1] ) ), label="O2"  )
+    display(p1)
+end
