@@ -449,5 +449,10 @@ let
     p1 = scatter!(log10.(1.0./Δx), log10.(ϵu), label="ϵ")
     p1 = plot!( log10.( 1.0./Δx ), log10.(ϵu[1]) .- 1.0* ( log10.( 1.0./Δx ) .- log10.( 1.0./Δx[1] ) ), label="O1"  ) 
     p1 = plot!( log10.( 1.0./Δx ), log10.(ϵu[1]) .- 2.0* ( log10.( 1.0./Δx ) .- log10.( 1.0./Δx[1] ) ), label="O2"  )
-    display(p1)
+
+    p2 = plot(xlabel="log10(1/Δt)", ylabel="log10(ϵu)")
+    p2 = scatter!(log10.(1.0./Δt), log10.(ϵu), label="ϵ")
+    p2 = plot!( log10.( 1.0./Δt ), log10.(ϵu[1]) .- 1.0* ( log10.( 1.0./Δt ) .- log10.( 1.0./Δt[1] ) ), label="O1"  )
+    p2 = plot!( log10.( 1.0./Δt ), log10.(ϵu[1]) .- 2.0* ( log10.( 1.0./Δt ) .- log10.( 1.0./Δt[1] ) ), label="O2"  ) 
+    display(plot(p1,p2))
 end
