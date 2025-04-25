@@ -23,7 +23,7 @@ using ForwardDiff, Enzyme  # AD backends you want to use
 #      |     uS    |
 #      |           |
 
-function Diffusion2D_backwardEuler(u_loc, k, s, type_loc, bcv_loc, Δ, u0, ρ, cp)
+function Diffusion2D(u_loc, u0_loc, k, s, type_loc, bcv_loc, bcv0_loc, Δ, ρ, cp, θ)
 
     # u_loc is 3*3 matrix containing the current values of u for the whole stencil
     #             0   uN  0
@@ -31,62 +31,11 @@ function Diffusion2D_backwardEuler(u_loc, k, s, type_loc, bcv_loc, Δ, u0, ρ, c
     #             0   uS  0
     # Therefore u_loc[2,2] is the current value of uC
     uC       = u_loc[2,2]
+    u0C     = u0_loc[2,2]
 
     # Boundary conditions need to be applied on every boundaries :D
     # Here we define the values of the ghost nodes. For example at the west side uW needs to be defined  
     # For example, to set a Dirichlet values, we say: 1/2*(uW + uC) = u_BC, hence uW = 2*u_BC - uC
-    # West
-    if type_loc[1,2] === :Dirichlet
-        uW = 2*bcv_loc[1,2] - u_loc[2,2]
-    elseif type_loc[1,2] === :Neumann
-        uW = Δ.x*bcv_loc[1,2] + u_loc[2,2]
-    elseif type_loc[1,2] === :periodic || type_loc[1,2] === :in
-        uW = u_loc[1,2] 
-    end
-
-    # East
-    if type_loc[3,2] === :Dirichlet
-        uE = 2*bcv_loc[3,2] - u_loc[2,2]
-    elseif type_loc[3,2] === :Neumann
-        uE = -Δ.x*bcv_loc[3,2] + u_loc[2,2]
-    elseif type_loc[3,2] === :periodic || type_loc[3,2] === :in
-        uE = u_loc[3,2] 
-    end
-
-    # South
-    if type_loc[2,1] === :Dirichlet
-        uS = 2*bcv_loc[2,1] - u_loc[2,2]
-    elseif type_loc[2,1] === :Neumann
-        uS = Δ.y*bcv_loc[2,1] + u_loc[2,2]
-    elseif type_loc[2,1] === :periodic || type_loc[2,1] === :in
-        uS = u_loc[2,1] 
-    end
-
-    # North
-    if type_loc[2,3] === :Dirichlet
-        uN = 2*bcv_loc[2,3] - u_loc[2,2]
-    elseif type_loc[2,3] === :Neumann
-        uN = -Δ.y*bcv_loc[2,3] + u_loc[2,2]
-    elseif type_loc[2,3] === :periodic || type_loc[2,3] === :in
-        uN = u_loc[2,3] 
-    end
-
-    # Heat flux for each face based on finite differences
-    qxW = -k.xx[1]*(uC - uW)/Δ.x  # West
-    qxE = -k.xx[2]*(uE - uC)/Δ.x  # East
-    qyS = -k.yy[1]*(uC - uS)/Δ.y  # South
-    qyN = -k.yy[2]*(uN - uC)/Δ.y  # North
-
-    # Return the residual function based on finite differences
-    return -(-(qxE - qxW)/Δ.x - (qyN - qyS)/Δ.y + s - ρ*cp*(uC - u0)/Δ.t)  
-end
-
-function Diffusion2D_CrankNicolson(u_loc, u0_loc, k, s, type_loc, bcv_loc, bcv0_loc, Δ, ρ, cp, θ)
-
-    uC = u_loc[2,2]
-    u0C = u0_loc[2,2]
-
-    # Boundary conditions
     # West
     if type_loc[1,2] === :Dirichlet
         uW = 2*bcv_loc[1,2] - u_loc[2,2]
@@ -148,6 +97,7 @@ function Diffusion2D_CrankNicolson(u_loc, u0_loc, k, s, type_loc, bcv_loc, bcv0_
     qyS0 = -k.yy[1]*(u0C - u0S)/Δ.y  # South
     qyN0 = -k.yy[2]*(u0N - u0C)/Δ.y  # North
 
+    # Return the residual function based on finite differences
     return -( θ * (-(qxE - qxW)/Δ.x - (qyN - qyS)/Δ.y) + (1-θ) * (-(qxE0 - qxW0)/Δ.x - (qyN0 - qyS0)/Δ.y) - ρ*cp*(uC - u0C)/Δ.t + s)
 end
 
@@ -182,11 +132,7 @@ function ResidualDiffusion2D!(R, u, k, s, num, type, bc_val, bc_val0, nc, Δ, u0
         # This stores the TYPE of the boundary condition for the stencils (3*3 matrix)
         type_loc  = SMatrix{3,3}(  type.u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
 
-        if Scheme ==:CrankNicolson
-            R[i,j]    = Diffusion2D_CrankNicolson(u_loc, u0_loc, k_loc, s[i,j], type_loc, bcv_loc, bcv0_loc, Δ, ρ[i,j], cp[i,j], θ)
-        elseif Scheme ==:BackwardEuler
-            R[i,j]    = Diffusion2D_backwardEuler(u_loc, k_loc, s[i,j], type_loc, bcv_loc, Δ, u0[i,j], ρ[i,j], cp[i,j])
-        end
+        R[i,j]    = Diffusion2D(u_loc, u0_loc, k_loc, s[i,j], type_loc, bcv_loc, bcv0_loc, Δ, ρ[i,j], cp[i,j], θ)
     end
     return nothing
 end
@@ -241,11 +187,7 @@ function AssemblyDiffusion_Enzyme!(K, u, k, s, number, type, pattern, bc_val, bc
         ∂R∂u     .= 0e0
 
         # Here the magic happens: we call a function from Enzyme that computes all, partial derivatives for the current stencil block 
-        if Scheme ==:CrankNicolson
-            autodiff(Enzyme.Reverse, Diffusion2D_CrankNicolson, Duplicated(u_loc, ∂R∂u), Const(u0_loc), Const(k_loc), Const(s[i,j]), Const(type_loc), Const(bcv_loc), Const(bcv0_loc), Const(Δ), Const(ρ[i,j]), Const(cp[i,j]), Const(θ))
-        elseif Scheme ==:BackwardEuler
-            autodiff(Enzyme.Reverse, Diffusion2D_backwardEuler, Duplicated(u_loc, ∂R∂u), Const(k_loc), Const(s[i,j]), Const(type_loc), Const(bcv_loc), Const(Δ), Const(u0[i,j]), Const(ρ[i,j]), Const(cp[i,j]))
-        end
+        autodiff(Enzyme.Reverse, Diffusion2D, Duplicated(u_loc, ∂R∂u), Const(u0_loc), Const(k_loc), Const(s[i,j]), Const(type_loc), Const(bcv_loc), Const(bcv0_loc), Const(Δ), Const(ρ[i,j]), Const(cp[i,j]), Const(θ))
 
         # This loops through the 2*2 stencil block and sets the coefficient ∂R∂u into the sparse matrix K.u.u
         num_ij = number.u[i,j]
@@ -338,7 +280,12 @@ function RunDiffusion(nc, L, Δt0, Scheme)
     # nout       = 20
     nt         = Int64(ceil(total_time/Δt0))
     t          = 0.
-    θ          = 0.5   # Crank-Nicolson parameter
+    #  parameter controlling the FD method
+    if Scheme == :CrankNicolson
+        θ = 0.5
+    elseif Scheme == :BackwardEuler
+        θ = 1.0
+    end
 
     # Arrays
     # div( q ) - s = 0
@@ -445,12 +392,12 @@ let
     end
 
     # Visualization
-    p1 = plot(xlabel="log10(1/Δx)", ylabel="log10(ϵu)", title="Convergence Analysis")
+    p1 = plot(xlabel="log₁₀(1/Δx)", ylabel="log₁₀(ϵu)")
     p1 = scatter!(log10.(1.0./Δx), log10.(ϵu), label="ϵ")
     p1 = plot!( log10.( 1.0./Δx ), log10.(ϵu[1]) .- 1.0* ( log10.( 1.0./Δx ) .- log10.( 1.0./Δx[1] ) ), label="O1"  ) 
     p1 = plot!( log10.( 1.0./Δx ), log10.(ϵu[1]) .- 2.0* ( log10.( 1.0./Δx ) .- log10.( 1.0./Δx[1] ) ), label="O2"  )
 
-    p2 = plot(xlabel="log10(1/Δt)", ylabel="log10(ϵu)")
+    p2 = plot(xlabel="log₁₀(1/Δt)", ylabel="log1₁₀(ϵu)")
     p2 = scatter!(log10.(1.0./Δt), log10.(ϵu), label="ϵ")
     p2 = plot!( log10.( 1.0./Δt ), log10.(ϵu[1]) .- 1.0* ( log10.( 1.0./Δt ) .- log10.( 1.0./Δt[1] ) ), label="O1"  )
     p2 = plot!( log10.( 1.0./Δt ), log10.(ϵu[1]) .- 2.0* ( log10.( 1.0./Δt ) .- log10.( 1.0./Δt[1] ) ), label="O2"  ) 
