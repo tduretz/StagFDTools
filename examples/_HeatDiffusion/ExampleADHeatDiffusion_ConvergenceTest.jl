@@ -102,7 +102,7 @@ function Diffusion2D(u_loc, u0_loc, k, s, type_loc, bcv_loc, bcv0_loc, Δ, ρ, c
 end
 
 # This function loop over the whole set of 2D cells and computes the residual in each cells
-function ResidualDiffusion2D!(R, u, k, s, num, type, bc_val, bc_val0, nc, Δ, u0, ρ, cp, θ, Scheme)
+function ResidualDiffusion2D!(R, u, k, s, num, type, bc_val, bc_val0, nc, Δ, u0, ρ, cp, θ)
 
     # This is just a vector of zeros (off-diagonal terms of the conductivity tensor are 0 in the isotropic case)
     # Here StaticArrays are being used a bit everywhere. This is a Julia Library which is used for achieving good performance.
@@ -142,7 +142,7 @@ end
 # The other does it with Enzyme: https://github.com/EnzymeAD/Enzyme.jl
 
 # Computation of the partial derivatives of the residual function. Sets the coefficient in the system matrix.
-function AssemblyDiffusion_Enzyme!(K, u, k, s, number, type, pattern, bc_val, bc_val0, nc, Δ, u0, ρ, cp, θ, Scheme)
+function AssemblyDiffusion_Enzyme!(K, u, k, s, number, type, pattern, bc_val, bc_val0, nc, Δ, u0, ρ, cp, θ)
 
     # This is aocal matrix that stores the partial derivatives.
      
@@ -191,10 +191,10 @@ function AssemblyDiffusion_Enzyme!(K, u, k, s, number, type, pattern, bc_val, bc
 
         # This loops through the 2*2 stencil block and sets the coefficient ∂R∂u into the sparse matrix K.u.u
         num_ij = number.u[i,j]
-        for jj in axes(num_loc,2), ii in axes(num_loc,1)
-            if num_loc[ii,jj] > 0 # only if equation exists, then put a value
+        for I in eachindex(num_loc)
+            if num_loc[I] > 0 # only if equation exists, then put a value
                 # For the given equation number (num_ij) enter all values on the line of the sparse matrix K.u.u
-                K.u.u[num_ij, num_loc[ii,jj]] = ∂R∂u[ii,jj]  
+                K.u.u[num_ij, num_loc[I]] = ∂R∂u[I]
             end
         end
     end
@@ -235,6 +235,13 @@ function BC_Analytical2D(bc_val, xc, yc, t, L, params)
     end
 end
 
+function fill_b!(b, r, inx, iny, number)
+    for j in iny, i in inx
+        ind = number.u[i,j]
+        b[ind] = r[i,j]
+    end
+end
+
 function RunDiffusion(nc, L, Δt0, Scheme) 
 
     # This is the main code that calls the above functions!
@@ -250,15 +257,14 @@ function RunDiffusion(nc, L, Δt0, Scheme)
     # Define node types 
     type = Fields( fill(:out, (nc.x+2, nc.y+2)) )   # Achtung: geist nodes
     type.u[2:end-1,2:end-1].= :in                   # inside nodes are all type :in
-    type.u[1,:]            .= :Dirichlet              # one BC type is :Dirichlet # West
-    type.u[end,:]          .= :Dirichlet              # East
-    type.u[:,1]            .= :Dirichlet            # South
-    type.u[:,end]          .= :Dirichlet            # North
+    @views type.u[1,:]            .= :Dirichlet     # one BC type is :Dirichlet # West
+    @views type.u[end,:]          .= :Dirichlet     # East
+    @views type.u[:,1]            .= :Dirichlet     # South
+    @views type.u[:,end]          .= :Dirichlet     # North
 
     # Define values of the boundary conditions
     bc_val = Fields( fill(0., (nc.x+2, nc.y+2)) )   # Achtung: geist nodes
     bc_val0 = Fields( fill(0., (nc.x+2, nc.y+2)) )
-    bc_val.u        .= zeros(nc.x+2, nc.y+2)        # useless ?!                         # North
 
     # 5-point stencil, this is the definition of the stencil block. 
     # It basically states which points are being included in the stencil
@@ -318,6 +324,7 @@ function RunDiffusion(nc, L, Δt0, Scheme)
     Δ      = (x=L/nc.x, y=L/nc.y, t=Δt0)
     xc     = LinRange(-L/2-Δ.x/2, L/2+Δ.x/2, nc.x+2)
     yc     = LinRange(-L/2-Δ.y/2, L/2+Δ.y/2, nc.y+2)
+    b      = zeros(nc.x*nc.y)
 
     # Initial condititon
     AnalyticalDiffusion2D(u, xc, yc, t, nc, params) 
@@ -341,36 +348,36 @@ function RunDiffusion(nc, L, Δt0, Scheme)
         BC_Analytical2D(bc_val0, xc, yc, t-Δ.t, L, params)
 
         # Residual check: div( q ) - s = r
-        @timeit to "Residual" ResidualDiffusion2D!(r, u, k, s, number, type, bc_val, bc_val0, nc, Δ, u0, ρ, cp, θ, Scheme) 
+        @timeit to "Residual" ResidualDiffusion2D!(r, u, k, s, number, type, bc_val, bc_val0, nc, Δ, u0, ρ, cp, θ) 
         @info norm(r)/sqrt(length(r))
         
         @timeit to "Assembly Enzyme" begin
-            AssemblyDiffusion_Enzyme!(M, u, k, s, number, type, pattern, bc_val, bc_val0, nc, Δ, u0, ρ, cp, θ, Scheme)
+            AssemblyDiffusion_Enzyme!(M, u, k, s, number, type, pattern, bc_val, bc_val0, nc, Δ, u0, ρ, cp, θ)
         end
 
         @info "Symmetry"
         @show norm(M.u.u - M.u.u')
 
         # A one-step Newton iteration - the problem is linear: only one step is needed to reach maximum accurracy
-        b  = r[inx,iny][:]                  # creates a 1D rhight hand side vector (whitout ghosts), values are the current residual
+        fill_b!(b, r, inx, iny, number)             # creates a 1D right hand side vector (without ghosts), values are the current residual
         
         # Solve
         du           = M.u.u\b              # apply inverse of matrix M.u.u to residual vector 
         u[inx,iny] .-= reshape(du, nc...)   # update the solution u using the correction du
         
         # Residual check
-        ResidualDiffusion2D!(r, u, k, s, number, type, bc_val, bc_val0, nc, Δ, u0, ρ, cp, θ, Scheme)
+        ResidualDiffusion2D!(r, u, k, s, number, type, bc_val, bc_val0, nc, Δ, u0, ρ, cp, θ)
         @info norm(r)/sqrt(length(r))
 
         # Analytic solution
         AnalyticalDiffusion2D(u_ana, xc, yc, t, nc, params)
 
         # Calculate error
-        u_devi[inx,iny] .= u[inx,iny] .- u_ana[inx,iny]    # Deviation between the numerical and analtical solution
+        @views u_devi[inx,iny] .= u[inx,iny] .- u_ana[inx,iny]    # Deviation between the numerical and analtical solution
 
         @info "Error = ", mean(u .- u_ana)
     end
-
+    # display(to)
     return mean(abs.(u .- u_ana))
 end
 
@@ -403,3 +410,48 @@ let
     p2 = plot!( log10.( 1.0./Δt ), log10.(ϵu[1]) .- 2.0* ( log10.( 1.0./Δt ) .- log10.( 1.0./Δt[1] ) ), label="O2"  ) 
     display(plot(p1,p2))
 end
+
+# Crank-Nicolson
+# ────────────────────────────────────────────────────────────────────────────
+#                                    Time                    Allocations      
+#                           ───────────────────────   ────────────────────────
+#     Tot / % measured:         63.3ms /   5.8%           21.6MiB /  14.9%    
+
+# Section           ncalls     time    %tot     avg     alloc    %tot      avg
+# ────────────────────────────────────────────────────────────────────────────
+# Assembly Enzyme       20   2.70ms   74.0%   135μs   3.21MiB  100.0%   165KiB
+# Residual              20    947μs   26.0%  47.3μs     0.00B    0.0%    0.00B
+# ────────────────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────────────────
+#                                    Time                    Allocations      
+#                           ───────────────────────   ────────────────────────
+#     Tot / % measured:          2.70s /  11.6%           1.43GiB /  12.4%    
+
+# Section           ncalls     time    %tot     avg     alloc    %tot      avg
+# ────────────────────────────────────────────────────────────────────────────
+# Assembly Enzyme       80    237ms   75.8%  2.96ms    182MiB  100.0%  2.27MiB
+# Residual              80   75.4ms   24.2%   943μs     0.00B    0.0%    0.00B
+# ────────────────────────────────────────────────────────────────────────────
+
+# Backward Euler
+# ────────────────────────────────────────────────────────────────────────────
+#                                    Time                    Allocations      
+#                           ───────────────────────   ────────────────────────
+#     Tot / % measured:         50.5ms /   7.0%           21.6MiB /  14.9%    
+
+# Section           ncalls     time    %tot     avg     alloc    %tot      avg
+# ────────────────────────────────────────────────────────────────────────────
+# Assembly Enzyme       20   2.64ms   74.3%   132μs   3.21MiB  100.0%   165KiB
+# Residual              20    914μs   25.7%  45.7μs     0.00B    0.0%    0.00B
+# ────────────────────────────────────────────────────────────────────────────
+
+# ────────────────────────────────────────────────────────────────────────────
+#                                    Time                    Allocations      
+#                           ───────────────────────   ────────────────────────
+#     Tot / % measured:          2.74s /  11.7%           1.43GiB /  12.4%    
+
+# Section           ncalls     time    %tot     avg     alloc    %tot      avg
+# ────────────────────────────────────────────────────────────────────────────
+# Assembly Enzyme       80    243ms   76.1%  3.04ms    182MiB  100.0%  2.27MiB
+# Residual              80   76.5ms   23.9%   956μs     0.00B    0.0%    0.00B
+# ────────────────────────────────────────────────────────────────────────────
