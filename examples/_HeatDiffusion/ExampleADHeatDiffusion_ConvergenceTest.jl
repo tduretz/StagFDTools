@@ -23,7 +23,7 @@ using ForwardDiff, Enzyme  # AD backends you want to use
 #      |     uS    |
 #      |           |
 
-function Diffusion2D(u_loc, u0_loc, k, s, type_loc, bcv_loc, bcv0_loc, Δ, ρ, cp, θ)
+function Diffusion2D(u_loc, u0_loc, k, s, type_loc, bcv_loc, Δ, ρ, cp, θ)
 
     # u_loc is 3*3 matrix containing the current values of u for the whole stencil
     #             0   uN  0
@@ -32,6 +32,10 @@ function Diffusion2D(u_loc, u0_loc, k, s, type_loc, bcv_loc, bcv0_loc, Δ, ρ, c
     # Therefore u_loc[2,2] is the current value of uC
     uC       = u_loc[2,2]
     u0C     = u0_loc[2,2]
+    
+    # redefine u_loc in dependence of θ to allow for both Crank-Nicolson and Backward Euler
+    u_loc = θ * u_loc + (1-θ) * u0_loc
+    uCθ = u_loc[2,2]
 
     # Boundary conditions need to be applied on every boundaries :D
     # Here we define the values of the ghost nodes. For example at the west side uW needs to be defined  
@@ -39,70 +43,52 @@ function Diffusion2D(u_loc, u0_loc, k, s, type_loc, bcv_loc, bcv0_loc, Δ, ρ, c
     # West
     if type_loc[1,2] === :Dirichlet
         uW = 2*bcv_loc[1,2] - u_loc[2,2]
-        u0W = 2*bcv0_loc[1,2] - u0_loc[2,2]
     elseif type_loc[1,2] === :Neumann
         uW = Δ.x*bcv_loc[1,2] + u_loc[2,2]
-        u0W = Δ.x*bcv0_loc[1,2] + u0_loc[2,2]
     elseif type_loc[1,2] === :periodic || type_loc[1,2] === :in
         uW = u_loc[1,2] 
-        u0W = u0_loc[1,2]
     end
 
     # East
     if type_loc[3,2] === :Dirichlet
         uE = 2*bcv_loc[3,2] - u_loc[2,2]
-        u0E = 2*bcv0_loc[3,2] - u0_loc[2,2]
     elseif type_loc[3,2] === :Neumann
         uE = -Δ.x*bcv_loc[3,2] + u_loc[2,2]
-        u0E = -Δ.x*bcv0_loc[3,2] + u0_loc[2,2]
     elseif type_loc[3,2] === :periodic || type_loc[3,2] === :in
         uE = u_loc[3,2] 
-        u0E = u0_loc[3,2]
     end
 
     # South
     if type_loc[2,1] === :Dirichlet
         uS = 2*bcv_loc[2,1] - u_loc[2,2]
-        u0S = 2*bcv0_loc[2,1] - u0_loc[2,2]
     elseif type_loc[2,1] === :Neumann
         uS = Δ.y*bcv_loc[2,1] + u_loc[2,2]
-        u0S = Δ.y*bcv0_loc[2,1] + u0_loc[2,2]
     elseif type_loc[2,1] === :periodic || type_loc[2,1] === :in
         uS = u_loc[2,1]
-        u0S = u0_loc[2,1]
     end
 
     # North
     if type_loc[2,3] === :Dirichlet
         uN = 2*bcv_loc[2,3] - u_loc[2,2]
-        u0N = 2*bcv0_loc[2,3] - u0_loc[2,2]
     elseif type_loc[2,3] === :Neumann
         uN = -Δ.y*bcv_loc[2,3] + u_loc[2,2]
-        u0N = -Δ.y*bcv0_loc[2,3] + u0_loc[2,2]
     elseif type_loc[2,3] === :periodic || type_loc[2,3] === :in
         uN = u_loc[2,3]
-        u0N = u0_loc[2,3]
     end
 
 
     # Heat flux for each face based on finite differences
-    qxW = -k.xx[1]*(uC - uW)/Δ.x  # West
-    qxE = -k.xx[2]*(uE - uC)/Δ.x  # East
-    qyS = -k.yy[1]*(uC - uS)/Δ.y  # South
-    qyN = -k.yy[2]*(uN - uC)/Δ.y  # North
-
-    # Heat flux of the previous time step for each face based on finite differences
-    qxW0 = -k.xx[1]*(u0C - u0W)/Δ.x  # West
-    qxE0 = -k.xx[2]*(u0E - u0C)/Δ.x  # East
-    qyS0 = -k.yy[1]*(u0C - u0S)/Δ.y  # South
-    qyN0 = -k.yy[2]*(u0N - u0C)/Δ.y  # North
+    qxW = -k.xx[1]*(uCθ - uW)/Δ.x  # West
+    qxE = -k.xx[2]*(uE - uCθ)/Δ.x  # East
+    qyS = -k.yy[1]*(uCθ - uS)/Δ.y  # South
+    qyN = -k.yy[2]*(uN - uCθ)/Δ.y  # North
 
     # Return the residual function based on finite differences
-    return -( θ * (-(qxE - qxW)/Δ.x - (qyN - qyS)/Δ.y) + (1-θ) * (-(qxE0 - qxW0)/Δ.x - (qyN0 - qyS0)/Δ.y) - ρ*cp*(uC - u0C)/Δ.t + s)
+    return -((-(qxE - qxW)/Δ.x - (qyN - qyS)/Δ.y) - ρ*cp*(uC - u0C)/Δ.t + s)
 end
 
 # This function loop over the whole set of 2D cells and computes the residual in each cells
-function ResidualDiffusion2D!(R, u, k, s, num, type, bc_val, bc_val0, nc, Δ, u0, ρ, cp, θ)
+function ResidualDiffusion2D!(R, u, k, s, num, type, bc_val, nc, Δ, u0, ρ, cp, θ)
 
     # This is just a vector of zeros (off-diagonal terms of the conductivity tensor are 0 in the isotropic case)
     # Here StaticArrays are being used a bit everywhere. This is a Julia Library which is used for achieving good performance.
@@ -127,12 +113,11 @@ function ResidualDiffusion2D!(R, u, k, s, num, type, bc_val, bc_val0, nc, Δ, u0
 
         # This stores the VALUE of the boundary condition for the stencils (3*3 matrix)
         bcv_loc   = SMatrix{3,3}(bc_val.u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        bcv0_loc  = SMatrix{3,3}(bc_val0.u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
 
         # This stores the TYPE of the boundary condition for the stencils (3*3 matrix)
         type_loc  = SMatrix{3,3}(  type.u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
 
-        R[i,j]    = Diffusion2D(u_loc, u0_loc, k_loc, s[i,j], type_loc, bcv_loc, bcv0_loc, Δ, ρ[i,j], cp[i,j], θ)
+        R[i,j]    = Diffusion2D(u_loc, u0_loc, k_loc, s[i,j], type_loc, bcv_loc, Δ, ρ[i,j], cp[i,j], θ)
     end
     return nothing
 end
@@ -142,7 +127,7 @@ end
 # The other does it with Enzyme: https://github.com/EnzymeAD/Enzyme.jl
 
 # Computation of the partial derivatives of the residual function. Sets the coefficient in the system matrix.
-function AssemblyDiffusion_Enzyme!(K, u, k, s, number, type, pattern, bc_val, bc_val0, nc, Δ, u0, ρ, cp, θ)
+function AssemblyDiffusion_Enzyme!(K, u, k, s, number, type, pattern, bc_val, nc, Δ, u0, ρ, cp, θ)
 
     # This is aocal matrix that stores the partial derivatives.
      
@@ -178,7 +163,6 @@ function AssemblyDiffusion_Enzyme!(K, u, k, s, number, type, pattern, bc_val, bc
 
         # Same as above: boundary condition VALUES
         bcv_loc   = SMatrix{3,3}(bc_val.u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        bcv0_loc  = SMatrix{3,3}(bc_val0.u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
 
         # Same as above: boundary condition TYPES
         type_loc  = SMatrix{3,3}(  type.u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
@@ -187,7 +171,7 @@ function AssemblyDiffusion_Enzyme!(K, u, k, s, number, type, pattern, bc_val, bc
         ∂R∂u     .= 0e0
 
         # Here the magic happens: we call a function from Enzyme that computes all, partial derivatives for the current stencil block 
-        autodiff(Enzyme.Reverse, Diffusion2D, Duplicated(u_loc, ∂R∂u), Const(u0_loc), Const(k_loc), Const(s[i,j]), Const(type_loc), Const(bcv_loc), Const(bcv0_loc), Const(Δ), Const(ρ[i,j]), Const(cp[i,j]), Const(θ))
+        autodiff(Enzyme.Reverse, Diffusion2D, Duplicated(u_loc, ∂R∂u), Const(u0_loc), Const(k_loc), Const(s[i,j]), Const(type_loc), Const(bcv_loc), Const(Δ), Const(ρ[i,j]), Const(cp[i,j]), Const(θ))
 
         # This loops through the 2*2 stencil block and sets the coefficient ∂R∂u into the sparse matrix K.u.u
         num_ij = number.u[i,j]
@@ -343,16 +327,16 @@ function RunDiffusion(nc, L, Δt0, Scheme)
 
         u0 .= u  # store the previous solution
 
-        # Update BC
-        BC_Analytical2D(bc_val, xc, yc, t, L, params)
-        BC_Analytical2D(bc_val0, xc, yc, t-Δ.t, L, params)
+        #= Update BC
+        this is done at t-(1-θ)*Δ.t to directly compute the values for the intermediate time step for Crank-Nicolson =#
+        BC_Analytical2D(bc_val, xc, yc, t-(1-θ)*Δ.t, L, params)
 
         # Residual check: div( q ) - s = r
-        @timeit to "Residual" ResidualDiffusion2D!(r, u, k, s, number, type, bc_val, bc_val0, nc, Δ, u0, ρ, cp, θ) 
+        @timeit to "Residual" ResidualDiffusion2D!(r, u, k, s, number, type, bc_val, nc, Δ, u0, ρ, cp, θ) 
         @info norm(r)/sqrt(length(r))
         
         @timeit to "Assembly Enzyme" begin
-            AssemblyDiffusion_Enzyme!(M, u, k, s, number, type, pattern, bc_val, bc_val0, nc, Δ, u0, ρ, cp, θ)
+            AssemblyDiffusion_Enzyme!(M, u, k, s, number, type, pattern, bc_val, nc, Δ, u0, ρ, cp, θ)
         end
 
         @info "Symmetry"
@@ -366,7 +350,7 @@ function RunDiffusion(nc, L, Δt0, Scheme)
         u[inx,iny] .-= reshape(du, nc...)   # update the solution u using the correction du
         
         # Residual check
-        ResidualDiffusion2D!(r, u, k, s, number, type, bc_val, bc_val0, nc, Δ, u0, ρ, cp, θ)
+        ResidualDiffusion2D!(r, u, k, s, number, type, bc_val, nc, Δ, u0, ρ, cp, θ)
         @info norm(r)/sqrt(length(r))
 
         # Analytic solution
@@ -385,7 +369,7 @@ end
 let
     L   = 1.      # Domain extent
     nc0 = 30
-    n   =  [1, 2, 4]
+    n   =  [2, 4, 8]
     Scheme = :CrankNicolson # :BackwardEuler, :CrankNicolson
 
     Δx  = L ./ (n*nc0)
@@ -411,47 +395,28 @@ let
     display(plot(p1,p2))
 end
 
-# Crank-Nicolson
-# ────────────────────────────────────────────────────────────────────────────
-#                                    Time                    Allocations      
-#                           ───────────────────────   ────────────────────────
-#     Tot / % measured:         63.3ms /   5.8%           21.6MiB /  14.9%    
+#=
+Crank-Nicolson
+────────────────────────────────────────────────────────────────────────────
+                                   Time                    Allocations      
+                          ───────────────────────   ────────────────────────
+    Tot / % measured:          2.24s /  11.6%           1.38GiB /  12.8%    
 
-# Section           ncalls     time    %tot     avg     alloc    %tot      avg
-# ────────────────────────────────────────────────────────────────────────────
-# Assembly Enzyme       20   2.70ms   74.0%   135μs   3.21MiB  100.0%   165KiB
-# Residual              20    947μs   26.0%  47.3μs     0.00B    0.0%    0.00B
-# ────────────────────────────────────────────────────────────────────────────
-# ────────────────────────────────────────────────────────────────────────────
-#                                    Time                    Allocations      
-#                           ───────────────────────   ────────────────────────
-#     Tot / % measured:          2.70s /  11.6%           1.43GiB /  12.4%    
+Section           ncalls     time    %tot     avg     alloc    %tot      avg
+────────────────────────────────────────────────────────────────────────────
+Assembly Enzyme       80    198ms   76.2%  2.47ms    182MiB  100.0%  2.27MiB
+Residual              80   61.7ms   23.8%   771μs     0.00B    0.0%    0.00B
+────────────────────────────────────────────────────────────────────────────
 
-# Section           ncalls     time    %tot     avg     alloc    %tot      avg
-# ────────────────────────────────────────────────────────────────────────────
-# Assembly Enzyme       80    237ms   75.8%  2.96ms    182MiB  100.0%  2.27MiB
-# Residual              80   75.4ms   24.2%   943μs     0.00B    0.0%    0.00B
-# ────────────────────────────────────────────────────────────────────────────
+Backward Euler
+────────────────────────────────────────────────────────────────────────────
+                                   Time                    Allocations      
+                          ───────────────────────   ────────────────────────
+    Tot / % measured:          2.24s /  11.3%           1.38GiB /  12.8%    
 
-# Backward Euler
-# ────────────────────────────────────────────────────────────────────────────
-#                                    Time                    Allocations      
-#                           ───────────────────────   ────────────────────────
-#     Tot / % measured:         50.5ms /   7.0%           21.6MiB /  14.9%    
-
-# Section           ncalls     time    %tot     avg     alloc    %tot      avg
-# ────────────────────────────────────────────────────────────────────────────
-# Assembly Enzyme       20   2.64ms   74.3%   132μs   3.21MiB  100.0%   165KiB
-# Residual              20    914μs   25.7%  45.7μs     0.00B    0.0%    0.00B
-# ────────────────────────────────────────────────────────────────────────────
-
-# ────────────────────────────────────────────────────────────────────────────
-#                                    Time                    Allocations      
-#                           ───────────────────────   ────────────────────────
-#     Tot / % measured:          2.74s /  11.7%           1.43GiB /  12.4%    
-
-# Section           ncalls     time    %tot     avg     alloc    %tot      avg
-# ────────────────────────────────────────────────────────────────────────────
-# Assembly Enzyme       80    243ms   76.1%  3.04ms    182MiB  100.0%  2.27MiB
-# Residual              80   76.5ms   23.9%   956μs     0.00B    0.0%    0.00B
-# ────────────────────────────────────────────────────────────────────────────
+Section           ncalls     time    %tot     avg     alloc    %tot      avg
+────────────────────────────────────────────────────────────────────────────
+Assembly Enzyme       80    193ms   75.9%  2.41ms    182MiB  100.0%  2.27MiB
+Residual              80   61.3ms   24.1%   766μs     0.00B    0.0%    0.00B
+────────────────────────────────────────────────────────────────────────────
+=#
