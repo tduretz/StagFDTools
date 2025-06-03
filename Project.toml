@@ -6,6 +6,7 @@ version = "0.1.0"
 [deps]
 DifferentiationInterface = "a0c0ee7d-e4b9-4e03-894e-1c5f64a51d63"
 Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
+ExactFieldSolutions = "2a6b1ac7-2de5-4354-bffb-bf009f6a4bef"
 ExtendableSparse = "95c220a8-a1cf-11e9-0c77-dbfce5f500b3"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 IterativeSolvers = "42fd0dbc-a981-5370-80f2-aaf504508153"
@@ -21,6 +22,7 @@ UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 
 [compat]
 DifferentiationInterface = "0.6.27"
+ExactFieldSolutions = "0.1.6"
 ForwardDiff = "0.10.38"
 IterativeSolvers = "0.9.4"
 MuladdMacro = "0.2.4"

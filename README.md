@@ -105,6 +105,12 @@ This package aims at generating flexible FD stencils that can interoperate with 
 ## Anisotropic Stokes (full staggered grid - symmetric operator)
 ![image](https://github.com/user-attachments/assets/3df8215a-0eca-4e3e-b01a-85a501a4bacb)
 
+## Diffusion (backward Euler)
+![image](results/Diffusion_BackwardEuler.svg)
+
+## Diffusion (Crank-Nicolson)
+![image](results/Diffusion_CrankNicolson.svg)
+
 # Two-phase flow
 ![image](https://github.com/user-attachments/assets/e5606f59-1a56-43e8-84d9-25381318eb0c)
 
