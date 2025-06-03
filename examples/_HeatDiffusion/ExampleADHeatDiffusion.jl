@@ -167,10 +167,10 @@ function AssemblyPoisson_Enzyme!(K, u, k, s, number, type, pattern, bc_val, nc, 
 
         # This loops through the 2*2 stencil block and sets the coefficient ∂R∂u into the sparse matrix K.u.u
         num_ij = number.u[i,j]
-        for jj in axes(num_loc,2), ii in axes(num_loc,1)
-            if num_loc[ii,jj] > 0 # only if equation exists, then put a value
+        for I in eachindex(num_loc)
+            if num_loc[I] > 0 # only if equation exists, then put a value
                 # For the given equation number (num_ij) enter all values on the line of the sparse matrix K.u.u
-                K.u.u[num_ij, num_loc[ii,jj]] = ∂R∂u[ii,jj]  
+                K.u.u[num_ij, num_loc[I]] = ∂R∂u[I]
             end
         end
     end
@@ -211,6 +211,13 @@ function BC_Analytical(bc_val, xc, yc, t, L, params)
     end
 end
 
+function fill_b!(b, r, inx, iny, number)
+    for j in iny, i in inx
+        ind = number.u[i,j]
+        b[ind] = r[i,j]
+    end
+end
+
 function RunDiffusion(n) 
 
     # This is the main code that calls the above functions!
@@ -226,14 +233,13 @@ function RunDiffusion(n)
     # Define node types 
     type = Fields( fill(:out, (nc.x+2, nc.y+2)) )   # Achtung: geist nodes
     type.u[2:end-1,2:end-1].= :in                   # inside nodes are all type :in
-    type.u[1,:]            .= :Dirichlet              # one BC type is :Dirichlet # West
-    type.u[end,:]          .= :Dirichlet              # East
-    type.u[:,1]            .= :Dirichlet            # South
-    type.u[:,end]          .= :Dirichlet            # North
+    @views type.u[end,:]          .= :Dirichlet     # East
+    @views type.u[:,1]            .= :Dirichlet     # South
+    @views type.u[:,end]          .= :Dirichlet     # North
+    @views type.u[1,:]            .= :Dirichlet     # one BC type is :Dirichlet # West
 
     # Define values of the boundary conditions
     bc_val = Fields( fill(0., (nc.x+2, nc.y+2)) )   # Achtung: geist nodes
-    bc_val.u        .= zeros(nc.x+2, nc.y+2)        # useless ?!                         # North
 
     # 5-point stencil, this is the definition of the stencil block. 
     # It basically states which points are being included in the stencil
@@ -289,6 +295,7 @@ function RunDiffusion(n)
     Δ      = (x=L/nc.x, y=L/nc.y, t=Δt0)
     xc     = LinRange(-L/2-Δ.x/2, L/2+Δ.x/2, nc.x+2)
     yc     = LinRange(-L/2-Δ.y/2, L/2+Δ.y/2, nc.y+2)
+    b      = zeros(nc.x*nc.y)
 
     # Initial condititon
     AnalyticalDiffusion2D(u, xc, yc, t, nc, params) 
@@ -322,7 +329,7 @@ function RunDiffusion(n)
         @show norm(M.u.u - M.u.u')
 
         # A one-step Newton iteration - the problem is linear: only one step is needed to reach maximum accurracy
-        b  = r[inx,iny][:]                  # creates a 1D rhight hand side vector (whitout ghosts), values are the current residual
+        fill_b!(b, r, inx, iny, number)             # creates a 1D right hand side vector (without ghosts), values are the current residual
         
         # Solve
         du           = M.u.u\b              # apply inverse of matrix M.u.u to residual vector 
@@ -336,7 +343,7 @@ function RunDiffusion(n)
         AnalyticalDiffusion2D(u_ana, xc, yc, t, nc, params)
 
         # Calculate error
-        u_devi[inx,iny] .= u[inx,iny] .- u_ana[inx,iny]    # Deviation between the numerical and analtical solution
+        @views u_devi[inx,iny] .= u[inx,iny] .- u_ana[inx,iny]    # Deviation between the numerical and analtical solution
 
         # Visualization
         if mod(it, nout) == 0
