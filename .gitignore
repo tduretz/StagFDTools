@@ -1,3 +1,5 @@
 /.vscode
 /Manifest.toml
 /examples/.DS_Store
+*.jld2
+.DS_Store
