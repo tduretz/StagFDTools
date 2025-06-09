@@ -34,6 +34,18 @@ module StokesFSG
     export SetRHS!, UpdateSolution!, SetRHSSG1!, UpdateSolutionSG1!, SetRHSSG2!, UpdateSolutionSG2!
 end
 
+module ThermoMechanics
+    using StagFDTools, StaticArrays, ExtendableSparse, StaticArrays, LinearAlgebra, Enzyme
+    include("ThermoMechanics/ThermoMechanics.jl")
+    export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx1, SetBCVy1
+    export AssembleHeatDiffusion2D!, ResidualHeatDiffusion2D!, HeatDiffusion
+    export AssembleContinuity2D!, ResidualContinuity2D!, Continuity
+    export AssembleMomentum2D_y!, ResidualMomentum2D_y!, Momentum_y
+    export AssembleMomentum2D_x!, ResidualMomentum2D_x!, Momentum_x
+    include("ThermoMechanics/ThermoMechanics_Rheology.jl")
+    export LocalRheology, StressVector!, TangentOperator!
+end
+
 module TwoPhases
     using StagFDTools, StaticArrays, ExtendableSparse, StaticArrays, LinearAlgebra, Enzyme
     include("TwoPhases/TwoPhases_v2.jl")
