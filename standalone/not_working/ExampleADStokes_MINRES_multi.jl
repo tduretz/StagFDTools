@@ -364,7 +364,7 @@ let
     # Resolution
     nc = (x = 30, y = 32)
 
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, size_x, size_y, size_c = Ranges(nc)
 
     #--------------------------------------------#
     # Boundary conditions
@@ -500,7 +500,7 @@ let
 
     # Diagonal preconditioner
     D_PC    = spdiagm(diag(𝑀))
-    diag_Pt = 1/2*max(nc...) ./ η.p[inx_Pt, iny_Pt]
+    diag_Pt = 1/2*max(nc...) ./ η.p[inx_c, iny_c]
     D_PC[(nVx+nVy+1):end, (nVx+nVy+1):end] .+= spdiagm(diag_Pt[:])
     D_PC_inv =  spdiagm(1 ./ diag(D_PC))
 
@@ -554,7 +554,7 @@ let
 
         # @show norm(Ap.x[inx_Vx, iny_Vx])
         # @show norm(Ap.y[inx_Vy, iny_Vy])
-        # @show norm(Ap_p[inx_Pt, iny_Pt])
+        # @show norm(Ap_p[inx_c, iny_c])
         
         # Compute step size alpha
         r_dot_z = (dot(R.x, z.x) + dot(R.y, z.y) + dot(Rp, z_p))
@@ -609,7 +609,7 @@ let
     @info "Residuals"
     @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
     @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-    @show norm(Rp[inx_Pt,iny_Pt])/sqrt(nPt)
+    @show norm(Rp[inx_c,iny_c])/sqrt(nPt)
 
     #--------------------------------------------#
     @info "Velocity block symmetry"
@@ -628,14 +628,14 @@ let
 
     p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc))
     p2 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc))
-    p3 = heatmap(xc, yc, Pt[inx_Pt,iny_Pt]' .- mean(Pt[inx_Pt,iny_Pt]), aspect_ratio=1, xlim=extrema(xc), clim=(-10,10))
+    p3 = heatmap(xc, yc, Pt[inx_c,iny_c]' .- mean(Pt[inx_c,iny_c]), aspect_ratio=1, xlim=extrema(xc), clim=(-10,10))
     display(plot(p1, p2, p3))
 
     #--------------------------------------------#
 end
 
 
-# function Residual!(R, Rp, V, Pt, ε̇, τ, η, Δ, inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt)
+# function Residual!(R, Rp, V, Pt, ε̇, τ, η, Δ, inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c)
 #     @. V.x[:,[2 end-1]] .= V.x[:,[3 end-2]]
 #     @. V.y[[2 end-1],:] .= V.y[[3 end-2],:]
 #     @. ε̇.kk = (V.x[2:end-0,2:end-1] - V.x[1:end-1,2:end-1]) / Δ.x + (V.y[2:end-1,2:end-0] - V.y[2:end-1,1:end-1]) / Δ.y
@@ -646,7 +646,7 @@ end
 #     @. τ.xy = 2 * η.xy * ε̇.xy
 #     @. R.x[inx_Vx, iny_Vx] = (τ.xx[2:end,2:end-1] - τ.xx[1:end-1,2:end-1]) / Δ.x + (τ.xy[:,2:end] - τ.xy[:,1:end-1]) / Δ.y - (Pt[2:end,2:end-1] - Pt[1:end-1,2:end-1]) / Δ.x
 #     @. R.y[inx_Vy, iny_Vy] = (τ.yy[2:end-1,2:end] - τ.yy[2:end-1,1:end-1]) / Δ.y + (τ.xy[2:end,:] - τ.xy[1:end-1,:]) / Δ.x - (Pt[2:end-1,2:end] - Pt[2:end-1,1:end-1]) / Δ.y
-#     @. Rp[inx_Pt, iny_Pt] = ε̇.kk[inx_Pt, iny_Pt]
+#     @. Rp[inx_c, iny_c] = ε̇.kk[inx_c, iny_c]
 #     return nothing
 # end
 
@@ -655,7 +655,7 @@ end
 #     size_x, size_y, size_c, size_xy = (nc.x+3, nc.y+4), (nc.x+4, nc.y+3), (nc.x+2, nc.y+2), (nc.x+1, nc.y+1)
 #     inx_Vx, iny_Vx = 2:nc.x+2, 3:nc.y+2
 #     inx_Vy, iny_Vy = 3:nc.x+2, 2:nc.y+2
-#     inx_Pt, iny_Pt = 2:nc.x+1, 2:nc.y+1
+#     inx_c, iny_c = 2:nc.x+1, 2:nc.y+1
 
 
 #     # Intialise field
@@ -713,7 +713,7 @@ end
 #     D.p .= max(nc...) ./ η.p
 
 #     # Initial residual
-#     Residual!(R, Rp, V, Pt, ε̇, τ, η, Δ, inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt)
+#     Residual!(R, Rp, V, Pt, ε̇, τ, η, Δ, inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c)
 
 #     # Arrays for solver 
 #     dV   = (x=zeros(size_x...), y=zeros(size_y...)); dPt  = zeros(size_c...)
@@ -736,12 +736,12 @@ end
 #     for k in 1:max_iter
 
 #         # Compute A * p
-#         Residual!(Ap, Ap_p, p, p_p, ε̇, τ, η, Δ, inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt)
+#         Residual!(Ap, Ap_p, p, p_p, ε̇, τ, η, Δ, inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c)
 
        
 #         @show norm(R.x[inx_Vx, iny_Vx])
 #         @show norm(R.y[inx_Vy, iny_Vy])
-#         @show norm(Rp[inx_Pt, iny_Pt])
+#         @show norm(Rp[inx_c, iny_c])
 
 
 #         # Compute step size alpha

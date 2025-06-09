@@ -653,7 +653,7 @@ end
     #--------------------------------------------#
     # Resolution
 
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c, size_v = Ranges(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, size_x, size_y, size_c, size_v = Ranges(nc)
 
     #--------------------------------------------#
     # Boundary conditions
@@ -772,10 +772,10 @@ end
     BC.Vy[     2, iny_Vy] .= (type.Vy[     2, iny_Vy] .== :Neumann) .* D_BC[2,1] .+ (type.Vy[    2, iny_Vy] .== :Dirichlet) .* (D_BC[2,1]*xv[1]   .+ D_BC[2,2]*yv)
     BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
 
-    phases.c[inx_Pt, iny_Pt][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
+    phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
     phases.v[(xv.^2 .+ (yv').^2) .<= 0.1^2] .= 2
 
-    # p1 = heatmap(xc, yc, phases.c[inx_Pt,iny_Pt]', aspect_ratio=1, xlim=extrema(xc))
+    # p1 = heatmap(xc, yc, phases.c[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc))
     # p2 = heatmap(xv, yv, phases.v', aspect_ratio=1, xlim=extrema(xc))
     # display(plot(p1, p2))
     #--------------------------------------------#
@@ -822,7 +822,7 @@ end
 
             err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
             err.y[iter] = norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-            err.p[iter] = norm(R.p[inx_Pt,iny_Pt])/sqrt(nPt)
+            err.p[iter] = norm(R.p[inx_c,iny_c])/sqrt(nPt)
             max(err.x[iter], err.y[iter]) < ϵ_nl ? break : nothing
 
             #--------------------------------------------#
@@ -867,7 +867,7 @@ end
                     ResidualContinuity2D!(R, V, Pt, Pt0, λ̇, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
                     ResidualMomentum2D_x!(R, V, Pt, Pt0, λ̇, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
                     ResidualMomentum2D_y!(R, V, Pt, Pt0, λ̇, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-                    rvec[i] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx) + norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy) + norm(R.p[inx_Pt,iny_Pt])/sqrt(nPt)   
+                    rvec[i] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx) + norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy) + norm(R.p[inx_c,iny_c])/sqrt(nPt)   
                 end
                 _, imin = findmin(rvec)
                 V.x .= Vi.x 
@@ -897,14 +897,14 @@ end
         ε̇II  = sqrt.( 0.5.*(ε̇.xx[2:end-1,2:end-1].^2 + ε̇.yy[2:end-1,2:end-1].^2) .+ ε̇xyc.^2 )
         # p1 = heatmap(xc, yv, abs.(R.y[inx_Vy,iny_Vy])', aspect_ratio=1, xlim=extrema(xc), title="Vy")
         p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
-        p2 = heatmap(xc, yc,  Ptc[inx_Pt,iny_Pt]', aspect_ratio=1, xlim=extrema(xc), title="Pt")
+        p2 = heatmap(xc, yc,  Ptc[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt")
         p3 = heatmap(xc, yc,  log10.(ε̇II)', aspect_ratio=1, xlim=extrema(xc), title="ε̇II", c=:coolwarm)
         p4 = heatmap(xc, yc,  τII', aspect_ratio=1, xlim=extrema(xc), title="τII", c=:turbo)
         p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright)
         p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
         p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
         p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
-        p5 = heatmap(xc, yc,  (λ̇.c[inx_Pt,iny_Pt] .> 0.)', aspect_ratio=1, xlim=extrema(xc), title="ηc")
+        p5 = heatmap(xc, yc,  (λ̇.c[inx_c,iny_c] .> 0.)', aspect_ratio=1, xlim=extrema(xc), title="ηc")
         p6 = heatmap(xv, yv,  (λ̇.v .> 0.)', aspect_ratio=1, xlim=extrema(xv), title="ηv")
         display(plot(p1, p3, p2, p4, layout=(2,2)))
 

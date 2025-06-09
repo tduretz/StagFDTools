@@ -355,7 +355,7 @@ end
 @views function main(nc) 
     #--------------------------------------------#
     # Resolution
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, size_x, size_y, size_c = Ranges(nc)
 
     #--------------------------------------------#
     # Boundary conditions
@@ -480,7 +480,7 @@ end
 
     # Diagonal preconditioner
     D_PC    = spdiagm(diag(𝑀))
-    diag_Pt = max(nc...) ./ η.p[inx_Pt, iny_Pt]
+    diag_Pt = max(nc...) ./ η.p[inx_c, iny_c]
     D_PC[(nVx+nVy+1):end, (nVx+nVy+1):end] .+= spdiagm(diag_Pt[:])
     D_PC_inv =  spdiagm(1 ./ diag(D_PC))
 
@@ -611,7 +611,7 @@ end
     @info "Residuals"
     @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
     @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-    @show norm(Rp[inx_Pt,iny_Pt])/sqrt(nPt)
+    @show norm(Rp[inx_c,iny_c])/sqrt(nPt)
 
     #--------------------------------------------#
     @info "Velocity block symmetry"
@@ -630,7 +630,7 @@ end
 
     p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc))
     p2 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc))
-    p3 = heatmap(xc, yc,  Pt[inx_Pt,iny_Pt]' .- mean(Pt[inx_Pt,iny_Pt]), aspect_ratio=1, xlim=extrema(xc))
+    p3 = heatmap(xc, yc,  Pt[inx_c,iny_c]' .- mean(Pt[inx_c,iny_c]), aspect_ratio=1, xlim=extrema(xc))
     display(plot(p1, p2, p3))
 
     #--------------------------------------------#
