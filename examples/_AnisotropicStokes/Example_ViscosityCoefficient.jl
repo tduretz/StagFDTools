@@ -37,13 +37,12 @@ function ViscousRheology(θ)
     
     # θ = LinRange(0.0, π, 180)       # Angle of foliation
 
-    D_clt = zeros(3,3)
+    D_ctl = zeros(3,3)
 
     jac = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVectorCartesian!, ε̇, Const(η_n), Const(θ), Const(δ))
 
-    D_clt[:,:] .= jac.derivs[1]
-    @show D_clt
-    # why is it not [2η 0 0; 0 2η 0; 0 0 2η] for all θ at δ = 1.0?
+    D_ctl[:,:] .= jac.derivs[1]
+    @show D_ctl
 end
 
 ViscousRheology(0)
