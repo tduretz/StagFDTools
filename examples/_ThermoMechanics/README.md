@@ -1,4 +1,4 @@
-## Heating caused by compaction
+## Heating caused by compression
 ![image](/results/ThermoMechanics_CompactionLoading.svg)
 
 ## Pressurisation caused by heating
