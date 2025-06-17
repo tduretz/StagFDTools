@@ -2,59 +2,12 @@ using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, S
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
-using TimerOutputs, CairoMakie, Interpolations
+using TimerOutputs, CairoMakie, Interpolations, GridGeometryUtils
 
 function splot(ax, x, y, u, v)
     intu, intv = linear_interpolation((x,y), u), linear_interpolation((x,y), v)
     f(x) = Point2f(intu(x...), intv(x...))
     return streamplot!(ax, f, x, y, colormap=:magma, arrow_size=0)
-end
-
-# From Chat GPT
-
-function point_in_rotated_rectangle(px, py, cx, cy, width, height, theta)
-    # Translate point into rectangle-centered coordinates
-    dx = px - cx
-    dy = py - cy
-
-    # Rotate point by -theta to align with rectangle axes
-    cosθ = cos(-theta)
-    sinθ = sin(-theta)
-    x_rot = dx * cosθ - dy * sinθ
-    y_rot = dx * sinθ + dy * cosθ
-
-    # Check bounds in aligned rectangle
-    return abs(x_rot) ≤ width/2 && abs(y_rot) ≤ height/2
-end
-
-function is_inside_hexagon(point::Tuple{Float64, Float64}; 
-    radius::Float64 = 1.0,
-    tilt::Float64 = 0.0,
-    center::Tuple{Float64, Float64} = (0.0, 0.0))::Bool
-    # Unpack coordinates
-    px, py = point
-    cx, cy = center
-
-    # Compute vertices of the hexagon
-    angles = [i * π/3 + tilt for i in 0:5]  # 6 corners
-    vertices = [(cx + radius * cos(θ), cy + radius * sin(θ)) for θ in angles]
-
-    # Ray-casting algorithm to check point inside polygon
-    n = length(vertices)
-    inside = false
-
-    j = n
-    for i in 1:n
-    xi, yi = vertices[i]
-    xj, yj = vertices[j]
-    if ((yi > py) != (yj > py)) &&
-    (px < (xj - xi) * (py - yi) / (yj - yi + 1e-10) + xi)  # add small number to avoid divide-by-zero
-    inside = !inside
-    end
-    j = i
-    end
-
-    return inside
 end
 
 @views function main(BC_template, D_template)
@@ -85,6 +38,19 @@ end
         sinψ = [0.0    0.0  0.0  ],
     )
     materials.B   .= (2*materials.η0).^(-materials.n)
+
+    # Material geometries
+    garnets = (
+        Hexagon((-.075, 0.075), 0.100; θ = π/4),
+        Hexagon((0.04, -.04),   0.075; θ = π/4),
+        Hexagon((0.18, -.18),   0.120; θ = π/4),
+        Hexagon((-.2, -.19),    0.100; θ = π/4),
+        Hexagon((-.21,-.05),    0.050; θ = π/4),
+    )
+
+    micas = (
+        Rectangle((0.1, -0.1), 0.03, 0.07; θ = -π / 4), #0.1, -0.1, 0.03, 0.07, -45
+    )
 
     # Time steps
     Δt0   = 0.5
@@ -192,41 +158,38 @@ end
     BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
 
     # Set material geometry 
-    Center = [(-.075, 0.075), (0.04, -.04), (0.18, -.18), (-.2, -.19), (-.21,-.05)]
-    Tilt   = [π/4,            π/4,                  π/4,         π/4,          π/4]
-    Radius = [0.1,            0.075,               0.12,         0.1,         0.05]
+    for i in inx_c, j in iny_c   # loop on centroids
+        𝐱 = @SVector([xc[i-1], yc[j-1]])
 
-    for igarnet in eachindex(Center)
-
-        for i in inx_c, j in iny_c
-            X, Y = xc[i-1], yc[j-1]
-            isin = is_inside_hexagon((X, Y), radius = Radius[igarnet], tilt = Tilt[igarnet], center = Center[igarnet])  # returns true or false
-            if isin 
+        for igeom in eachindex(garnets) # Garnets: phase 2
+            if inside(𝐱, garnets[igeom])
                 phases.c[i, j] = 2
-            end 
-
-            isin = point_in_rotated_rectangle(X, Y, 0.1, -0.1, 0.03, 0.07, -45)
-            if isin 
+            end
+        end
+        for igeom in eachindex(micas) # Micas: phase 3
+            if inside(𝐱, micas[igeom])
                 phases.c[i, j] = 3
             end
         end
-
-        for i in inx_c, j in iny_c
-            X, Y = xv[i-1], yv[j-1]
-            isin = is_inside_hexagon((X, Y), radius = Radius[igarnet], tilt = Tilt[igarnet], center = Center[igarnet])  # returns true or false
-            if isin 
-                phases.v[i, j] = 2
-            end 
-
-            isin = point_in_rotated_rectangle(X, Y, 0.1, -0.1, 0.03, 0.07, -45)
-            if isin 
-                phases.v[i, j] = 3
-            end 
-        
-        end
-
     end
 
+    for i in inx_c, j in iny_c  # loop on vertices
+        𝐱 = @SVector([xv[i-1], yv[j-1]])
+
+        # Garnets: phase 2
+        for igeom in eachindex(garnets) # Garnets: phase 2
+            if inside(𝐱, garnets[igeom])
+                phases.v[i, j] = 2
+            end  
+        end
+
+        for igeom in eachindex(micas) # Micas: phase 3
+            if inside(𝐱, micas[igeom])
+                phases.v[i, j] = 3
+            end  
+        end
+    end
+    
     #--------------------------------------------#
 
     rvec = zeros(length(α))
@@ -333,7 +296,8 @@ end
 
         fig = Figure()
         ax  = Axis(fig[1,1], aspect=DataAspect())
-        heatmap!(ax, xc, yc,  Pt[inx_c,iny_c], colormap=:bluesreds)
+        # heatmap!(ax, xc, yc,  Pt[inx_c,iny_c], colormap=:bluesreds)
+        heatmap!(ax, xc, yc,  phases.c[inx_c,iny_c], colormap=:bluesreds)
         st = 10
         # arrows!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], arrowsize = 0, lengthscale=0.02, linewidth=1, color=:white)
         splot(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end])

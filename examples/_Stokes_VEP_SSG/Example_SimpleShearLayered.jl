@@ -2,44 +2,7 @@ using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, S
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
-using TimerOutputs, CairoMakie, Interpolations
-
-# From Chat GPT
-"""
-    isin_layer(X; tilt=0.0, period=1.0, fraction_A=0.5)
-
-Determine if point (x, y) lies in material A or B in a tilted, periodic layered structure.
-
-# Arguments
-- `x`, `y`: Coordinates of the point.
-- `tilt`: Tilt angle of layers in radians (0 = horizontal layers).
-- `period`: Total thickness of one A+B layer unit.
-- `fraction_A`: Fraction of the period occupied by material A (between 0 and 1).
-
-# Returns
-- `:A` or `:B`: Symbol indicating the material.
-"""
-function isin_layer(X; layer_thickness=0.1, ratio=0.5, tilt=0.0, period=1.0, center=(0,0), perturb_amp=0.0, perturb_width=1.0)
-    
-    x, y = X 
-    
-    # Shift and rotate point to align with layering direction
-    x0, y0 = center
-    dx = x - x0
-    dy = y - y0
-    θ = tilt
-    xr = dx * cos(θ) + dy * sin(θ)
-    yr = -dx * sin(θ) + dy * cos(θ)
-
-    # Add Gaussian perturbation to layer interface
-    perturb = perturb_amp * exp(-xr^2 / (2 * perturb_width^2))
-
-    # Compute local vertical position in periodic layers
-    y_mod = mod(yr - perturb, layer_thickness)
-
-    # Determine if within Layer A or Layer B
-    return y_mod < ratio * layer_thickness
-end
+using TimerOutputs, CairoMakie, Interpolations, GridGeometryUtils
 
 @views function main(nc, layering, BC_template, D_template)
     #--------------------------------------------#   
@@ -53,7 +16,7 @@ end
         compressible = true,
         plasticity   = :none,
         n    = [1.0    1.0  1.0  ],
-        η0   = [1e0    1/10  1e-1 ], 
+        η0   = [1e0    1/10 1e-1 ], 
         G    = [1e1    1e1  1e1  ],
         C    = [150    150  150  ],
         ϕ    = [30.    30.  30.  ],
@@ -175,16 +138,16 @@ end
 
     # Set material geometry 
     for i in inx_c, j in iny_c   # loop on centroids
-        X, Y = xc[i-1], yc[j-1]
-        isin = isin_layer((X, Y); layer_thickness=layering.thick, ratio=layering.frac, tilt=layering.θ_layer, period=layering.period, center=layering.center, perturb_amp=layering.amp, perturb_width=layering.width)
+        𝐱 = @SVector([xc[i-1], yc[j-1]])
+        isin = inside(𝐱, layering)
         if isin 
             phases.c[i, j] = 2
         end 
     end
 
     for i in inx_c, j in iny_c  # loop on vertices
-        X, Y = xv[i-1], yv[j-1]
-        isin = isin_layer((X, Y); layer_thickness=layering.thick, ratio=layering.frac, tilt=layering.θ_layer, period=layering.period, center=layering.center, perturb_amp=layering.amp, perturb_width=layering.width)
+        𝐱 = @SVector([xv[i-1], yv[j-1]])
+        isin = inside(𝐱, layering)
         if isin 
             phases.v[i, j] = 2
         end  
@@ -325,14 +288,13 @@ let
     # Run them all
     for iθ in eachindex(θ)
 
-        layering = (
-            θ_layer = θ[iθ],
-            thick   = 0.1,
-            period  = 0.1,
-            frac    = 0.5,
-            center  = (0*0.25, 0*0.25),
-            amp     = 0*1.0,              # perturbation
-            width   = 1.0,                # perturbation
+        layering = Layering(
+            (0*0.25, 0*0.25), 
+            0.1, 
+            0.5; 
+            θ = θ[iθ],  
+            perturb_amp=0*1.0, 
+            perturb_width=1.0
         )
 
         τ_cart[iθ] = main( nc, layering, BCs[1], D_BCs[1])
