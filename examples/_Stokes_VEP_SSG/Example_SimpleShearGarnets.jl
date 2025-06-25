@@ -173,7 +173,7 @@ end
         end
     end
 
-    for i in inx_c, j in iny_c  # loop on vertices
+    for i in inx_v, j in iny_v  # loop on vertices
         𝐱 = @SVector([xv[i-1], yv[j-1]])
 
         # Garnets: phase 2

@@ -4,6 +4,8 @@ using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 using TimerOutputs, CairoMakie
 
+import Makie.SpecApi as S
+
 @views function main(nc, θgouge)
     #--------------------------------------------#
 
@@ -20,12 +22,12 @@ using TimerOutputs, CairoMakie
         plasticity   = :DruckerPrager,
         n    = [1.0    1.0    1.0 ],
         η0   = [1e3    1e3    1e-3], 
-        G    = [1e1    5e0    1e1 ],
-        C    = [150    150    150 ],
-        ϕ    = [30.    30.    30. ],
-        ηvp  = [0.2    0.2    0.2 ],
-        β    = [1e-2   1e-2   1e-2],
-        ψ    = [3.0    3.0    3.0 ],
+        G    = [1e1    2e1    1e1 ],
+        C    = [150    100    150 ],
+        ϕ    = [35.    30.    35. ],
+        ηvp  = [1.0    1.0    1.0 ].*0.6,
+        β    = [1e-2   0.5e-2   1e-2],
+        ψ    = [0.0    5.0    0.0 ],
         B    = [0.0    0.0    0.0 ],
         cosϕ = [0.0    0.0    0.0 ],
         sinϕ = [0.0    0.0    0.0 ],
@@ -49,8 +51,8 @@ using TimerOutputs, CairoMakie
     )
 
     # Time steps
-    Δt0   = 0.5
-    nt    = 50
+    Δt0   = 0.25
+    nt    = 100
 
     # Newton solver
     niter = 20
@@ -186,7 +188,7 @@ using TimerOutputs, CairoMakie
         end
     end
 
-    Pt  .= 500*rand(size(Pt)...)
+    Pt  .= 200*rand(size(Pt)...)
     Pt0 .= Pt
     Pti .= Pt
 
@@ -301,10 +303,10 @@ using TimerOutputs, CairoMakie
         # Visualise
         fig = Figure()
         ax  = Axis(fig[1:2,1], aspect=DataAspect(), title="Strain rate", xlabel="x", ylabel="y")
-        heatmap!(ax, xc, yc,  log10.(ε̇II), colormap=:bluesreds)
+        heatmap!(ax, xc, yc,  log10.(λ̇.c), colormap=:bluesreds)
         contour!(ax, xc, yc,  phases.c[inx_c,iny_c], color=:black)
         st = 10
-        arrows!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], arrowsize = 0, lengthscale=0.04, linewidth=2, color=:white)
+        # arrows!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], arrowsize = 0, lengthscale=0.04, linewidth=2, color=:white)
         ax  = Axis(fig[1,2], xlabel="Time", ylabel="mean(τII)")
         scatter!(ax, probes.t[1:nt], probes.τII[1:nt] )
         ax  = Axis(fig[2,2], xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error")
@@ -323,5 +325,5 @@ using TimerOutputs, CairoMakie
 end
 
 let
-    main((x = 150, y = 100), -π/2.4)
+    main((x = 250, y = 200), -π/2.4)
 end
