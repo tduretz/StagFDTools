@@ -4,8 +4,6 @@ using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 using TimerOutputs, CairoMakie
 
-import Makie.SpecApi as S
-
 @views function main(nc, θgouge)
     #--------------------------------------------#
 
@@ -25,7 +23,7 @@ import Makie.SpecApi as S
         G    = [1e1    2e1    1e1 ],
         C    = [150    100    150 ],
         ϕ    = [35.    30.    35. ],
-        ηvp  = [1.0    1.0    1.0 ].*0.6,
+        ηvp  = [1.0    1.0    1.0 ].*0.5,
         β    = [1e-2   0.5e-2   1e-2],
         ψ    = [0.0    5.0    0.0 ],
         B    = [0.0    0.0    0.0 ],
@@ -55,7 +53,7 @@ import Makie.SpecApi as S
     nt    = 100
 
     # Newton solver
-    niter = 20
+    niter = 15
     ϵ_nl  = 1e-8
     α     = LinRange(0.05, 1.0, 10)
 
