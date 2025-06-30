@@ -6,6 +6,22 @@ This package aims at generating flexible FD stencils that can interoperate with 
 - generation of sparsity patterns
 - flexible treatment of multi-physics
 
+# Get started
+
+0) Make sure you have Julia and `VSCode` or `VSCodium` working together. *Recommended way: (1) Install Julia using [`juliaup`](https://github.com/JuliaLang/juliaup), (2) install [`VSCodium`](https://vscodium.com), (3) install `Julia Language Support` in `VSCode` extensions.*
+
+1) In your general Julia environment, make sure you have plotting packages installed.
+*How: (1) In Julia's terminal (REPL), type: `]` to go to package mode (`(@v1.11) pkg>`). (2) type `add Plots` and then `add Makie`.*
+
+2) Clone this repository somewhere on your computer.
+
+3) In `VSCodium`, click on `File`, then `New Window`. Click on `Open...` and select the `StagFDTools` folder. *Achtung: At this point, you should agree to select `StagFDTools`'s environment*.
+
+4) Go to package mode: type `]`. It should clearly indicate that you're working in the correct environment (`(StagFDTools) pkg>`). If not, repeat step 3. If yes, type `instantiate`.
+
+5) Now, you should be able to run the scripts in the `example/` folder.
+
+
 # Poisson sparsity examples
 
 ##  Flag boundary nodes and constant nodes (e.g. inner BC or free surface)

@@ -18,18 +18,19 @@ using TimerOutputs, CairoMakie
     materials = ( 
         compressible = true,
         plasticity   = :DruckerPrager,
-        n    = [1.0    1.0    1.0 ],
-        η0   = [1e3    1e3    1e-3], 
-        G    = [1e1    2e1    1e1 ],
-        C    = [150    100    150 ],
-        ϕ    = [35.    30.    35. ],
-        ηvp  = [1.0    1.0    1.0 ].*0.5,
-        β    = [1e-2   0.5e-2   1e-2],
-        ψ    = [0.0    5.0    0.0 ],
-        B    = [0.0    0.0    0.0 ],
-        cosϕ = [0.0    0.0    0.0 ],
-        sinϕ = [0.0    0.0    0.0 ],
-        sinψ = [0.0    0.0    0.0 ],
+        #       rock   gouge  salt 
+        n    = [1.0    1.0    1.0 ],      # Power law exponent
+        η0   = [1e3    1e3    1e-3],      # Reference viscosity 
+        G    = [1e1    2e1    1e1 ],      # Shear modulus
+        C    = [150    100    150 ],      # Cohesion
+        ϕ    = [35.    30.    35. ],      # Friction angle
+        ψ    = [0.0    5.0    0.0 ],      # Dilation angle
+        ηvp  = [1.0    1.0    1.0 ].*0.3, # Viscoplastic regularisation
+        β    = [1e-2   0.5e-2 1e-2],      # Compressibility
+        B    = [0.0    0.0    0.0 ],      # (calculated after) power-law creep pre-factor
+        cosϕ = [0.0    0.0    0.0 ],      # (calculated after) frictional parameters
+        sinϕ = [0.0    0.0    0.0 ],      # (calculated after) frictional parameters
+        sinψ = [0.0    0.0    0.0 ],      # (calculated after) frictional parameters
     )
     # For power law
     materials.B   .= (2*materials.η0).^(-materials.n)
@@ -50,7 +51,7 @@ using TimerOutputs, CairoMakie
 
     # Time steps
     Δt0   = 0.25
-    nt    = 100
+    nt    = 200
 
     # Newton solver
     niter = 15
@@ -194,7 +195,7 @@ using TimerOutputs, CairoMakie
 
     rvec   = zeros(length(α))
     err    = (x = zeros(niter), y = zeros(niter), p = zeros(niter))
-    probes = (τII = zeros(nt), t = zeros(nt))
+    probes = (τII = zeros(nt), fric = zeros(nt), t = zeros(nt))
     to     = TimerOutput()
 
     #--------------------------------------------#
@@ -295,8 +296,10 @@ using TimerOutputs, CairoMakie
         end
 
         # Store probes data
-        probes.t[it]   = it*Δ.t
-        probes.τII[it] = mean(τII)
+        probes.t[it]    = it*Δ.t
+        probes.τII[it]  = mean(τII)
+        i_midx = Int64(floor(nc.x))
+        probes.fric[it] = mean(.-τxyc[i_midx, end-3]./(-Pt[i_midx, end-3] .+ τ.yy[i_midx, end-3])) 
 
         # Visualise
         fig = Figure()
@@ -305,7 +308,7 @@ using TimerOutputs, CairoMakie
         contour!(ax, xc, yc,  phases.c[inx_c,iny_c], color=:black)
         st = 10
         # arrows!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], arrowsize = 0, lengthscale=0.04, linewidth=2, color=:white)
-        ax  = Axis(fig[1,2], xlabel="Time", ylabel="mean(τII)")
+        ax  = Axis(fig[1,2], xlabel="Time", ylabel="Effective stress (τII)")
         scatter!(ax, probes.t[1:nt], probes.τII[1:nt] )
         ax  = Axis(fig[2,2], xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error")
         scatter!(ax, 1:niter, log10.(err.x[1:niter]) )
