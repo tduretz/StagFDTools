@@ -13,11 +13,11 @@ using TimerOutputs, CairoMakie, Interpolations, GridGeometryUtils
 
     # Material parameters
     materials = ( 
-        compressible = true,
+        compressible = false,
         plasticity   = :none,
         n    = [1.0    1.0  1.0  ],
-        η0   = [1e0    1/10 1e-1 ], 
-        G    = [1e1    1e1  1e1  ],
+        η0   = [2e0    2/10 1e-1 ], 
+        G    = [1e6    1e6  1e6  ],
         C    = [150    150  150  ],
         ϕ    = [30.    30.  30.  ],
         ηvp  = [0.5    0.5  0.5  ],
@@ -111,13 +111,16 @@ using TimerOutputs, CairoMakie, Interpolations, GridGeometryUtils
     D_ctl_v =  [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)]
     𝐷_ctl   = (c = D_ctl_c, v = D_ctl_v)
     τII     = ones(size_c...)
+    ε̇II     = ones(size_c...)
 
     # Mesh coordinates
-    xv = LinRange(-L.x/2, L.x/2, nc.x+1)
-    yv = LinRange(-L.y/2, L.y/2, nc.y+1)
-    xc = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
-    yc = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
-    phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...))  # phase on velocity points
+    xv  = LinRange(-L.x/2, L.x/2, nc.x+1)
+    yv  = LinRange(-L.y/2, L.y/2, nc.y+1)
+    xc  = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
+    yc  = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
+    xce = LinRange(-L.x/2-Δ.x/2, L.x/2+Δ.x/2, nc.x+2)
+    yce = LinRange(-L.y/2-Δ.y/2, L.y/2+Δ.y/2, nc.y+2)
+    phases = (c= ones(Int64, size_c...), v= ones(Int64, size_v...))  # phase on velocity points
 
     # Initial velocity & pressure field
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
@@ -239,7 +242,10 @@ using TimerOutputs, CairoMakie, Interpolations, GridGeometryUtils
         σ1 = (x = zeros(size(Pt)), y = zeros(size(Pt)), v = zeros(size(Pt)))
 
         τxyc = av2D(τ.xy)
+        ε̇xyc = av2D(ε̇.xy)
         τII[inx_c,iny_c]  .= sqrt.( 0.5.*(τ.xx[inx_c,iny_c].^2 + τ.yy[inx_c,iny_c].^2 + 0*(-τ.xx[inx_c,iny_c]-τ.yy[inx_c,iny_c]).^2) .+ τxyc[inx_c,iny_c].^2 )
+        ε̇II[inx_c,iny_c]  .= sqrt.( 0.5.*(ε̇.xx[inx_c,iny_c].^2 + ε̇.yy[inx_c,iny_c].^2 + 0*(-ε̇.xx[inx_c,iny_c]-ε̇.yy[inx_c,iny_c]).^2) .+ ε̇xyc[inx_c,iny_c].^2 )
+
         for i in inx_c, j in iny_c
             σ  = @SMatrix[-Pt[i,j]+τ.xx[i,j] τxyc[i,j] 0.; τxyc[i,j] -Pt[i,j]+τ.yy[i,j] 0.; 0. 0. -Pt[i,j]+(-τ.xx[i,j]-τ.yy[i,j])]
             v  = eigvecs(σ)
@@ -256,12 +262,18 @@ using TimerOutputs, CairoMakie, Interpolations, GridGeometryUtils
         st = 10
         arrows!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], arrowsize = 0, lengthscale=0.02, linewidth=1, color=:white)
         display(fig)
-
     end
 
-    display(to)
+    # display(to)
 
-    return mean(τII[inx_c,iny_c])
+    imin_x = argmin(abs.(xce .+ 0.3))
+    imax_x = argmin(abs.(xce .- 0.3))
+    imin_y = argmin(abs.(yce .+ 0.3))
+    imax_y = argmin(abs.(yce .- 0.3))
+    inner_x = imin_x:imax_x
+    inner_y = imin_y:imax_y
+
+    return mean(τII[inner_x, inner_y])
 
 end
 
@@ -278,10 +290,11 @@ let
          @SMatrix( [1 0; 0 -1] ),
     ]
 
-    nc = (x = 300, y = 300)
+    nc = (x = 200, y = 200)
 
     # Discretise angle of layer 
     nθ     = 30
+    # θ      = [ π/4]
     θ      = LinRange(0, π, nθ) 
     τ_cart = zeros(nθ)
 
@@ -289,7 +302,7 @@ let
     for iθ in eachindex(θ)
 
         layering = Layering(
-            (0*0.25, 0*0.25), 
+            (0*0.25, 0.025), 
             0.1, 
             0.5; 
             θ = θ[iθ],  
@@ -298,11 +311,31 @@ let
         )
 
         τ_cart[iθ] = main( nc, layering, BCs[1], D_BCs[1])
+
     end
+
+    ε̇bg = sqrt( sum(1/2 .* D_BCs[1][:].^2))
+
+    α1 = 0.5
+    α2 = 1 - α1 
+
+    η1 = 2/10
+    η2 = 2
+    m  = η2/η1
+
+    # Strongest end-member
+    ηeff = α1*η1 + α2*η2
+    @show τstrong    = 2*ηeff*ε̇bg
+
+    # Strongest end-member
+    ηeff = (α1/η1 + α2/η2)^(-1)
+    @show τweak      = 2*ηeff*ε̇bg
 
     fig = Figure()
     ax  = Axis(fig[1,1], xlabel= "θ", ylabel="τII") #, aspect=DataAspect()
     lines!(ax, θ*180/π, τ_cart)
+    lines!(ax, θ*180/π, τstrong*ones(size(θ)))
+    lines!(ax, θ*180/π, τweak*ones(size(θ)))
     display(fig)
 
 end
