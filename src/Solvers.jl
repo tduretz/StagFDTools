@@ -22,7 +22,7 @@ function DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:chol,  ηb=1e3
         @time 𝐊fact = cholesky(Hermitian(Ksym), check=false)
     elseif fact == :PCchol
         L_PC  = I(size(𝐊sc,1))
-        @time 𝐊fact = cholesky(Hermitian(𝐊sc_PC), check=false)
+        @time 𝐊fact = cholesky(Hermitian(𝐊sc_PC), check=true)
     elseif fact == :lu
         L_PC  = I(size(𝐊sc,1))
         @time 𝐊fact = lu(L_PC*𝐊sc)

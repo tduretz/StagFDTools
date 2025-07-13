@@ -2,7 +2,8 @@ using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, S
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
-using TimerOutputs, CairoMakie, Interpolations, GridGeometryUtils
+using TimerOutputs, Interpolations, GridGeometryUtils
+import CairoMakie as cm
 
 @views function main(nc, layering, BC_template, D_template)
     #--------------------------------------------#   
@@ -148,7 +149,7 @@ using TimerOutputs, CairoMakie, Interpolations, GridGeometryUtils
         end 
     end
 
-    for i in inx_c, j in iny_c  # loop on vertices
+    for i in inx_v, j in iny_v  # loop on vertices
         𝐱 = @SVector([xv[i-1], yv[j-1]])
         isin = inside(𝐱, layering)
         if isin 
@@ -185,8 +186,6 @@ using TimerOutputs, CairoMakie, Interpolations, GridGeometryUtils
             # Residual check        
             @timeit to "Residual" begin
                 TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
-                @show extrema(λ̇.c)
-                @show extrema(λ̇.v)
                 ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
                 ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
                 ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
@@ -253,14 +252,14 @@ using TimerOutputs, CairoMakie, Interpolations, GridGeometryUtils
             scale = sqrt(v[1,1]^2 + v[2,1]^2)
             σ1.x[i,j] = v[1,1]/scale
             σ1.y[i,j] = v[2,1]/scale
-            σ1.v[i] = σp[1]
+            σ1.v[i]   = σp[1]
         end
 
-        fig = Figure()
-        ax  = Axis(fig[1,1], aspect=DataAspect())
-        heatmap!(ax, xc, yc,  τII[inx_c,iny_c], colormap=:bluesreds)
+        fig = cm.Figure()
+        ax  = cm.Axis(fig[1,1], aspect=cm.DataAspect())
+        cm.heatmap!(ax, xc, yc,  τII[inx_c,iny_c], colormap=:bluesreds)
         st = 10
-        arrows!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], arrowsize = 0, lengthscale=0.02, linewidth=1, color=:white)
+        cm.arrows2d!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], tiplength = 0, lengthscale=0.02, tipwidth=1, color=:white)
         display(fig)
     end
 
@@ -294,8 +293,8 @@ let
 
     # Discretise angle of layer 
     nθ     = 30
-    # θ      = [ π/4]
-    θ      = LinRange(0, π, nθ) 
+    θ      = [ π/4]
+    # θ      = LinRange(0, π, nθ) 
     τ_cart = zeros(nθ)
 
     # Run them all
@@ -311,7 +310,6 @@ let
         )
 
         τ_cart[iθ] = main( nc, layering, BCs[1], D_BCs[1])
-
     end
 
     ε̇bg = sqrt( sum(1/2 .* D_BCs[1][:].^2))
@@ -331,11 +329,11 @@ let
     ηeff = (α1/η1 + α2/η2)^(-1)
     @show τweak      = 2*ηeff*ε̇bg
 
-    fig = Figure()
-    ax  = Axis(fig[1,1], xlabel= "θ", ylabel="τII") #, aspect=DataAspect()
-    lines!(ax, θ*180/π, τ_cart)
-    lines!(ax, θ*180/π, τstrong*ones(size(θ)))
-    lines!(ax, θ*180/π, τweak*ones(size(θ)))
+    fig = cm.Figure()
+    ax  = cm.Axis(fig[1,1], xlabel= "θ", ylabel="τII") #, aspect=DataAspect()
+    cm.lines!(ax, θ*180/π, τ_cart)
+    cm.lines!(ax, θ*180/π, τstrong*ones(size(θ)))
+    cm.lines!(ax, θ*180/π, τweak*ones(size(θ)))
     display(fig)
 
 end
