@@ -1,12 +1,11 @@
-using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf
+using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
-using TimerOutputs, Interpolations, GridGeometryUtils
-import CairoMakie as cm
+using TimerOutputs
 
 @views function main(nc, layering, BC_template, D_template, factorization)
-    #--------------------------------------------#   
+    #--------------------------------------------#
 
     # Boundary loading type
     config = BC_template
@@ -16,18 +15,18 @@ import CairoMakie as cm
     materials = ( 
         compressible = false,
         plasticity   = :none,
-        n    = [1.0    1.0  1.0  ],
-        η0   = [2e0    2/10 1e-1 ], 
-        G    = [1e6    1e6  1e6  ],
-        C    = [150    150  150  ],
-        ϕ    = [30.    30.  30.  ],
-        ηvp  = [0.5    0.5  0.5  ],
-        β    = [1e-6   1e-6 1e-6 ],
-        ψ    = [3.0    3.0  3.0  ],
-        B    = [0.     0.   0.   ],
-        cosϕ = [0.0    0.0  0.0  ],
-        sinϕ = [0.0    0.0  0.0  ],
-        sinψ = [0.0    0.0  0.0  ],
+        n    = [1.0    1.0  ],
+        η0   = [1e2    1e-1 ], 
+        G    = [1e6    1e6  ],
+        C    = [150    150  ],
+        ϕ    = [30.    30.  ],
+        ηvp  = [0.5    0.5  ],
+        β    = [1e-2   1e-2 ],
+        ψ    = [3.0    3.0  ],
+        B    = [0.     0.   ],
+        cosϕ = [0.0    0.0  ],
+        sinϕ = [0.0    0.0  ],
+        sinψ = [0.0    0.0  ],
     )
     materials.B   .= (2*materials.η0).^(-materials.n)
 
@@ -36,7 +35,7 @@ import CairoMakie as cm
     nt    = 1
 
     # Newton solver
-    niter = 3
+    niter = 2
     ϵ_nl  = 1e-8
     α     = LinRange(0.05, 1.0, 10)
 
@@ -111,8 +110,6 @@ import CairoMakie as cm
     D_ctl_c =  [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)]
     D_ctl_v =  [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)]
     𝐷_ctl   = (c = D_ctl_c, v = D_ctl_v)
-    τII     = ones(size_c...)
-    ε̇II     = ones(size_c...)
 
     # Mesh coordinates
     xv  = LinRange(-L.x/2, L.x/2, nc.x+1)
@@ -121,7 +118,7 @@ import CairoMakie as cm
     yc  = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
     xce = LinRange(-L.x/2-Δ.x/2, L.x/2+Δ.x/2, nc.x+2)
     yce = LinRange(-L.y/2-Δ.y/2, L.y/2+Δ.y/2, nc.y+2)
-    phases = (c= ones(Int64, size_c...), v= ones(Int64, size_v...))  # phase on velocity points
+    phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...))  # phase on velocity points
 
     # Initial velocity & pressure field
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
@@ -141,21 +138,8 @@ import CairoMakie as cm
     BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
 
     # Set material geometry 
-    for i in inx_c, j in iny_c   # loop on centroids
-        𝐱 = @SVector([xc[i-1], yc[j-1]])
-        isin = inside(𝐱, layering)
-        if isin 
-            phases.c[i, j] = 2
-        end 
-    end
-
-    for i in inx_v, j in iny_v  # loop on vertices
-        𝐱 = @SVector([xv[i-1], yv[j-1]])
-        isin = inside(𝐱, layering)
-        if isin 
-            phases.v[i, j] = 2
-        end  
-    end
+    phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
+    phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= 0.1^2] .= 2
 
     #--------------------------------------------#
 
@@ -220,7 +204,7 @@ import CairoMakie as cm
             # Direct-iterative solver
             fu   = -r[1:size(𝐊,1)]
             fp   = -r[size(𝐊,1)+1:end]
-            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=factorization,  ηb=1e3, niter_l=10, ϵ_l=1e-9)
+            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=factorization,  ηb=1e3, niter_l=10, ϵ_l=1e-11)
             dx[1:size(𝐊,1)]     .= u
             dx[size(𝐊,1)+1:end] .= p
 
@@ -229,7 +213,6 @@ import CairoMakie as cm
             @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
             UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
             TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
-
         end
 
         # Update pressure
@@ -237,47 +220,84 @@ import CairoMakie as cm
 
         #--------------------------------------------#
 
+        p3 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Vx")
+        p4 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy")
+        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt")
+        p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright, title=BC_template)
+        p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
+        p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
+        p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
+        display(plot(p1, p2, p3, p4, layout=(2,2)))
+
+        #--------------------------------------------#
+
         # Principal stress
         σ1 = (x = zeros(size(Pt)), y = zeros(size(Pt)), v = zeros(size(Pt)))
 
+        τII  = zeros(size_c...)
         τxyc = av2D(τ.xy)
-        ε̇xyc = av2D(ε̇.xy)
         τII[inx_c,iny_c]  .= sqrt.( 0.5.*(τ.xx[inx_c,iny_c].^2 + τ.yy[inx_c,iny_c].^2 + 0*(-τ.xx[inx_c,iny_c]-τ.yy[inx_c,iny_c]).^2) .+ τxyc[inx_c,iny_c].^2 )
-        ε̇II[inx_c,iny_c]  .= sqrt.( 0.5.*(ε̇.xx[inx_c,iny_c].^2 + ε̇.yy[inx_c,iny_c].^2 + 0*(-ε̇.xx[inx_c,iny_c]-ε̇.yy[inx_c,iny_c]).^2) .+ ε̇xyc[inx_c,iny_c].^2 )
 
         for i in inx_c, j in iny_c
-            σ         = @SMatrix[-Pt[i,j]+τ.xx[i,j] τxyc[i,j] 0.; τxyc[i,j] -Pt[i,j]+τ.yy[i,j] 0.; 0. 0. -Pt[i,j]+(-τ.xx[i,j]-τ.yy[i,j])]
-            v         = eigvecs(σ)
-            σp        = eigvals(σ)
-            scale     = sqrt(v[1,1]^2 + v[2,1]^2)
+            σ  = @SMatrix[-Pt[i,j]+τ.xx[i,j] τxyc[i,j] 0.; τxyc[i,j] -Pt[i,j]+τ.yy[i,j] 0.; 0. 0. -Pt[i,j]+(-τ.xx[i,j]-τ.yy[i,j])]
+            v  = eigvecs(σ)
+            σp = eigvals(σ)
+            scale = sqrt(v[1,1]^2 + v[2,1]^2)
             σ1.x[i,j] = v[1,1]/scale
             σ1.y[i,j] = v[2,1]/scale
             σ1.v[i]   = σp[1]
         end
 
-        fig = cm.Figure()
-        ax  = cm.Axis(fig[1,1], aspect=cm.DataAspect())
-        cm.heatmap!(ax, xc, yc,  τII[inx_c,iny_c], colormap=:bluesreds)
-        st = 10
-        cm.arrows2d!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], tiplength = 0, lengthscale=0.02, tipwidth=1, color=:white)
-        display(fig)
+         # Only account for the subdomain
+        imin_x = argmin(abs.(xce .+ 0.3))
+        imax_x = argmin(abs.(xce .- 0.3))
+        imin_y = argmin(abs.(yce .+ 0.3))
+        imax_y = argmin(abs.(yce .- 0.3))
+        inner_x = imin_x:imax_x
+        inner_y = imin_y:imax_y
+
+        return mean(τII[inner_x, inner_y])
+
     end
 
-    # display(to)
-
-    # Only account for the subdomain
-    imin_x = argmin(abs.(xce .+ 0.3))
-    imax_x = argmin(abs.(xce .- 0.3))
-    imin_y = argmin(abs.(yce .+ 0.3))
-    imax_y = argmin(abs.(yce .- 0.3))
-    inner_x = imin_x:imax_x
-    inner_y = imin_y:imax_y
-
-    return mean(τII[inner_x, inner_y])
-
+    display(to)
+    
 end
 
+
+# let
+#     # # Boundary condition templates
+#     BCs = [
+#         :free_slip,
+#     ]
+
+#     # # Boundary deformation gradient matrix
+#     # D_BCs = [
+#     #     @SMatrix( [1 0; 0 -1] ),
+#     # ]
+
+#     # BCs = [
+#     #     # :EW_periodic,
+#     #     :all_Dirichlet,
+#     # ]
+
+#     # Boundary deformation gradient matrix
+#     D_BCs = [
+#         #  @SMatrix( [0 1; 0  0] ),
+#         @SMatrix( [1 0; 0 -1] ),
+#     ]
+
+#     # Run them all
+#     for iBC in eachindex(BCs)
+#         @info "Running $(string(BCs[iBC])) and D = $(D_BCs[iBC])"
+#         main(BCs[iBC], D_BCs[iBC], :chol)
+#     end
+# end
+
 let
+
+    nc = (x = 150, y = 150)
+
     # Boundary condition templates
     BCs = [
         # :EW_periodic,
@@ -295,7 +315,8 @@ let
 
     # Discretise angle of layer 
     nθ     = 30
-    θ      = LinRange(0, π, nθ) 
+    θ      = [ π/4]
+    # θ      = LinRange(0, π, nθ) 
     τ_cart = zeros(nθ)
 
     # Run them all
@@ -309,6 +330,7 @@ let
             perturb_amp=0*1.0, 
             perturb_width=1.0
         )
+
         τ_cart[iθ] = main( nc, layering, BCs[1], D_BCs[1], :chol)
     end
 
@@ -329,11 +351,11 @@ let
     ηeff = (α1/η1 + α2/η2)^(-1)
     @show τweak      = 2*ηeff*ε̇bg
 
-    fig = cm.Figure()
-    ax  = cm.Axis(fig[1,1], xlabel= "θ", ylabel="τII") #, aspect=DataAspect()
-    cm.lines!(ax, θ*180/π, τ_cart)
-    cm.lines!(ax, θ*180/π, τstrong*ones(size(θ)))
-    cm.lines!(ax, θ*180/π, τweak*ones(size(θ)))
-    display(fig)
+    # fig = cm.Figure()
+    # ax  = cm.Axis(fig[1,1], xlabel= "θ", ylabel="τII") #, aspect=DataAspect()
+    # cm.lines!(ax, θ*180/π, τ_cart)
+    # cm.lines!(ax, θ*180/π, τstrong*ones(size(θ)))
+    # cm.lines!(ax, θ*180/π, τweak*ones(size(θ)))
+    # display(fig)
 
 end

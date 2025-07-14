@@ -303,7 +303,7 @@ function AssembleMomentum2D_x!(K, V, P, P0, ΔP, τ0, 𝐷, phases, materials, n
     Vx_loc = @MMatrix zeros(3,3)
     Vy_loc = @MMatrix zeros(4,4)
     P_loc  = @MMatrix zeros(2,3)
-    ΔP_loc  = @MMatrix zeros(2,1)
+    ΔP_loc = @MMatrix zeros(2,1)
 
     shift    = (x=1, y=2)
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x+1
@@ -404,7 +404,7 @@ function AssembleMomentum2D_y!(K, V, P, P0, ΔP, τ0, 𝐷, phases, materials, n
     Vx_loc = @MMatrix zeros(4,4)
     Vy_loc = @MMatrix zeros(3,3)
     P_loc  = @MMatrix zeros(3,2)
-    ΔP_loc  = @MMatrix zeros(1,2)
+    ΔP_loc = @MMatrix zeros(1,2)
        
     shift    = (x=2, y=1)
     K21 = K[2][1]

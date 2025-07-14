@@ -2,14 +2,12 @@ using SparseArrays
 
 function DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:chol,  ηb=1e3, niter_l=10, ϵ_l=1e-11, 𝐊_PC=I(size(𝐊,1)))
     
-    ϵ_ref = 1e-7
-
     if nnz(𝐏) == 0 # incompressible limit
-        𝐏inv  = -ηb .* I(size(𝐏,1))
+        𝐏inv  = ηb .* I(size(𝐏,1))
     else # compressible case
         𝐏inv  = spdiagm(1.0 ./diag(𝐏))
     end
-    𝐊sc      = 𝐊 .- 𝐐*(𝐏inv*𝐐ᵀ)
+    𝐊sc      = 𝐊    .- 𝐐*(𝐏inv*𝐐ᵀ)
     𝐊sc_PC   = 𝐊_PC .- 𝐐*(𝐏inv*𝐐ᵀ)
 
     if fact == :chol
@@ -22,7 +20,7 @@ function DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:chol,  ηb=1e3
         @time 𝐊fact = cholesky(Hermitian(Ksym), check=false)
     elseif fact == :PCchol
         L_PC  = I(size(𝐊sc,1))
-        @time 𝐊fact = cholesky(Hermitian(𝐊sc_PC), check=true)
+        @time 𝐊fact = cholesky(Hermitian(𝐊sc_PC), check=false)
     elseif fact == :lu
         L_PC  = I(size(𝐊sc,1))
         @time 𝐊fact = lu(L_PC*𝐊sc)
@@ -46,6 +44,7 @@ function DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:chol,  ηb=1e3
         u    .= 𝐊fact\(L_PC*fusc)
 
         # # Iterative refinement
+        # ϵ_ref = 1e-7
         # for iter_ref=1:10
         #     ru .= 𝐊sc*u .- fusc
         #     @printf("  --> Iterative refinement %02d\n res.   = %2.2e\n", iter_ref, norm(ru)/sqrt(length(ru)))
