@@ -180,7 +180,7 @@ function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materia
     fx  = ( τxx[2]  - τxx[1] ) * invΔx
     fx += ( τxy[2]  - τxy[1] ) * invΔy
     fx -= ( Ptc[2]  - Ptc[1] ) * invΔx
-    # fx *= -1 * Δ.x * Δ.y
+    fx *= -1* Δ.x * Δ.y
 
     return fx
 end
@@ -243,7 +243,7 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materia
     fy  = ( τyy[2]  -  τyy[1] ) * invΔy
     fy += ( τxy[2]  -  τxy[1] ) * invΔx
     fy -= ( Ptc[2]  -  Ptc[1])  * invΔy
-    # fy *= -1 * Δ.x * Δ.y
+    fy *= -1 * Δ.x * Δ.y
     
     return fy
 end
@@ -254,8 +254,11 @@ function Continuity(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δ)
     invΔy = 1 / Δ.y
     invΔt = 1 / Δ.t
     β     = materials.β[phase]
+    η     = materials.β[phase]
     comp  = materials.compressible
-    return ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy) + comp * β * (Pt[1] - Pt0) * invΔt
+    f     = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy) + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
+    f    *= max(invΔx, invΔy)
+    return f
 end
 
 function ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
@@ -300,7 +303,7 @@ function AssembleMomentum2D_x!(K, V, P, P0, ΔP, τ0, 𝐷, phases, materials, n
     Vx_loc = @MMatrix zeros(3,3)
     Vy_loc = @MMatrix zeros(4,4)
     P_loc  = @MMatrix zeros(2,3)
-    ΔP_loc  = @MMatrix zeros(2,1)
+    ΔP_loc = @MMatrix zeros(2,1)
 
     shift    = (x=1, y=2)
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x+1
@@ -401,7 +404,7 @@ function AssembleMomentum2D_y!(K, V, P, P0, ΔP, τ0, 𝐷, phases, materials, n
     Vx_loc = @MMatrix zeros(4,4)
     Vy_loc = @MMatrix zeros(3,3)
     P_loc  = @MMatrix zeros(3,2)
-    ΔP_loc  = @MMatrix zeros(1,2)
+    ΔP_loc = @MMatrix zeros(1,2)
        
     shift    = (x=2, y=1)
     K21 = K[2][1]

@@ -156,7 +156,7 @@ end
 # Computation of the partial derivatives of the residual function. Sets the coefficient in the system matrix.
 function AssemblyPoisson_Enzyme!(K, u, k, s, number, type, pattern, bc_val, nc, Δ)
 
-    # This is aocal matrix that stores the partial derivatives.
+    # This is a local matrix that stores the partial derivatives.
      
     # Remember:     #             0    uN    0
                     #     u_loc = uW   uC    uE
@@ -215,7 +215,7 @@ let
     to = TimerOutput()
 
     # Resolution in FD cells
-    nc = (x = 30, y = 40)
+    nc = (x = 10, y = 10)
 
     # Get ranges
     ranges = Ranges(nc)
@@ -245,9 +245,6 @@ let
     number = Fields( fill(0, (nc.x+2, nc.y+2)) )  # Achtung: geist nodes  
     Numbering!(number, type, nc)                  # There is a StagFD function that does it
     
-    @info "Node types"
-    printxy(number.u) 
-
     # 5-point stencil
     pattern = Fields( Fields( @SMatrix([0 1 0; 1 1 1; 0 1 0]) ) )  # Ooops this is done twice, you can remove it :D
 
@@ -308,16 +305,13 @@ let
     ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ)     
     @info norm(r)/sqrt(length(r))
     # Visualization
-    p1 = heatmap(xc[inx], yc[iny], u[inx,iny]', aspect_ratio=1, xlim=extrema(xc))
+    p1 = heatmap(xc[inx], yc[iny], u[inx,iny]', aspect_ratio=1, xlim=extrema(xc), title="u")
     qx = -diff(u[inx,iny],dims=1)/Δ.x
     qy = -diff(u[inx,iny],dims=2)/Δ.y
-    # # @show     mean(qx[1,:])
-    # # @show     mean(qx[end,:])
-    # # @show     mean(qy[:,1])
-    # # @show     mean(qy[:,end])
-    heatmap(xc[1:end-3], yc[iny], qx')
-    heatmap(xc[inx], yc[1:end-3], qy')
-    display(p1)
+    p2 = heatmap(xc[2:end-2], yc[iny], qx', aspect_ratio=1, xlim=extrema(xc), title="qx")
+    p3 = heatmap(xc[inx], yc[2:end-2], qy', aspect_ratio=1, xlim=extrema(xc), title="qy")
+    p4 = spy(M.u.u, title="M")
+    display(plot(p1, p2, p3, p4))
     display(to)
 
 end

@@ -345,7 +345,7 @@ end
     #--------------------------------------------#
     # Resolution
 
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, size_x, size_y, size_c = Ranges(nc)
 
     #--------------------------------------------#
     # Boundary conditions
@@ -471,7 +471,7 @@ end
 
         err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
         err.y[iter] = norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-        err.p[iter] = norm(R.p[inx_Pt,iny_Pt])/sqrt(nPt)
+        err.p[iter] = norm(R.p[inx_c,iny_c])/sqrt(nPt)
 
         #--------------------------------------------#
         # Set global residual vector
@@ -507,7 +507,7 @@ end
     #--------------------------------------------#
     p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
     p2 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy")
-    p3 = heatmap(xc, yc,  Pt[inx_Pt,iny_Pt]' .- mean(Pt[inx_Pt,iny_Pt]), aspect_ratio=1, xlim=extrema(xc), title="Pt")
+    p3 = heatmap(xc, yc,  Pt[inx_c,iny_c]' .- mean(Pt[inx_c,iny_c]), aspect_ratio=1, xlim=extrema(xc), title="Pt")
     p4 = plot(xlabel="Iterations", ylabel="log₁₀ error")
     p4 = plot!(1:niter, log10.(err.x[1:niter]), label="Vx")
     p4 = plot!(1:niter, log10.(err.y[1:niter]), label="Vy")

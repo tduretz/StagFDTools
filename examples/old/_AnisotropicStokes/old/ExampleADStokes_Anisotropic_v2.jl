@@ -532,7 +532,7 @@ let
     # Resolution
     nc = (x = 20, y = 20)
 
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_Pt, iny_Pt, size_x, size_y, size_c = Ranges(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, size_x, size_y, size_c = Ranges(nc)
 
     #--------------------------------------------#
     # Boundary conditions
@@ -654,7 +654,7 @@ let
     @info "Residuals"
     @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
     @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-    @show norm(Rp[inx_Pt,iny_Pt])/sqrt(nPt)
+    @show norm(Rp[inx_c,iny_c])/sqrt(nPt)
 
     # printxy(type.Vx)
     # printxy(type.Pt)
@@ -705,12 +705,12 @@ let
 
     p1 = heatmap(xv, yc, R.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc))
     p2 = heatmap(xc, yv, R.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc))
-    p3 = heatmap(xc, yc, R.p[inx_Pt,iny_Pt]', aspect_ratio=1, xlim=extrema(xc))
+    p3 = heatmap(xc, yc, R.p[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc))
     display(plot(p1, p2, p3))
     
     # p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc))
     # p2 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc))
-    # p3 = heatmap(xc, yc,  Pt[inx_Pt,iny_Pt]' .- mean(Pt[inx_Pt,iny_Pt]), aspect_ratio=1, xlim=extrema(xc))
+    # p3 = heatmap(xc, yc,  Pt[inx_c,iny_c]' .- mean(Pt[inx_c,iny_c]), aspect_ratio=1, xlim=extrema(xc))
     # display(plot(p1, p2, p3))
     
     # #--------------------------------------------#
