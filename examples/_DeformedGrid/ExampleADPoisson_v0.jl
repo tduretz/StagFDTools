@@ -1,9 +1,8 @@
 using StagFDTools, StagFDTools.Poisson, ExtendableSparse, StaticArrays, LinearAlgebra, Statistics, UnPack
 using TimerOutputs
-# using Enzyme
 using ForwardDiff, Enzyme  # AD backends you want to use 
 import CairoMakie as cm
-import Makie.GeometryBasics as geom
+import CairoMakie.Makie.GeometryBasics as geom
 
 ###############################################################
 ########################## NEW STUFF ##########################
@@ -334,7 +333,7 @@ let
         X.c[I] .= @SVector([xc[i], yc[j]]) 
     end
 
-    # Deform mesh along y
+    # Mesh deformation parameters
     params = (
         m      = -1,
         Amp    = 0.25,
@@ -344,11 +343,23 @@ let
         y0     = 0.5,
         x0     = 0.0,
     )
+   
+    # Deform mesh and determine the inverse Jacobian  
+    Jinv = (
+        v =  [@MMatrix(zeros(2,2)) for _ in axes(xv,1), _ in axes(yv,1)],
+        c =  [@MMatrix(zeros(2,2)) for _ in axes(xc,1), _ in axes(yc,1)],
+    )
+    
     for I in CartesianIndices(X.v)
-        X.v[I] .=  TransformCoordinates(ξ.v[I], params)
+        J          = Enzyme.jacobian(Enzyme.ForwardWithPrimal, TransformCoordinates, ξ.v[I], Const(params))
+        Jinv.v[I] .= inv(J.derivs[1])
+        X.v[I]    .= J.val
     end
+
     for I in CartesianIndices(X.c)
-        X.c[I] .= TransformCoordinates(ξ.v[I], params)
+        J          = Enzyme.jacobian(Enzyme.ForwardWithPrimal, TransformCoordinates, ξ.c[I], Const(params))
+        Jinv.c[I] .= inv(J.derivs[1])
+        X.c[I]    .= J.val
     end
 
     # Model configuration: source term
@@ -394,6 +405,26 @@ let
     ########################## NEW STUFF ##########################
     ###############################################################
 
+    # Node list
+    vertices = zeros((nc.x+3)*(nc.y+3), 2)
+    for I in CartesianIndices(X.c)
+        i, j = I[1], I[2]
+        v = i + (j-1)*(nc.x+3)
+        vertices[v, :] .= X.v[I]
+    end
+
+    # Face list
+    faces = zeros(Int64, (nc.x+2)*(nc.y+2), 4)
+    for I in CartesianIndices(X.c)
+        i, j = I[1], I[2]
+        c  = i + (j-1)*(nc.x+2)
+        v1 = i + (j-1)*(nc.x+3)
+        v2 = i + (j-1)*(nc.x+3) + 1
+        v3 = i + (j  )*(nc.x+3) + 1
+        v4 = i + (j  )*(nc.x+3) 
+        faces[c, :] .= [v1, v2, v3, v4]
+    end
+
     # Post-process
     cells = (
         x = zeros((nc.x+2)*(nc.y+2), 4),
@@ -417,8 +448,11 @@ let
     # ----
     ax  = cm.Axis(fig[1, 1], title = "u - centroids", xlabel = "x", ylabel = "y", aspect=1.0)
     cm.poly!(ax, pc, color = u[:], colormap = :turbo, strokewidth = 0, strokecolormap = :white, colorrange=extrema(u[2:end-1,2:end-1]))#, colorrange=limits
+    # cm.mesh!(ax, vertices, faces, color=u[:])
     cm.Colorbar(fig[1, 2], colormap = :turbo, flipaxis = true, size = 10 )    
     display(fig)
+
+    display(to)
 end
 
 
