@@ -372,7 +372,7 @@ let
     # A one-step Newton iteration - the problem is linear: only one step is needed to reach maximum accurracy
     b  = r[inx,iny][:]                  # creates a 1D rhight hand side vector (whitout ghosts), values are the current residual
     # Solve
-    du           = .-M.u.u\b              # apply inverse of matrix M.u.u to residual vector 
+    du           = .-M.u.u\b            # apply inverse of matrix M.u.u to residual vector 
     u[inx,iny] .+= reshape(du, nc...)   # update the solution u using the correction du
     # Residual check
     ResidualPoisson2D!(r, u, k, s, Jinv, number, type, bc_val, nc, Δ)     
