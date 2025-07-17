@@ -162,7 +162,7 @@ function AssemblyPoisson_ForwardDiff!(K, u, k, s, number, type, pattern, bc_val,
 end
 
 # Computation of the partial derivatives of the residual function. Sets the coefficient in the system matrix.
-function AssemblyPoisson_Enzyme!(K, u, k, s, number, type, pattern, bc_val, nc, Δ)
+function AssemblyPoisson_Enzyme!(K, u, k, s, number, type, pattern, bc_val, nc, Δxv, Δyv)
 
     # This is a local matrix that stores the partial derivatives.
      
@@ -204,7 +204,7 @@ function AssemblyPoisson_Enzyme!(K, u, k, s, number, type, pattern, bc_val, nc, 
         ∂R∂u     .= 0e0
 
         # Here the magic happens: we call a function from Enzyme that computes all, partial derivatives for the current stencil block 
-        autodiff(Enzyme.Reverse, Poisson2D, Duplicated(u_loc, ∂R∂u), Const(k_loc), Const(s[i,j]), Const(type_loc), Const(bcv_loc), Const(Δ))
+        autodiff(Enzyme.Reverse, Poisson2D, Duplicated(u_loc, ∂R∂u), Const(k_loc), Const(s[i,j]), Const(type_loc), Const(bcv_loc), Const(Δxv), Const(Δyv))
 
         # This loops through the 2*2 stencil block and sets the coefficient ∂R∂u into the sparse matrix K.u.u
         num_ij = number.u[i,j]
@@ -232,7 +232,7 @@ let
     to = TimerOutput()
 
     # Resolution in FD cells
-    nc = (x = 10, y = 10)
+    nc = (x = 5, y = 5)
 
     # Get ranges
     ranges = Ranges(nc)
@@ -356,12 +356,12 @@ let
     nu  = maximum(number.u)
     M   = Fields( Fields( ExtendableSparseMatrix(nu, nu) )) 
   
-    #@timeit to "Assembly Enzyme" begin
-    #    AssemblyPoisson_Enzyme!(M, u, k, s, number, type, pattern, bc_val, nc, Δ)
-    #end
-    @timeit to "Assembly ForwardDiff" begin
-        AssemblyPoisson_ForwardDiff!(M, u, k, s, number, type, pattern, bc_val, nc, Δ.x, Δ.y)
+    @timeit to "Assembly Enzyme" begin
+        AssemblyPoisson_Enzyme!(M, u, k, s, number, type, pattern, bc_val, nc, Δ.x, Δ.y)
     end
+    #@timeit to "Assembly ForwardDiff" begin
+    #    AssemblyPoisson_ForwardDiff!(M, u, k, s, number, type, pattern, bc_val, nc, Δ.x, Δ.y)
+    #end
 
     @info "Symmetry"
     @show norm(M.u.u - M.u.u')
