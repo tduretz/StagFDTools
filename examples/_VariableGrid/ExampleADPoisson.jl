@@ -220,8 +220,8 @@ end
 
 function normal_linspace_interval(inflimit::Float64, suplimit::Float64, μ::Float64, σ::Float64, ncells::Int)
     dist = Normal(μ, σ)
-    inf_cdf = cdf(d, inflimit)
-    sup_cdf = cdf(d, suplimit)
+    inf_cdf = cdf(dist, inflimit)
+    sup_cdf = cdf(dist, suplimit)
     vec = range(inf_cdf, sup_cdf; length=ncells)
     return quantile.(dist, vec)
 end
@@ -232,7 +232,7 @@ let
     to = TimerOutput()
 
     # Resolution in FD cells
-    nc = (x = 5, y = 5)
+    nc = (x = 60, y = 60)
 
     # Get ranges
     ranges = Ranges(nc)
@@ -241,10 +241,10 @@ let
     # Define node types 
     type = Fields( fill(:out, (nc.x+2, nc.y+2)) )   # Achtung: geist nodes
     type.u[2:end-1,2:end-1].= :in                   # inside nodes are all type :in
-    type.u[1,:]            .= :Dirichlet            # one BC type is :Dirichlet # West
-    type.u[end,:]          .= :Dirichlet            # East
-    type.u[:,1]            .= :Neumann #:Dirichlet            # South
-    type.u[:,end]          .= :Neumann #:Dirichlet            # North
+    type.u[1,:]            .= :Neumann #:Dirichlet            # one BC type is :Dirichlet # West
+    type.u[end,:]          .= :Neumann #:Dirichlet            # East
+    type.u[:,1]            .= :Dirichlet            # South
+    type.u[:,end]          .= :Dirichlet            # North
 
     # Define values of the boundary conditions
     bc_val = Fields( fill(0., (nc.x+2, nc.y+2)) )   # Achtung: geist nodes
@@ -292,10 +292,10 @@ let
            y = (yx=zeros(nc.x,nc.y+1), yy= ones(nc.x,nc.y+1)))
     
     # Définir le maillage variable (gaussienne, sinh...) 
-    true_variable_grid = false
+    true_variable_grid = true
     if true_variable_grid
-        μ = ( x = 0.1, y = 0.1)
-        σ = ( x = 0.3, y = 0.3)
+        μ = ( x = 0., y = 0.)
+        σ = ( x = 0.4, y = 0.4)
         inflimit = (x = -L/2, y = -L/2)
         suplimit = (x = L/2, y = L/2)
         xc = normal_linspace_interval(inflimit.x, suplimit.x, μ.x, σ.x, nc.x+2)
@@ -308,14 +308,14 @@ let
         #display(dxghostE)
         #display(dyghostS)
         #display(dyghostN)
-        xc[end] = bornesup.x + dxghostE
-        xc[end-1] = bornesup.x
-        xc[1] = borneinf.x - dxghostW
-        xc[2] = borneinf.x
-        yc[end] = bornesup.y + dyghostN
-        yc[end-1] = bornesup.y
-        yc[1] = borneinf.y - dyghostS
-        yc[2] = borneinf.y
+        xc[end] = suplimit.x + dxghostE
+        xc[end-1] = suplimit.x
+        xc[1] = inflimit.x - dxghostW
+        xc[2] = inflimit.x
+        yc[end] = suplimit.y + dyghostN
+        yc[end-1] = suplimit.y
+        yc[1] = inflimit.y - dyghostS
+        yc[2] = inflimit.y
 
         #display(xc)
         #display(yc)
