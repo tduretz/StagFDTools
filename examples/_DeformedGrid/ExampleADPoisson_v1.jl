@@ -1,4 +1,4 @@
-using StagFDTools, StagFDTools.Poisson, ExtendableSparse, StaticArrays, LinearAlgebra, Statistics, UnPack
+using StagFDTools, StagFDTools.Poisson, ExtendableSparse, StaticArrays, LinearAlgebra, Statistics, UnPack, Printf
 using TimerOutputs
 using ForwardDiff, Enzyme  # AD backends you want to use 
 import CairoMakie as cm
@@ -329,6 +329,11 @@ let
         v =  [@MMatrix(zeros(2,2)) for _ in axes(ξv,1), _ in axes(ηv,1)],
         c =  [@MMatrix(zeros(2,2)) for _ in axes(ξc,1), _ in axes(ηc,1)],
     )
+
+    Iinv = (
+        v =  [@MMatrix([1.0 0.0; 0.0 1.0]) for _ in axes(ξv,1), _ in axes(ηv,1)],
+        c =  [@MMatrix([1.0 0.0; 0.0 1.0]) for _ in axes(ξc,1), _ in axes(ηc,1)],
+    )
     
     I2  = LinearAlgebra.I(2)     # Identity matrix
 
@@ -360,49 +365,74 @@ let
     @info norm(r)/sqrt(length(r))
     
     # Sparse matrix assembly
-    nu  = maximum(number.u)
-    M   = Fields( Fields( ExtendableSparseMatrix(nu, nu) )) 
-  
+    nu   = maximum(number.u)
+    M    = Fields( Fields( ExtendableSparseMatrix(nu, nu) )) 
+    M_PC = Fields( Fields( ExtendableSparseMatrix(nu, nu) )) 
+
     @timeit to "Assembly Enzyme" begin
         AssemblyPoisson_Enzyme!(M, u, k, s, Jinv, number, type, pattern, bc_val, nc, Δ)
     end
 
+    @timeit to "Assembly Enzyme" begin
+        AssemblyPoisson_Enzyme!(M_PC, u, k, s, Iinv, number, type, pattern, bc_val, nc, Δ)
+    end
+
     @info "Symmetry"
-    @show norm(M.u.u - M.u.u')
+    @show norm(M_PC.u.u - M_PC.u.u')
     # A one-step Newton iteration - the problem is linear: only one step is needed to reach maximum accurracy
-    b  = r[inx,iny][:]                  # creates a 1D rhight hand side vector (whitout ghosts), values are the current residual
+    𝑏  = r[inx,iny][:]                  # creates a 1D rhight hand side vector (whitout ghosts), values are the current residual
     # Solve
-    du           = .-M.u.u\b            # apply inverse of matrix M.u.u to residual vector 
-    u[inx,iny] .+= reshape(du, nc...)   # update the solution u using the correction du
+    𝐌fact       = lu(M.u.u)
+    δ𝑢           = .-(𝐌fact\𝑏)            # apply inverse of matrix M.u.u to residual vector 
+    u[inx,iny] .+= reshape(δ𝑢, nc...)   # update the solution u using the correction du
+    
+    # Iterative refinement
+    𝑟 = zeros(size(δ𝑢))
+    𝑢 = u[inx,iny][:]
+
+    # ϵ_ref = 1e-7
+    # for iter_ref=1:10
+    #     𝑟 .= M.u.u * 𝑢 .+ 𝑏
+    #     @printf("  --> Iterative refinement %02d\n res.   = %2.2e\n", iter_ref, norm(𝑟)/sqrt(length(𝑟)))
+    #     norm(𝑟)/sqrt(length(𝑟)) < ϵ_ref && break
+    #     δ𝑢   = .-(𝐌fact\𝑟)
+    #     𝑢  .+= δ𝑢
+    # end
+
+    
     # Residual check
     ResidualPoisson2D!(r, u, k, s, Jinv, number, type, bc_val, nc, Δ)     
     @info norm(r)/sqrt(length(r))
     
-    # Visualization
+    # # Visualization
+
+    # ###############################################################
+    # ########################## NEW STUFF ##########################
+    # ###############################################################
+
+    # # Node list
+    # vertices = zeros((nc.x+3)*(nc.y+3), 2)
+    # for I in CartesianIndices(X.c)
+    #     i, j = I[1], I[2]
+    #     v = i + (j-1)*(nc.x+3)
+    #     vertices[v, :] .= X.v[I]
+    # end
+
+    # # Face list
+    # faces = zeros(Int64, (nc.x+2)*(nc.y+2), 4)
+    # for I in CartesianIndices(X.c)
+    #     i, j = I[1], I[2]
+    #     c  = i + (j-1)*(nc.x+2)
+    #     v1 = i + (j-1)*(nc.x+3)
+    #     v2 = i + (j-1)*(nc.x+3) + 1
+    #     v3 = i + (j  )*(nc.x+3) + 1
+    #     v4 = i + (j  )*(nc.x+3) 
+    #     faces[c, :] .= [v1, v2, v3, v4]
+    # end
 
     ###############################################################
     ########################## NEW STUFF ##########################
     ###############################################################
-
-    # Node list
-    vertices = zeros((nc.x+3)*(nc.y+3), 2)
-    for I in CartesianIndices(X.c)
-        i, j = I[1], I[2]
-        v = i + (j-1)*(nc.x+3)
-        vertices[v, :] .= X.v[I]
-    end
-
-    # Face list
-    faces = zeros(Int64, (nc.x+2)*(nc.y+2), 4)
-    for I in CartesianIndices(X.c)
-        i, j = I[1], I[2]
-        c  = i + (j-1)*(nc.x+2)
-        v1 = i + (j-1)*(nc.x+3)
-        v2 = i + (j-1)*(nc.x+3) + 1
-        v3 = i + (j  )*(nc.x+3) + 1
-        v4 = i + (j  )*(nc.x+3) 
-        faces[c, :] .= [v1, v2, v3, v4]
-    end
 
     # Post-process
     cells = (
@@ -415,10 +445,6 @@ let
         cells.x[c,:] .= @SVector([X.v[i,j][1], X.v[i+1,j][1], X.v[i+1,j+1][1], X.v[i,j+1][1] ]) 
         cells.y[c,:] .= @SVector([X.v[i,j][2], X.v[i+1,j][2], X.v[i+1,j+1][2], X.v[i,j+1][2] ]) 
     end
-
-    ###############################################################
-    ########################## NEW STUFF ##########################
-    ###############################################################
 
     pc = [cm.Polygon( geom.Point2f[ (cells.x[i,j], cells.y[i,j]) for j=1:4] ) for i in 1:(nc.x+2)*(nc.y+2)]
     # Visu
