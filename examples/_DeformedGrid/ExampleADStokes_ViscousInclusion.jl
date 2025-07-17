@@ -6,6 +6,8 @@ using TimerOutputs
 import CairoMakie as cm
 import CairoMakie.Makie.GeometryBasics as geom
 
+include("Stokes_Deformed.jl")
+
 function TransformCoordinates(ξ, params)
     h = params.Amp*exp(-(ξ[1] - params.x0)^2 / params.σx^2)
     if params.deform 
@@ -15,40 +17,167 @@ function TransformCoordinates(ξ, params)
     end
 end
 
-function Continuity_Def(Vx_loc, Vy_loc, Pt, Pt0, D, J, phase, materials, type_loc, bcv_loc, Δ)
-    invΔx = 1 / Δ.ξ
-    invΔy = 1 / Δ.η
-    invΔt = 1 / Δ.t
+function SMomentum_x_Generic_Def(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δ)
+    
+    invΔx, invΔy = 1 / Δ.x, 1 / Δ.y
+
     # BC
-    Vx    = SetBCVx1(Vx_loc, type_loc.x, bcv_loc.x, Δ)
-    Vy    = SetBCVy1(Vy_loc, type_loc.y, bcv_loc.y, Δ)
-    V̄x    = av(Vx)
-    V̄y    = av(Vy)
-    β     = materials.β[phase]
-    η     = materials.β[phase]
-    comp  = materials.compressible
-    ∂Vx∂x = (Vx[2,2] - Vx[1,2]) * invΔx
-    ∂Vy∂y = (Vy[2,2] - Vy[2,1]) * invΔy
-    f     =  (∂Vx∂x + ∂Vy∂y) + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
-    f    *= max(invΔx, invΔy)
-    return f
+    Vx = SetBCVx1(Vx_loc, type.x, bcv.x, Δ)
+    Vy = SetBCVy1(Vy_loc, type.y, bcv.y, Δ)
+
+    # Velocity gradient
+    Dxx = ∂x(Vx) * invΔx
+    Dyy = ∂y_inn(Vy) * invΔy
+    Dxy = ∂y(Vx) * invΔy
+    Dyx = ∂x_inn(Vy) * invΔx
+
+    # Strain rate
+    ε̇kk = @. Dxx + Dyy
+    ε̇xx = @. Dxx - 1/3*ε̇kk
+    ε̇yy = @. Dyy - 1/3*ε̇kk
+    ε̇xy = @. 1/2 * ( Dxy + Dyx )
+
+    # Average vertex to centroid
+    ε̇̄xy  = av(ε̇xy)
+    # Average centroid to vertex
+    ε̇̄xx  = av(ε̇xx)
+    ε̇̄yy  = av(ε̇yy)
+    P̄t   = av(Pt)
+    τ̄0xx = av(τ0.xx)
+    τ̄0yy = av(τ0.yy)
+    τ̄0xy = av(τ0.xy)
+
+    # Effective strain rate
+    Gc   = SVector{2, Float64}( materials.G[phases.c] )
+    Gv   = SVector{2, Float64}( materials.G[phases.v] )
+    tmpc = @. inv(2 * Gc * Δ.t)
+    tmpv = @. inv(2 * Gv * Δ.t)
+    ϵ̇xx  = @. ε̇xx[:,2] + τ0.xx[:,2] * tmpc
+    ϵ̇yy  = @. ε̇yy[:,2] + τ0.yy[:,2] * tmpc
+    ϵ̇̄xy  = @. ε̇̄xy[:]   + τ̄0xy[:]    * tmpc
+    ϵ̇̄xx  = @. ε̇̄xx[:]   + τ̄0xx[:]    * tmpv
+    ϵ̇̄yy  = @. ε̇̄yy[:]   + τ̄0yy[:]    * tmpv
+    ϵ̇xy  = @. ε̇xy[2,:] + τ0.xy[2,:] * tmpv
+
+    # Corrected pressure
+    comp = materials.compressible
+    Ptc  = SVector{2, Float64}( @. Pt[:,2] + comp * ΔP[:] )
+
+    # Stress
+    τxx = @MVector zeros(2)
+    τxy = @MVector zeros(2)
+    for i=1:2
+        τxx[i] = (𝐷.c[i][1,1] - 𝐷.c[i][4,1]) * ϵ̇xx[i] + (𝐷.c[i][1,2] - 𝐷.c[i][4,2]) * ϵ̇yy[i] + (𝐷.c[i][1,3] - 𝐷.c[i][4,3]) * ϵ̇̄xy[i] + (𝐷.c[i][1,4] - (𝐷.c[i][4,4] - 1)) * Pt[i,2]
+        τxy[i] = 𝐷.v[i][3,1]                 * ϵ̇̄xx[i] + 𝐷.v[i][3,2]                 * ϵ̇̄yy[i] + 𝐷.v[i][3,3]                  * ϵ̇xy[i] + 𝐷.v[i][3,4]                       * P̄t[i]
+    end
+
+    # Residual
+    fx  = ( τxx[2]  - τxx[1] ) * invΔx
+    fx += ( τxy[2]  - τxy[1] ) * invΔy
+    fx -= ( Ptc[2]  - Ptc[1] ) * invΔx
+    fx *= -1* Δ.x * Δ.y
+
+    return fx
 end
 
-function ResidualContinuity2D_Def!(R, V, P, P0, ΔP, τ0, 𝐷, Jinv, phases, materials, number, type, BC, nc, Δ) 
+function ResidualMomentum2D_x_Def!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
                 
-    for j in 2:size(R.p,2)-1, i in 2:size(R.p,1)-1
-        if type.Pt[i,j] !== :constant 
-            Vx_loc     = SMatrix{2,3}(      V.x[ii,jj] for ii in i:i+1, jj in j:j+2)
-            Vy_loc     = SMatrix{3,2}(      V.y[ii,jj] for ii in i:i+2, jj in j:j+1)
-            bcx_loc    = SMatrix{2,3}(    BC.Vx[ii,jj] for ii in i:i+1, jj in j:j+2)
-            bcy_loc    = SMatrix{3,2}(    BC.Vy[ii,jj] for ii in i:i+2, jj in j:j+1)
-            typex_loc  = SMatrix{2,3}(  type.Vx[ii,jj] for ii in i:i+1, jj in j:j+2)
-            typey_loc  = SMatrix{3,2}(  type.Vy[ii,jj] for ii in i:i+2, jj in j:j+1)
-            Jinv_c     = SMatrix{1,1}(  Jinv.c[ii,jj] for ii in i:i,   jj in j:j  )
-            D          = (;)
+    shift    = (x=1, y=2)
+    for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x+1
+        if type.Vx[i,j] == :in
+            Vx_loc     = SMatrix{3,3}(      V.x[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            Vy_loc     = SMatrix{4,4}(      V.y[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
+            bcx_loc    = SMatrix{3,3}(    BC.Vx[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            bcy_loc    = SMatrix{4,4}(    BC.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
+            typex_loc  = SMatrix{3,3}(  type.Vx[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            typey_loc  = SMatrix{4,4}(  type.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
+            phc_loc    = SMatrix{2,1}( phases.c[ii,jj] for ii in i-1:i,   jj in j-1:j-1)
+            phv_loc    = SMatrix{1,2}( phases.v[ii,jj] for ii in i-0:i-0, jj in j-1:j-0)
+            P_loc      = SMatrix{2,3}(        P[ii,jj] for ii in i-1:i,   jj in j-2:j  )
+            ΔP_loc     = SMatrix{2,1}(       ΔP[ii,jj] for ii in i-1:i,   jj in j-1:j-1)
+            τxx0       = SMatrix{2,3}(    τ0.xx[ii,jj] for ii in i-1:i,   jj in j-2:j  )
+            τyy0       = SMatrix{2,3}(    τ0.yy[ii,jj] for ii in i-1:i,   jj in j-2:j  )
+            τxy0       = SMatrix{3,2}(    τ0.xy[ii,jj] for ii in i-1:i+1, jj in j-1:j  )
+
+            Dc         = SMatrix{2,1}(      𝐷.c[ii,jj] for ii in i-1:i,   jj in j-1:j-1)
+            Dv         = SMatrix{1,2}(      𝐷.v[ii,jj] for ii in i-0:i-0, jj in j-1:j-0)
             bcv_loc    = (x=bcx_loc, y=bcy_loc)
             type_loc   = (x=typex_loc, y=typey_loc)
-            R.p[i,j]   = Continuity_Def(Vx_loc, Vy_loc, P[i,j], P0[i,j], D, Jinv_c, phases.c[i,j], materials, type_loc, bcv_loc, Δ)
+            ph_loc     = (c=phc_loc, v=phv_loc)
+            D          = (c=Dc, v=Dv)
+            τ0_loc     = (xx=τxx0, yy=τyy0, xy=τxy0)
+    
+            R.x[i,j]   = SMomentum_x_Generic_Def(Vx_loc, Vy_loc, P_loc, ΔP_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δ)
+        end
+    end
+    return nothing
+end
+
+function AssembleMomentum2D_x_Def!(K, V, P, P0, ΔP, τ0, 𝐷, phases, materials, num, pattern, type, BC, nc, Δ) 
+
+    ∂R∂Vx = @MMatrix zeros(3,3)
+    ∂R∂Vy = @MMatrix zeros(4,4)
+    ∂R∂Pt = @MMatrix zeros(2,3)
+                
+    Vx_loc = @MMatrix zeros(3,3)
+    Vy_loc = @MMatrix zeros(4,4)
+    P_loc  = @MMatrix zeros(2,3)
+    ΔP_loc = @MMatrix zeros(2,1)
+
+    shift    = (x=1, y=2)
+    for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x+1
+        
+        if type.Vx[i,j] == :in
+
+            bcx_loc    = SMatrix{3,3}(    BC.Vx[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            bcy_loc    = SMatrix{4,4}(    BC.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
+            typex_loc  = SMatrix{3,3}(  type.Vx[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            typey_loc  = SMatrix{4,4}(  type.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
+            phc_loc    = SMatrix{2,1}( phases.c[ii,jj] for ii in i-1:i,   jj in j-1:j-1)
+            phv_loc    = SMatrix{1,2}( phases.v[ii,jj] for ii in i-0:i-0, jj in j-1:j-0) 
+            
+            Vx_loc    .= SMatrix{3,3}(      V.x[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            Vy_loc    .= SMatrix{4,4}(      V.y[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
+            P_loc     .= SMatrix{2,3}(        P[ii,jj] for ii in i-1:i,   jj in j-2:j  )
+            ΔP_loc    .= SMatrix{2,1}(       ΔP[ii,jj] for ii in i-1:i,   jj in j-1:j-1)
+
+            τxx0       = SMatrix{2,3}(    τ0.xx[ii,jj] for ii in i-1:i,   jj in j-2:j  )
+            τyy0       = SMatrix{2,3}(    τ0.yy[ii,jj] for ii in i-1:i,   jj in j-2:j  )
+            τxy0       = SMatrix{3,2}(    τ0.xy[ii,jj] for ii in i-1:i+1, jj in j-1:j  )
+            
+            Dc         = SMatrix{2,1}(      𝐷.c[ii,jj] for ii in i-1:i,   jj in j-1:j-1)
+            Dv         = SMatrix{1,2}(      𝐷.v[ii,jj] for ii in i-0:i-0, jj in j-1:j-0)
+            bcv_loc    = (x=bcx_loc, y=bcy_loc)
+            type_loc   = (x=typex_loc, y=typey_loc)
+            ph_loc     = (c=phc_loc, v=phv_loc)
+            D          = (c=Dc, v=Dv)
+            τ0_loc     = (xx=τxx0, yy=τyy0, xy=τxy0)
+
+            fill!(∂R∂Vx, 0e0)
+            fill!(∂R∂Vy, 0e0)
+            fill!(∂R∂Pt, 0e0)
+            autodiff(Enzyme.Reverse, SMomentum_x_Generic_Def, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ΔP_loc), Const(τ0_loc), Const(D), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+            # Vx --- Vx
+            Local = SMatrix{3,3}(num.Vx[ii, jj] for ii in i-1:i+1, jj in j-1:j+1) .* pattern[1][1]
+            for jj in axes(Local,2), ii in axes(Local,1)
+                if (Local[ii,jj]>0) && num.Vx[i,j]>0
+                    K[1][1][num.Vx[i,j], Local[ii,jj]] = ∂R∂Vx[ii,jj] 
+                end
+            end
+            # Vx --- Vy
+            Local = SMatrix{4,4}(num.Vy[ii, jj] for ii in i-1:i+2, jj in j-2:j+1) .* pattern[1][2]
+            for jj in axes(Local,2), ii in axes(Local,1)
+                if (Local[ii,jj]>0) && num.Vx[i,j]>0
+                    K[1][2][num.Vx[i,j], Local[ii,jj]] = ∂R∂Vy[ii,jj]  
+                end
+            end
+            # Vx --- Pt
+            Local = SMatrix{2,3}(num.Pt[ii, jj] for ii in i-1:i, jj in j-2:j) .* pattern[1][3]
+            for jj in axes(Local,2), ii in axes(Local,1)
+                if (Local[ii,jj]>0) && num.Vx[i,j]>0
+                    K[1][3][num.Vx[i,j], Local[ii,jj]] = ∂R∂Pt[ii,jj]  
+                end
+            end 
         end
     end
     return nothing
@@ -120,7 +249,7 @@ end
     pattern = Fields(
         Fields(@SMatrix([1 1 1; 1 1 1; 1 1 1]),                 @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([1 1 1; 1 1 1])), 
         Fields(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]),  @SMatrix([1 1 1; 1 1 1; 1 1 1]),                @SMatrix([1 1; 1 1; 1 1])), 
-        Fields(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]))
+        Fields(@SMatrix([1 1 1; 1 1 1]),                        @SMatrix([1 1; 1 1; 1 1]),                      @SMatrix([1]))
     )
 
     # Sparse matrix assembly
@@ -306,7 +435,7 @@ end
             @timeit to "Residual" begin
                 TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
                 ResidualContinuity2D_Def!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, Jinv, phases, materials, number, type, BC, nc, Δ) 
-                ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+                ResidualMomentum2D_x_Def!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
                 ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
             end
 
@@ -322,8 +451,8 @@ end
             #--------------------------------------------#
             # Assembly
             @timeit to "Assembly" begin
-                AssembleContinuity2D!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-                AssembleMomentum2D_x!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+                AssembleContinuity2D_Def!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, Jinv, phases, materials, number, pattern, type, BC, nc, Δ)
+                AssembleMomentum2D_x_Def!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
                 AssembleMomentum2D_y!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
             end
 
