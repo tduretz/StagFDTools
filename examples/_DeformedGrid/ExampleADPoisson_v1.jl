@@ -120,6 +120,7 @@ function Poisson2D(u_loc, k, s, Jc, Jv, type_loc, bcv_loc, Δ)
     ∂qx∂x = (qxE - qxW)/Δ.ξ * Jc[1,1][1,1] + (qxN - qxS)/Δ.η * Jc[1,1][1,2]
     ∂qy∂y = (qyE - qyW)/Δ.ξ * Jc[1,1][2,1] + (qyN - qyS)/Δ.η * Jc[1,1][2,2]
     f    = ∂qx∂x + ∂qy∂y - s
+    # f   *= 1/det(Jc[1,1])*(Δ.ξ*Δ.η) 
     return f  
 end
 
@@ -379,6 +380,8 @@ let
 
     @info "Symmetry"
     @show norm(M_PC.u.u - M_PC.u.u')
+    @show norm(M.u.u - M.u.u')
+
     # A one-step Newton iteration - the problem is linear: only one step is needed to reach maximum accurracy
     𝑏  = r[inx,iny][:]                  # creates a 1D rhight hand side vector (whitout ghosts), values are the current residual
     # Solve
