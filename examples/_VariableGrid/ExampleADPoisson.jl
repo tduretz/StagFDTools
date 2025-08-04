@@ -297,7 +297,7 @@ let
     true_variable_grid = true
     if true_variable_grid
         μ = ( x = 0., y = 0.)
-        σ = ( x = 0.4, y = 0.4)
+        σ = ( x = 0.8, y = 0.8)
         inflimit = (x = -L/2, y = -L/2)
         suplimit = (x = L/2, y = L/2)
         xnodes = normal_linspace_interval(inflimit.x, suplimit.x, μ.x, σ.x, nc.x+3)
@@ -338,37 +338,33 @@ let
     # Configuration
     s  .= 50*exp.(-(xc.^2 .+ (yc').^2)./0.4^2)
 
-    # Loop over Netwon iterations
-    eps=1E-3
-    normr=1
-    let M
-        while normr > eps
-            # Residual check: div( q ) - s = r
-            @timeit to "Residual" ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ) 
-            @info norm(r)/sqrt(length(r))
-            normr = norm(r)/sqrt(length(r))
+    # Loop over Newton iterations
+    #eps=1E-3
+    #while normr > eps
+        # Residual check: div( q ) - s = r
+        @timeit to "Residual" ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ) 
+        @info norm(r)/sqrt(length(r))
+        #normr = norm(r)/sqrt(length(r))
         
-            # Sparse matrix assembly
-            nu  = maximum(number.u)
-            M   = Fields( Fields( ExtendableSparseMatrix(nu, nu) )) 
+        # Sparse matrix assembly
+        nu  = maximum(number.u)
+        M   = Fields( Fields( ExtendableSparseMatrix(nu, nu) )) 
     
-            @timeit to "Assembly Enzyme" begin
-                AssemblyPoisson_Enzyme!(M, u, k, s, number, type, pattern, bc_val, nc, Δ.x, Δ.y)
-            end
-            #@timeit to "Assembly ForwardDiff" begin
-            #    AssemblyPoisson_ForwardDiff!(M, u, k, s, number, type, pattern, bc_val, nc, Δ.x, Δ.y)
-            #end
-
-            @info "Symmetry"
-            @show norm(M.u.u - M.u.u')
-            # A one-step Newton iteration - the problem is linear: only one step is needed to reach maximum accurracy
-            b  = r[inx,iny][:]                  # creates a 1D rhight hand side vector (whitout ghosts), values are the current residual
-            # Solve
-            du           = .-M.u.u\b              # apply inverse of matrix M.u.u to residual vector 
-            u[inx,iny] .+= reshape(du, nc...)   # update the solution u using the correction du
-        
+        @timeit to "Assembly Enzyme" begin
+            AssemblyPoisson_Enzyme!(M, u, k, s, number, type, pattern, bc_val, nc, Δ.x, Δ.y)
         end
-    end
+        #@timeit to "Assembly ForwardDiff" begin
+        #    AssemblyPoisson_ForwardDiff!(M, u, k, s, number, type, pattern, bc_val, nc, Δ.x, Δ.y)
+        #end
+
+        @info "Symmetry"
+        @show norm(M.u.u - M.u.u')
+        # A one-step Newton iteration - the problem is linear: only one step is needed to reach maximum accurracy
+        b  = r[inx,iny][:]                  # creates a 1D rhight hand side vector (whitout ghosts), values are the current residual
+        # Solve
+        du           = .-M.u.u\b              # apply inverse of matrix M.u.u to residual vector 
+        u[inx,iny] .+= reshape(du, nc...)   # update the solution u using the correction du
+    #end
 
     # Visualization
     p1 = heatmap(xc[inx], yc[iny], u[inx,iny]', aspect_ratio=1, xlim=extrema(xc), title="u")
