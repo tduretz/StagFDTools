@@ -33,54 +33,71 @@ function Poisson2D(u_loc, k, s, type_loc, bcv_loc, Δxv, Δyv)
     #             0   uS  0
     # Therefore u_loc[2,2] is the current value of uC
     uC       = u_loc[2,2]
+    coeffW = 1.
+    coeffE = 1.
+    coeffN = 1.
+    coeffS = 1.
 
-    # Boundary conditions need to be applied on every boundaries :D
+    #=
+    coeffW = ((Δxv[1]+Δxv[2])/2)/Δyv[2]
+    coeffE = ((Δxv[3]+Δxv[2])/2)/Δyv[2]
+    coeffN = ((Δyv[1]+Δyv[2])/2)/Δxv[2]
+    coeffS = ((Δyv[3]+Δyv[2])/2)/Δxv[2]
+    =#
+
+    #=
+    coeffW = ((Δxv[1]+Δxv[2])/2)/((Δyv[1]+Δyv[2])/2)
+    coeffE = ((Δxv[3]+Δxv[2])/2)/((Δyv[3]+Δyv[2])/2)
+    coeffN = ((Δyv[1]+Δyv[2])/2)/((Δxv[1]+Δxv[2])/2)
+    coeffS = ((Δyv[3]+Δyv[2])/2)/((Δxv[3]+Δxv[2])/2)
+    =#
+    # Boundary conditions need to be applied on every boundaries
     # Here we define the values of the ghost nodes. For example at the west side uW needs to be defined  
     # For example, to set a Dirichlet values, we say: 1/2*(uW + uC) = u_BC, hence uW = 2*u_BC - uC
     # West
     if type_loc[1,2] === :Dirichlet 
-        uW = (1/Δxv[1])*((Δxv[1]+Δxv[2])*bcv_loc[1,2]-Δxv[2]*uC)
+        uW = (1/Δxv[1])*((Δxv[1]+Δxv[2])*bcv_loc[1,2]-Δxv[2]*uC)*coeffW
     elseif type_loc[1,2] === :Neumann
-        uW = uC + (1/2)*bcv_loc[1,2]*(Δxv[1]+Δxv[2])
+        uW = uC + (1/2)*bcv_loc[1,2]*(Δxv[1]+Δxv[2])*coeffW
     elseif type_loc[1,2] === :periodic || type_loc[1,2] === :in
-        uW = u_loc[1,2] 
+        uW = u_loc[1,2]*coeffW
     end
 
     # East
     if type_loc[3,2] === :Dirichlet
-        uE = (1/Δxv[3])*((Δxv[3]+Δxv[2])*bcv_loc[3,2]-Δxv[2]*uC)
+        uE = (1/Δxv[3])*((Δxv[3]+Δxv[2])*bcv_loc[3,2]-Δxv[2]*uC)*coeffE
     elseif type_loc[3,2] === :Neumann
-        uE = uC - (1/2)*bcv_loc[3,2]*(Δxv[2]+Δxv[3])
+        uE = uC - (1/2)*bcv_loc[3,2]*(Δxv[2]+Δxv[3])*coeffE
     elseif type_loc[3,2] === :periodic || type_loc[3,2] === :in
-        uE = u_loc[3,2]
+        uE = u_loc[3,2]*coeffE
     end
 
     # North
     if type_loc[2,1] === :Dirichlet
-        uN = (1/Δyv[1])*((Δyv[1]+Δyv[2])*bcv_loc[2,1]-Δyv[2]*uC)
+        uN = (1/Δyv[1])*((Δyv[1]+Δyv[2])*bcv_loc[2,1]-Δyv[2]*uC)*coeffN
     elseif type_loc[2,1] === :Neumann
-        uN = uC + (1/2)*bcv_loc[2,1]*(Δyv[1]+Δyv[2])
+        uN = uC + (1/2)*bcv_loc[2,1]*(Δyv[1]+Δyv[2])*coeffN
     elseif type_loc[2,1] === :periodic || type_loc[2,1] === :in
-        uN = u_loc[2,1]
+        uN = u_loc[2,1]*coeffN
     end
 
     # South
     if type_loc[2,3] === :Dirichlet
-        uS = (1/Δyv[3])*((Δyv[3]+Δyv[2])*bcv_loc[2,3]-Δyv[2]*uC)
+        uS = (1/Δyv[3])*((Δyv[3]+Δyv[2])*bcv_loc[2,3]-Δyv[2]*uC)*coeffS
     elseif type_loc[2,3] === :Neumann
-        uS = uC - (1/2)*bcv_loc[2,3]*(Δyv[3]+Δyv[2])
+        uS = uC - (1/2)*bcv_loc[2,3]*(Δyv[3]+Δyv[2])*coeffS
     elseif type_loc[2,3] === :periodic || type_loc[2,3] === :in
-        uS = u_loc[2,3]
+        uS = u_loc[2,3]*coeffS
     end
 
     # Heat flux for each face based on finite differences
-    qxW = -k.xx[1]*(uC - uW)/((1/2)*(Δxv[1]+Δxv[2])) 
-    qxE = -k.xx[2]*(uE - uC)/((1/2)*(Δxv[2]+Δxv[3])) 
-    qyS = -k.yy[1]*(uS - uC)/((1/2)*(Δyv[3]+Δyv[2])) 
+    qxW = -k.xx[1]*(uC - uW)/((1/2)*(Δxv[1]+Δxv[2]))
+    qxE = -k.xx[2]*(uE - uC)/((1/2)*(Δxv[2]+Δxv[3]))
+    qyS = -k.yy[1]*(uS - uC)/((1/2)*(Δyv[3]+Δyv[2]))
     qyN = -k.yy[2]*(uC - uN)/((1/2)*(Δyv[2]+Δyv[1]))
 
     # Return the residual function based on finite differences
-    return -(-(qxE - qxW)/Δxv[2] - (qyS - qyN)/Δyv[2] + s)
+    return -(-(qxE - qxW)/Δxv[2] - (qyS - qyN)/Δyv[2] + s)*(Δxv[1]+Δxv[2]+Δxv[3])*(Δyv[1]+Δyv[2]+Δyv[3])
 end
 
 
@@ -222,6 +239,8 @@ function normal_linspace_interval(inflimit::Float64, suplimit::Float64, μ::Floa
     dist = Normal(μ, σ)
     inf_cdf = cdf(dist, inflimit)
     sup_cdf = cdf(dist, suplimit)
+    display(inf_cdf)
+    display(sup_cdf)
     vec = range(inf_cdf, sup_cdf; length=ncells)
     return quantile.(dist, vec)
 end
@@ -232,17 +251,17 @@ let
     to = TimerOutput()
 
     # Resolution in FD cells
-    nc = (x = 60, y = 60)
+    nc = (x = 40, y = 40)
 
     # Get ranges
     ranges = Ranges(nc)
     (; inx, iny) = ranges
 
-    # Define node types 
+    # Define node types
     type = Fields( fill(:out, (nc.x+2, nc.y+2)) )   # Achtung: geist nodes
     type.u[2:end-1,2:end-1].= :in                   # inside nodes are all type :in
-    type.u[1,:]            .= :Neumann #:Dirichlet            # one BC type is :Dirichlet # West
-    type.u[end,:]          .= :Neumann #:Dirichlet            # East
+    type.u[1,:]            .= :Dirichlet            # one BC type is :Dirichlet # West
+    type.u[end,:]          .= :Dirichlet            # East
     type.u[:,1]            .= :Dirichlet            # South
     type.u[:,end]          .= :Dirichlet            # North
 
@@ -298,47 +317,34 @@ let
         σ = ( x = 0.4, y = 0.4)
         inflimit = (x = -L/2, y = -L/2)
         suplimit = (x = L/2, y = L/2)
-        xc = normal_linspace_interval(inflimit.x, suplimit.x, μ.x, σ.x, nc.x+2)
-        yc = normal_linspace_interval(inflimit.y, suplimit.y, μ.y, σ.y, nc.y+2)
-        dxghostW = xc[2]-xc[1]
-        dxghostE = xc[end]-xc[end-1]
-        dyghostS = yc[2]-yc[1]
-        dyghostN = yc[end]-yc[end-1]
-        #display(dxghostW)
-        #display(dxghostE)
-        #display(dyghostS)
-        #display(dyghostN)
-        xc[end] = suplimit.x + dxghostE
-        xc[end-1] = suplimit.x
-        xc[1] = inflimit.x - dxghostW
-        xc[2] = inflimit.x
-        yc[end] = suplimit.y + dyghostN
-        yc[end-1] = suplimit.y
-        yc[1] = inflimit.y - dyghostS
-        yc[2] = inflimit.y
+        xnodes = normal_linspace_interval(inflimit.x, suplimit.x, μ.x, σ.x, nc.x+3)
+        ynodes = normal_linspace_interval(inflimit.y, suplimit.y, μ.y, σ.y, nc.y+3)
 
-        #display(xc)
-        #display(yc)
+        xc = xnodes[1:end-1]
+        yc = xnodes[1:end-1]
+        display(xc)
+        display(yc)
 
-        Δ = (x = zeros(nc.x+2), y = zeros(nc.y+2))
-        for i in 1:nc.x+1
-            Δ.x[i] = xc[i+1]-xc[i]
+        Δ = (x = zeros(nc.x+2), y = zeros(nc.y+2)) # nb cells
+        for i in 1:nc.x+2
+            Δ.x[i] = xnodes[i+1]-xnodes[i]
         end
-        Δ.x[end] = xc[end]-xc[end-1]
-        for i in 1:nc.y+1
-            Δ.y[i] = yc[i+1]-yc[i]
+        for i in 1:nc.y+2
+            Δ.y[i] = ynodes[i+1]-ynodes[i]
         end
-        Δ.y[end] = yc[end]-yc[end-1]
+        display(Δ.x)
+        display(Δ.y)
+
 
     else
 
         Δ   = (x = fill(L/nc.x,nc.x+2), y = fill(L/nc.y,nc.y+2))
-        #display(Δ.x)
-        #display(Δ.y)
+        display(Δ.x)
+        display(Δ.y)
         xc  = LinRange(-L/2-Δ.x[1]/2, L/2+Δ.x[end]/2, nc.x+2)
         yc  = LinRange(-L/2-Δ.y[1]/2, L/2+Δ.y[end]/2, nc.y+2)
-        #display(xc)
-        #display(yc)
+        display(xc)
+        display(yc)
     
     end
 
@@ -348,55 +354,50 @@ let
     #                     xc[1]      |       xc[2]       |
     # Configuration
     s  .= 50*exp.(-(xc.^2 .+ (yc').^2)./0.4^2)
-    # Residual check: div( q ) - s = r
-    @timeit to "Residual" ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ) 
-    @info norm(r)/sqrt(length(r))
+
+    # Loop over Netwon iterations
+    eps=1E-3
+    normr=1
+    let M
+        while normr > eps
+            # Residual check: div( q ) - s = r
+            @timeit to "Residual" ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ) 
+            @info norm(r)/sqrt(length(r))
+            normr = norm(r)/sqrt(length(r))
+        
+            # Sparse matrix assembly
+            nu  = maximum(number.u)
+            M   = Fields( Fields( ExtendableSparseMatrix(nu, nu) )) 
     
-    # Sparse matrix assembly
-    nu  = maximum(number.u)
-    M   = Fields( Fields( ExtendableSparseMatrix(nu, nu) )) 
-  
-    @timeit to "Assembly Enzyme" begin
-        AssemblyPoisson_Enzyme!(M, u, k, s, number, type, pattern, bc_val, nc, Δ.x, Δ.y)
-    end
-    #@timeit to "Assembly ForwardDiff" begin
-    #    AssemblyPoisson_ForwardDiff!(M, u, k, s, number, type, pattern, bc_val, nc, Δ.x, Δ.y)
-    #end
+            @timeit to "Assembly Enzyme" begin
+                AssemblyPoisson_Enzyme!(M, u, k, s, number, type, pattern, bc_val, nc, Δ.x, Δ.y)
+            end
+            #@timeit to "Assembly ForwardDiff" begin
+            #    AssemblyPoisson_ForwardDiff!(M, u, k, s, number, type, pattern, bc_val, nc, Δ.x, Δ.y)
+            #end
 
-    @info "Symmetry"
-    @show norm(M.u.u - M.u.u')
-    # A one-step Newton iteration - the problem is linear: only one step is needed to reach maximum accurracy
-    b  = r[inx,iny][:]                  # creates a 1D rhight hand side vector (whitout ghosts), values are the current residual
-    # Solve
-    du           = .-M.u.u\b              # apply inverse of matrix M.u.u to residual vector 
-    u[inx,iny] .+= reshape(du, nc...)   # update the solution u using the correction du
-
-    # Check with staggered grid results
-    display(u)
-    save("u_file.jld", "u", u)
-
-    u_stag_file = load("u_staggered_neumann.jld")
-    u_file = load("u_file.jld")
-
-    if u_stag_file == u_file
-        println("Same files")
-    else
-        println("Different files")
+            @info "Symmetry"
+            @show norm(M.u.u - M.u.u')
+            # A one-step Newton iteration - the problem is linear: only one step is needed to reach maximum accurracy
+            b  = r[inx,iny][:]                  # creates a 1D rhight hand side vector (whitout ghosts), values are the current residual
+            # Solve
+            du           = .-M.u.u\b              # apply inverse of matrix M.u.u to residual vector 
+            u[inx,iny] .+= reshape(du, nc...)   # update the solution u using the correction du
+        
+        end
     end
 
-    # Residual check
-    #ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ)
-    ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ)
-    @info norm(r)/sqrt(length(r))
     # Visualization
     p1 = heatmap(xc[inx], yc[iny], u[inx,iny]', aspect_ratio=1, xlim=extrema(xc), title="u")
     qx = -diff(u[inx,iny],dims=1)/Δ.x[1]
     qy = -diff(u[inx,iny],dims=2)/Δ.y[1]
+    #p2 = heatmap(xc[2:end-2], yc[iny], qx', aspect_ratio=1, xlim=extrema(xc), title="qx")
+    #p3 = heatmap(xc[inx], yc[2:end-2], qy', aspect_ratio=1, xlim=extrema(xc), title="qy")
     p2 = heatmap(xc[2:end-2], yc[iny], qx', aspect_ratio=1, xlim=extrema(xc), title="qx")
     p3 = heatmap(xc[inx], yc[2:end-2], qy', aspect_ratio=1, xlim=extrema(xc), title="qy")
-    p4 = spy(M.u.u, title="M")
-    display(plot(p1, p2, p3, p4))
-    sleep(4)
+    #p4 = spy(M.u.u, title="M")
+    display(plot(p1, p2, p3))#, p4))
+    sleep(10)
     display(to)
 
 end
