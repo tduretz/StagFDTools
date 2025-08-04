@@ -33,61 +33,44 @@ function Poisson2D(u_loc, k, s, type_loc, bcv_loc, Δxv, Δyv)
     #             0   uS  0
     # Therefore u_loc[2,2] is the current value of uC
     uC       = u_loc[2,2]
-    coeffW = 1.
-    coeffE = 1.
-    coeffN = 1.
-    coeffS = 1.
 
-    #=
-    coeffW = ((Δxv[1]+Δxv[2])/2)/Δyv[2]
-    coeffE = ((Δxv[3]+Δxv[2])/2)/Δyv[2]
-    coeffN = ((Δyv[1]+Δyv[2])/2)/Δxv[2]
-    coeffS = ((Δyv[3]+Δyv[2])/2)/Δxv[2]
-    =#
-
-    #=
-    coeffW = ((Δxv[1]+Δxv[2])/2)/((Δyv[1]+Δyv[2])/2)
-    coeffE = ((Δxv[3]+Δxv[2])/2)/((Δyv[3]+Δyv[2])/2)
-    coeffN = ((Δyv[1]+Δyv[2])/2)/((Δxv[1]+Δxv[2])/2)
-    coeffS = ((Δyv[3]+Δyv[2])/2)/((Δxv[3]+Δxv[2])/2)
-    =#
     # Boundary conditions need to be applied on every boundaries
     # Here we define the values of the ghost nodes. For example at the west side uW needs to be defined  
     # For example, to set a Dirichlet values, we say: 1/2*(uW + uC) = u_BC, hence uW = 2*u_BC - uC
     # West
     if type_loc[1,2] === :Dirichlet 
-        uW = (1/Δxv[1])*((Δxv[1]+Δxv[2])*bcv_loc[1,2]-Δxv[2]*uC)*coeffW
+        uW = (1/Δxv[1])*((Δxv[1]+Δxv[2])*bcv_loc[1,2]-Δxv[2]*uC)
     elseif type_loc[1,2] === :Neumann
-        uW = uC + (1/2)*bcv_loc[1,2]*(Δxv[1]+Δxv[2])*coeffW
+        uW = uC + (1/2)*bcv_loc[1,2]*(Δxv[1]+Δxv[2])
     elseif type_loc[1,2] === :periodic || type_loc[1,2] === :in
-        uW = u_loc[1,2]*coeffW
+        uW = u_loc[1,2]
     end
 
     # East
     if type_loc[3,2] === :Dirichlet
-        uE = (1/Δxv[3])*((Δxv[3]+Δxv[2])*bcv_loc[3,2]-Δxv[2]*uC)*coeffE
+        uE = (1/Δxv[3])*((Δxv[3]+Δxv[2])*bcv_loc[3,2]-Δxv[2]*uC)
     elseif type_loc[3,2] === :Neumann
-        uE = uC - (1/2)*bcv_loc[3,2]*(Δxv[2]+Δxv[3])*coeffE
+        uE = uC - (1/2)*bcv_loc[3,2]*(Δxv[2]+Δxv[3])
     elseif type_loc[3,2] === :periodic || type_loc[3,2] === :in
-        uE = u_loc[3,2]*coeffE
+        uE = u_loc[3,2]
     end
 
     # North
     if type_loc[2,1] === :Dirichlet
-        uN = (1/Δyv[1])*((Δyv[1]+Δyv[2])*bcv_loc[2,1]-Δyv[2]*uC)*coeffN
+        uN = (1/Δyv[1])*((Δyv[1]+Δyv[2])*bcv_loc[2,1]-Δyv[2]*uC)
     elseif type_loc[2,1] === :Neumann
-        uN = uC + (1/2)*bcv_loc[2,1]*(Δyv[1]+Δyv[2])*coeffN
+        uN = uC + (1/2)*bcv_loc[2,1]*(Δyv[1]+Δyv[2])
     elseif type_loc[2,1] === :periodic || type_loc[2,1] === :in
-        uN = u_loc[2,1]*coeffN
+        uN = u_loc[2,1]
     end
 
     # South
     if type_loc[2,3] === :Dirichlet
-        uS = (1/Δyv[3])*((Δyv[3]+Δyv[2])*bcv_loc[2,3]-Δyv[2]*uC)*coeffS
+        uS = (1/Δyv[3])*((Δyv[3]+Δyv[2])*bcv_loc[2,3]-Δyv[2]*uC)
     elseif type_loc[2,3] === :Neumann
-        uS = uC - (1/2)*bcv_loc[2,3]*(Δyv[3]+Δyv[2])*coeffS
+        uS = uC - (1/2)*bcv_loc[2,3]*(Δyv[3]+Δyv[2])
     elseif type_loc[2,3] === :periodic || type_loc[2,3] === :in
-        uS = u_loc[2,3]*coeffS
+        uS = u_loc[2,3]
     end
 
     # Heat flux for each face based on finite differences
@@ -251,7 +234,7 @@ let
     to = TimerOutput()
 
     # Resolution in FD cells
-    nc = (x = 40, y = 40)
+    nc = (x = 20, y = 20)
 
     # Get ranges
     ranges = Ranges(nc)
