@@ -101,7 +101,7 @@ function ResidualPoisson2D!(R, u, k, s, num, type, bc_val, nc, Δ)  # u_loc, s, 
         # vecteur dx
         Δxv = @SVector [ Δ.x[i-1], Δ.x[i], Δ.x[i+1] ]
         # vecteur dy
-        Δyv = @SVector [ Δ.y[i-1], Δ.y[i], Δ.y[i+1] ]
+        Δyv = @SVector [ Δ.y[j-1], Δ.y[j], Δ.y[j+1] ]
 
         # This is the 3*3 matrix that contains the current stencil values (see residual function above) 
         u_loc     =  SMatrix{3,3}(u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
@@ -234,7 +234,7 @@ let
     to = TimerOutput()
 
     # Resolution in FD cells
-    nc = (x = 20, y = 20)
+    nc = (x = 10, y = 10)
 
     # Get ranges
     ranges = Ranges(nc)
@@ -247,6 +247,13 @@ let
     type.u[end,:]          .= :Dirichlet            # East
     type.u[:,1]            .= :Dirichlet            # South
     type.u[:,end]          .= :Dirichlet            # North
+
+    #=
+    type.u[1,:]            .= :Neumann #Dirichlet            # one BC type is :Dirichlet # West
+    type.u[end,:]          .= :Neumann #Dirichlet            # East
+    type.u[:,1]            .= :Neumann #Dirichlet            # South
+    type.u[:,end]          .= :Neumann #Dirichlet            # North
+    =#
 
     # Define values of the boundary conditions
     bc_val = Fields( fill(0., (nc.x+2, nc.y+2)) )   # Achtung: geist nodes
@@ -300,24 +307,35 @@ let
         σ = ( x = 0.8, y = 0.8)
         inflimit = (x = -L/2, y = -L/2)
         suplimit = (x = L/2, y = L/2)
-        xnodes = normal_linspace_interval(inflimit.x, suplimit.x, μ.x, σ.x, nc.x+3)
-        ynodes = normal_linspace_interval(inflimit.y, suplimit.y, μ.y, σ.y, nc.y+3)
 
-        xc = xnodes[1:end-1]
-        yc = xnodes[1:end-1]
-        display(xc)
-        display(yc)
+        # nodes
+        xv = normal_linspace_interval(inflimit.x, suplimit.x, μ.x, σ.x, nc.x+3)
+        yv = normal_linspace_interval(inflimit.y, suplimit.y, μ.y, σ.y, nc.y+3)
+        display(xv)
+        display(yv)
 
+        # spaces between nodes
         Δ = (x = zeros(nc.x+2), y = zeros(nc.y+2)) # nb cells
         for i in 1:nc.x+2
-            Δ.x[i] = xnodes[i+1]-xnodes[i]
+            Δ.x[i] = xv[i+1]-xv[i]
         end
         for i in 1:nc.y+2
-            Δ.y[i] = ynodes[i+1]-ynodes[i]
+            Δ.y[i] = yv[i+1]-yv[i]
         end
         display(Δ.x)
         display(Δ.y)
 
+        # cells 
+        xc = zeros(nc.x+2)
+        for i in 1:nc.x+2
+            xc[i] = xv[i] + Δ.x[i]/2
+        end
+        yc = zeros(nc.y+2)
+        for j in 1:nc.y+2
+            yc[j] = xv[j] + Δ.y[j]/2
+        end
+        display(xc)
+        display(yc)
 
     else
 
@@ -338,33 +356,41 @@ let
     # Configuration
     s  .= 50*exp.(-(xc.^2 .+ (yc').^2)./0.4^2)
 
-    # Loop over Newton iterations
-    #eps=1E-3
-    #while normr > eps
-        # Residual check: div( q ) - s = r
-        @timeit to "Residual" ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ) 
-        @info norm(r)/sqrt(length(r))
-        #normr = norm(r)/sqrt(length(r))
-        
-        # Sparse matrix assembly
-        nu  = maximum(number.u)
-        M   = Fields( Fields( ExtendableSparseMatrix(nu, nu) )) 
+    # Residual check: div( q ) - s = r
+    @timeit to "Residual" ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ) 
+    @info norm(r)/sqrt(length(r))
     
-        @timeit to "Assembly Enzyme" begin
-            AssemblyPoisson_Enzyme!(M, u, k, s, number, type, pattern, bc_val, nc, Δ.x, Δ.y)
-        end
-        #@timeit to "Assembly ForwardDiff" begin
-        #    AssemblyPoisson_ForwardDiff!(M, u, k, s, number, type, pattern, bc_val, nc, Δ.x, Δ.y)
-        #end
-
-        @info "Symmetry"
-        @show norm(M.u.u - M.u.u')
-        # A one-step Newton iteration - the problem is linear: only one step is needed to reach maximum accurracy
-        b  = r[inx,iny][:]                  # creates a 1D rhight hand side vector (whitout ghosts), values are the current residual
-        # Solve
-        du           = .-M.u.u\b              # apply inverse of matrix M.u.u to residual vector 
-        u[inx,iny] .+= reshape(du, nc...)   # update the solution u using the correction du
+    # Sparse matrix assembly
+    nu  = maximum(number.u)
+    M   = Fields( Fields( ExtendableSparseMatrix(nu, nu) )) 
+    
+    @timeit to "Assembly Enzyme" begin
+        AssemblyPoisson_Enzyme!(M, u, k, s, number, type, pattern, bc_val, nc, Δ.x, Δ.y)
+    end
+    #@timeit to "Assembly ForwardDiff" begin
+    #    AssemblyPoisson_ForwardDiff!(M, u, k, s, number, type, pattern, bc_val, nc, Δ.x, Δ.y)
     #end
+
+    @info "Symmetry"
+    @show norm(M.u.u - M.u.u')
+    # A one-step Newton iteration - the problem is linear: only one step is needed to reach maximum accurracy
+    b  = r[inx,iny][:]                  # creates a 1D rhight hand side vector (whitout ghosts), values are the current residual
+    # Solve
+    du           = .-M.u.u\b              # apply inverse of matrix M.u.u to residual vector 
+    u[inx,iny] .+= reshape(du, nc...)   # update the solution u using the correction du
+    
+    # Residual check
+    @timeit to "Residual" ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ) 
+    @info norm(r)/sqrt(length(r))
+    #display(size(r))
+
+    #var = zeros(nc.x+2,nc.y+2)
+    #for i in 2:11
+    #    r[2:11,i] .= 10000
+    #end
+    p = spy(r, title="residu")
+    display(plot(p))
+    sleep(6)
 
     # Visualization
     p1 = heatmap(xc[inx], yc[iny], u[inx,iny]', aspect_ratio=1, xlim=extrema(xc), title="u")
@@ -374,8 +400,8 @@ let
     #p3 = heatmap(xc[inx], yc[2:end-2], qy', aspect_ratio=1, xlim=extrema(xc), title="qy")
     p2 = heatmap(xc[2:end-2], yc[iny], qx', aspect_ratio=1, xlim=extrema(xc), title="qx")
     p3 = heatmap(xc[inx], yc[2:end-2], qy', aspect_ratio=1, xlim=extrema(xc), title="qy")
-    #p4 = spy(M.u.u, title="M")
-    display(plot(p1, p2, p3))#, p4))
+    p4 = spy(M.u.u, title="M")
+    display(plot(p1, p2, p3, p4))
     sleep(10)
     display(to)
 
