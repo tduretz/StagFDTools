@@ -7,7 +7,12 @@ using ExactFieldSolutions
 import CairoMakie as cm
 import CairoMakie.Makie.GeometryBasics as geom
 
-include("Stokes_Deformed.jl")
+# This version uses routines from Stokes_Deformed.jl
+# The velocity components are interpolated to centroids abd vertices
+# This allows to mimic a full stagerred grid
+# The results of ViscousInclusion are bad: the pressure error increases as function of the viscosity contrast
+
+include("Stokes_Deformed_VxVy.jl")
 
 function TransformCoordinates(ξ, params)
     h = params.Amp*exp(-(ξ[1] - params.x0)^2 / params.σx^2)
@@ -25,7 +30,7 @@ end
     config = BC_template
     D_BC   = D_template
 
-    params_inc = (mm = 1.0, mc = 100, rc = 2.0, gr = 0.0, er = D_BC[1,1])
+    params_inc = (mm = 1.0, mc = 1e4, rc = 2.0, gr = 0.0, er = D_BC[1,1])
 
     # Material parameters
     materials = ( 
@@ -81,8 +86,8 @@ end
     #--------------------------------------------#
     # Stencil extent for each block matrix
     pattern = Fields(
-        Fields(@SMatrix([1 1 1; 1 1 1; 1 1 1]),                 @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([1 1 1; 1 1 1])), 
-        Fields(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]),  @SMatrix([1 1 1; 1 1 1; 1 1 1]),                @SMatrix([1 1; 1 1; 1 1])), 
+        Fields(@SMatrix([1 1 1 1 1; 1 1 1 1 1; 1 1 1 1 1; 1 1 1 1 1; 1 1 1 1 1]),     @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([1 1 1; 1 1 1; 1 1 1; 1 1 1])), 
+        Fields(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]),  @SMatrix([1 1 1 1 1; 1 1 1 1 1; 1 1 1 1 1; 1 1 1 1 1; 1 1 1 1 1]),                @SMatrix([1 1 1 1; 1 1 1 1; 1 1 1 1])), 
         Fields(@SMatrix([1 1 1; 1 1 1]),                        @SMatrix([1 1; 1 1; 1 1]),                      @SMatrix([1]))
     )
 
@@ -296,14 +301,14 @@ end
         τ0.xy .= τ.xy
         Pt0   .= Pt.c
 
-        for iter=1:1#niter
+        for iter=1:niter
 
             @printf("Iteration %04d\n", iter)
             
             #--------------------------------------------#
             # Residual check        
             @timeit to "Residual" begin
-                TangentOperator_Def!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V,   Pt, ΔPt, Jinv, type, BC, materials, phases, Δ)
+                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V,   Pt.c, ΔPt, type, BC, materials, phases, Δ)
                 ResidualContinuity2D_Def!(R, V, Pt.c, Pt0, ΔPt, τ0, 𝐷, Jinv, phases, materials, number, type, BC, nc, Δ) 
                 ResidualMomentum2D_x_Def!(R, V, Pt.c, Pt0, ΔPt, τ0, 𝐷, Jinv, phases, materials, number, type, BC, nc, Δ)
                 ResidualMomentum2D_y_Def!(R, V, Pt.c, Pt0, ΔPt, τ0, 𝐷, Jinv, phases, materials, number, type, BC, nc, Δ)
@@ -338,7 +343,7 @@ end
             # Direct-iterative solver
             fu   = -r[1:size(𝐊,1)]
             fp   = -r[size(𝐊,1)+1:end]
-            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu,  ηb=1e3, niter_l=10, ϵ_l=1e-11)
+            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:chol,  ηb=100*mean(η.c), niter_l=10, ϵ_l=1e-9)
             dx[1:size(𝐊,1)]     .= u
             dx[size(𝐊,1)+1:end] .= p
 
@@ -346,7 +351,7 @@ end
             # Line search & solution update
             @timeit to "Line search" imin = LineSearch_Def!(rvec, α, dx, R, V, Pt.c, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, Jinv, number, type, BC, materials, phases, nc, Δ)
             UpdateSolution!(V, Pt.c, α[imin]*dx, number, type, nc)
-            TangentOperator_Def!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V,   Pt, ΔPt, Jinv, type, BC, materials, phases, Δ)
+            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V,   Pt.c, ΔPt, type, BC, materials, phases, Δ)
         end
 
         # Update pressure
@@ -354,7 +359,7 @@ end
 
         #--------------------------------------------#
 
-        Pt.c .= Pt.c .- mean(Pt.c)
+        Pt.c[2:end-1,2:end-1] .= Pt.c[2:end-1,2:end-1] .- mean(Pt.c[2:end-1,2:end-1])
 
         Pt_ana = zero(Pt.c)
 
@@ -385,15 +390,26 @@ end
         fig = cm.Figure(size = (res, res), fontsize=25)
         # ----
         ax  = cm.Axis(fig[1, 1], title = "p - numerics", xlabel = "x", ylabel = "y", aspect=1.0)
-        cm.poly!(ax, pc, color = Pt.c[:], colormap = :vik, strokewidth = 0, strokecolormap = :white, colorrange=extrema(Pt.c[2:end-1,2:end-1]))#, colorrange=limits
+        field = Pt.c[2:end-1,2:end-1]
+        cm.poly!(ax, pc, color = Pt.c[:], colormap = :vik, strokewidth = 0, strokecolormap = :white, colorrange=extrema(Pt_ana))#, colorrange=limits
+        cm.Colorbar(fig[1, 2], colormap = :vik, flipaxis = true, size = 10, colorrange=extrema(Pt_ana) )    
+
+        # cm.spy!(ax, 𝐊)
         
+        # field = 1/2*(R.x[1:end-1,2:end-1].+R.x[2:end-0,2:end-1])
+        # field = Pt.c
+        # cm.heatmap!(ax, field)
+        # cm.poly!(ax, pc, color = (field)[:], colormap = :vik, strokewidth = 0, strokecolormap = :white, colorrange=extrema(Pt.c[2:end-1,2:end-1]))#, colorrange=limits
+        # # cm.poly!(ax, pc, color = 1/2*(R.y[2:end-1,1:end-1].+R.y[2:end-1,2:end])[:], colormap = :vik, strokewidth = 0, strokecolormap = :white, colorrange=extrema(Pt.c[2:end-1,2:end-1]))#, colorrange=limits
+        # cm.Colorbar(fig[1, 2], colormap = :vik, flipaxis = true, size = 10, colorrange=extrema(field) )    
+
+
         # cm.poly!(ax, pc, color = η.c[:], colormap = :vik, strokewidth = 0, strokecolormap = :white, colorrange=extrema(Pt[2:end-1,2:end-1]))#, colorrange=limits
         # cm.poly!(ax, pc, color = 1/2*(η.Vx[1:end-1,2:end-1].+η.Vx[2:end-0,2:end-1])[:], colormap = :vik, strokewidth = 0, strokecolormap = :white, colorrange=extrema(Pt.c[2:end-1,2:end-1]))#, colorrange=limits
-        cm.Colorbar(fig[1, 2], colormap = :vik, flipaxis = true, size = 10, colorrange=extrema(Pt.c[2:end-1,2:end-1]) )    
 
         # ----
         ax  = cm.Axis(fig[2, 1], title = "p - analytics", xlabel = "x", ylabel = "y", aspect=1.0)
-        cm.poly!(ax, pc, color = Pt_ana[:], colormap = :vik, strokewidth = 0, strokecolormap = :white, colorrange=extrema(Pt_ana[2:end-1,2:end-1]))
+        cm.poly!(ax, pc, color = Pt_ana[:], colormap = :vik, strokewidth = 0, strokecolormap = :white, colorrange=extrema(Pt_ana))
         cm.Colorbar(fig[2, 2], colormap = :vik, flipaxis = true, size = 10, colorrange=extrema(Pt_ana[2:end-1,2:end-1]) )    
        
         # ----
@@ -412,26 +428,15 @@ end
 let
 
     # Resolution
-    nc = (x = 51, y = 51)
+    nc = (x = 251, y = 251)
 
     # # Boundary condition templates
     BCs = [
         :free_slip,
     ]
 
-    # # Boundary deformation gradient matrix
-    # D_BCs = [
-    #     @SMatrix( [1 0; 0 -1] ),
-    # ]
-
-    # BCs = [
-    #     # :EW_periodic,
-    #     :all_Dirichlet,
-    # ]
-
     # Boundary deformation gradient matrix
     D_BCs = [
-        #  @SMatrix( [0 1; 0  0] ),
         @SMatrix( [1 0; 0 -1] ),
     ]
 

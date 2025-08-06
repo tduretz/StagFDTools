@@ -233,8 +233,8 @@ function ResidualMomentum2D_x_Def!(R, V, P, P0, ΔP, τ0, 𝐷, Jinv, phases, ma
             P_loc      = @inline SMatrix{2,3}(@inbounds        P[ii,jj] for ii in i-1:i,   jj in j-2:j  )
             ΔP_loc     = @inline SMatrix{2,3}(@inbounds       ΔP.c[ii,jj] for ii in i-1:i,   jj in j-2:j  )    
             τ0_loc     = @inline SMatrix{2,2}(@inbounds    τ0.Vy[ii,jj] for ii in i:i+1,   jj in j-1:j  )
-            # D_Vy       = @inline SMatrix{2,2}(@inbounds   1/2*(𝐷.v[ii,jj] + 𝐷.v[ii+1,jj]) for ii in i-1:i+0, jj in j-1:j-0)
-            D_Vy       = @inline SMatrix{2,2}(@inbounds     𝐷.Vy[ii,jj] for ii in i:i+1,   jj in j-1:j  )
+            D_Vy       = @inline SMatrix{2,2}(@inbounds   1/2*(𝐷.v[ii,jj] + 𝐷.v[ii+1,jj]) for ii in i-1:i+0, jj in j-1:j-0)
+            # D_Vy       = @inline SMatrix{2,2}(@inbounds     𝐷.Vy[ii,jj] for ii in i:i+1,   jj in j-1:j  )
 
             J_Vx       = @inline SMatrix{1,1}(@inbounds    Jinv.Vx[ii,jj] for ii in i:i,   jj in j:j    )
             J_Vy       = @inline SMatrix{2,2}(@inbounds    Jinv.Vy[ii,jj] for ii in i:i+1, jj in j-1:j  )
@@ -279,8 +279,8 @@ function AssembleMomentum2D_x_Def!(K, V, P, P0, ΔP, τ0, 𝐷, Jinv, phases, ma
             P_loc     .= @inline MMatrix{2,3}(@inbounds        P[ii,jj] for ii in i-1:i,   jj in j-2:j  )
             ΔP_loc     = @inline SMatrix{2,3}(@inbounds       ΔP.c[ii,jj] for ii in i-1:i,   jj in j-2:j  )
             τ0_loc     = @inline SMatrix{2,2}(@inbounds    τ0.Vy[ii,jj] for ii in i:i+1, jj in j-1:j+0)
-            # D_Vy       = @inline SMatrix{2,2}(@inbounds   1/2*(𝐷.v[ii,jj] + 𝐷.v[ii+1,jj]) for ii in i-1:i+0, jj in j-1:j-0)
-            D_Vy       = @inline SMatrix{2,2}(@inbounds     𝐷.Vy[ii,jj] for ii in i:i+1,   jj in j-1:j  )
+            D_Vy       = @inline SMatrix{2,2}(@inbounds   1/2*(𝐷.v[ii,jj] + 𝐷.v[ii+1,jj]) for ii in i-1:i+0, jj in j-1:j-0)
+            # D_Vy       = @inline SMatrix{2,2}(@inbounds     𝐷.Vy[ii,jj] for ii in i:i+1,   jj in j-1:j  )
 
             J_Vx       = @inline SMatrix{1,1}(@inbounds    Jinv.Vy[ii,jj] for ii in i:i,   jj in j:j    )
             J_Vy       = @inline SMatrix{2,2}(@inbounds    Jinv.Vy[ii,jj] for ii in i:i+1, jj in j-1:j+0)
@@ -400,8 +400,8 @@ function ResidualMomentum2D_y_Def!(R, V, P, P0, ΔP, τ0, 𝐷, Jinv, phases, ma
             P_loc      = @inline SMatrix{3,2}(@inbounds         P[ii,jj] for ii in i-2:i,   jj in j-1:j  )
             ΔP_loc     = @inline SMatrix{3,2}(@inbounds        ΔP.c[ii,jj] for ii in i-2:i,   jj in j-1:j  )
             τ0_loc     = @inline SMatrix{2,2}(@inbounds     τ0.Vx[ii,jj] for ii in i-1:i, jj in j:j+1    )
-            # D_Vx       = @inline SMatrix{2,2}(@inbounds   1/2*(𝐷.v[ii,jj] + 𝐷.v[ii,jj+1]) for ii in i-1:i, jj in j-1:j)
-            D_Vx       = @inline SMatrix{2,2}(@inbounds      𝐷.Vx[ii,jj] for ii in i-1:i, jj in j:j+1)
+            D_Vx       = @inline SMatrix{2,2}(@inbounds   1/2*(𝐷.v[ii,jj] + 𝐷.v[ii,jj+1]) for ii in i-1:i, jj in j-1:j)
+            # D_Vx       = @inline SMatrix{2,2}(@inbounds      𝐷.Vx[ii,jj] for ii in i-1:i, jj in j:j+1)
 
             J_Vy       = @inline SMatrix{1,1}(@inbounds    Jinv.Vy[ii,jj] for ii in i:i,   jj in j:j    )
             J_Vx       = @inline SMatrix{2,2}(@inbounds    Jinv.Vx[ii,jj] for ii in i-1:i, jj in j:j+1  )
@@ -447,8 +447,8 @@ function AssembleMomentum2D_y_Def!(K, V, P, P0, ΔP, τ0, 𝐷, Jinv, phases, ma
             P_loc     .= @inline MMatrix{3,2}(@inbounds         P[ii,jj] for ii in i-2:i,   jj in j-1:j  )
             ΔP_loc     = @inline SMatrix{3,2}(@inbounds      ΔP.c[ii,jj] for ii in i-2:i,   jj in j-1:j  )
             τ0_loc     = @inline SMatrix{2,2}(@inbounds     τ0.Vx[ii,jj] for ii in i-1:i, jj in j:j+1    )
-            # D_Vx       = @inline SMatrix{2,2}(@inbounds   1/2*(𝐷.v[ii,jj] + 𝐷.v[ii,jj+1]) for ii in i-1:i, jj in j-1:j)
-            D_Vx       = @inline SMatrix{2,2}(@inbounds      𝐷.Vx[ii,jj] for ii in i-1:i, jj in j:j+1)
+            D_Vx       = @inline SMatrix{2,2}(@inbounds   1/2*(𝐷.v[ii,jj] + 𝐷.v[ii,jj+1]) for ii in i-1:i, jj in j-1:j)
+            # D_Vx       = @inline SMatrix{2,2}(@inbounds      𝐷.Vx[ii,jj] for ii in i-1:i, jj in j:j+1)
 
             J_Vy       = @inline SMatrix{1,1}(@inbounds    Jinv.Vy[ii,jj] for ii in i:i,   jj in j:j    )
             J_Vx       = @inline SMatrix{2,2}(@inbounds    Jinv.Vx[ii,jj] for ii in i-1:i, jj in j:j+1  )
