@@ -149,8 +149,8 @@ function Poisson2D_print(u_loc, k, s, type_loc, bcv_loc, Δxv, Δyv)
     # Heat flux for each face based on finite differences
     qxW = -k.xx[1]*( (uC - uW) / ( (1/2)*(Δxv[1]+Δxv[2])) )
     qxE = -k.xx[2]*( (uE - uC) / ( (1/2)*(Δxv[2]+Δxv[3])) )
-    qyS = -k.yy[1]*( (uC - uS) / ( (1/2)*(Δyv[3]+Δyv[2])) )
-    qyN = -k.yy[2]*( (uN - uC) / ( (1/2)*(Δyv[2]+Δyv[1])) )
+    qyS = -k.yy[1]*( (uC - uS) / ( (1/2)*(Δyv[1]+Δyv[2])) )
+    qyN = -k.yy[2]*( (uN - uC) / ( (1/2)*(Δyv[2]+Δyv[3])) )
 
     # Return the residual function based on finite differences
     #=display("qxW")
@@ -205,8 +205,8 @@ function ResidualPoisson2D!(R, u, k, s, type, bc_val, nc, Δ)  # u_loc, s, type_
 
         # This calls the residual function
         R[i,j]    = Poisson2D_print(u_loc, k_loc, s[i,j], type_loc, bcv_loc, Δxv, Δyv)
-        display("la valeur de R[i,j] est ")
-        display(R[i,j])
+        #display("la valeur de R[i,j] est ")
+        #display(R[i,j])
     end
     #display(R)
     return nothing
