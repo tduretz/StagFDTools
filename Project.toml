@@ -5,6 +5,7 @@ version = "0.1.0"
 
 [deps]
 DifferentiationInterface = "a0c0ee7d-e4b9-4e03-894e-1c5f64a51d63"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
 ExactFieldSolutions = "2a6b1ac7-2de5-4354-bffb-bf009f6a4bef"
 ExtendableSparse = "95c220a8-a1cf-11e9-0c77-dbfce5f500b3"
@@ -24,6 +25,7 @@ UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 
 [compat]
 DifferentiationInterface = "0.6.27"
+Distributions = "0.25.120"
 ExactFieldSolutions = "0.1.6"
 ForwardDiff = "0.10.38"
 GridGeometryUtils = "0.1.7"
