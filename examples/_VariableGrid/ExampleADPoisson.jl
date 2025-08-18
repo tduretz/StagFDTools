@@ -25,6 +25,8 @@ using JLD2
 #      |             |
 # dx[1]| -- dx[2] -- | dx[3]
 
+
+
 function Poisson2D(u_loc, k, s, type_loc, bcv_loc, Δxv, Δyv)
 
     # u_loc is 3*3 matrix containing the current values of u for the whole stencil
@@ -33,71 +35,6 @@ function Poisson2D(u_loc, k, s, type_loc, bcv_loc, Δxv, Δyv)
     #             0   uS  0
     # Therefore u_loc[2,2] is the current value of uC
     uC       = u_loc[2,2]
-
-    # Boundary conditions need to be applied on every boundaries
-    # Here we define the values of the ghost nodes. For example at the west side uW needs to be defined  
-    # For example, to set a Dirichlet values, we say: 1/2*(uW + uC) = u_BC, hence uW = 2*u_BC - uC
-    # West
-    if type_loc[1,2] === :Dirichlet
-        #uW = (1/Δxv[1])*((2*Δxv[1])*bcv_loc[1,2]-Δxv[2]*uC)
-        uW = (1/Δxv[1])*((Δxv[1]+Δxv[2])*bcv_loc[1,2]-Δxv[2]*uC)
-    elseif type_loc[1,2] === :Neumann
-        uW = uC + (1/2)*bcv_loc[1,2]*(Δxv[1]+Δxv[2])
-    elseif type_loc[1,2] === :periodic || type_loc[1,2] === :in
-        uW = u_loc[1,2]
-    end
-
-    # East
-    if type_loc[3,2] === :Dirichlet
-        #uE = (1/Δxv[3])*(2*Δxv[3]*bcv_loc[3,2]-Δxv[2]*uC)
-        uE = (1/Δxv[3])*((Δxv[3]+Δxv[2])*bcv_loc[3,2]-Δxv[2]*uC)
-    elseif type_loc[3,2] === :Neumann
-        uE = uC - (1/2)*bcv_loc[3,2]*(Δxv[2]+Δxv[3])
-    elseif type_loc[3,2] === :periodic || type_loc[3,2] === :in
-        uE = u_loc[3,2]
-    end
-
-    # North
-    if type_loc[2,1] === :Dirichlet
-        #uN = (1/Δyv[1])*(2*Δyv[1]*bcv_loc[2,1]-Δyv[2]*uC)
-        uN = (1/Δyv[1])*((Δyv[1]+Δyv[2])*bcv_loc[2,1]-Δyv[2]*uC)
-    elseif type_loc[2,1] === :Neumann
-        uN = uC + (1/2)*bcv_loc[2,1]*(Δyv[1]+Δyv[2])
-    elseif type_loc[2,1] === :periodic || type_loc[2,1] === :in
-        uN = u_loc[2,1]
-    end
-
-    # South
-    if type_loc[2,3] === :Dirichlet
-        #uS = (1/Δyv[3])*(2*Δyv[3]*bcv_loc[2,3]-Δyv[2]*uC)
-        uS = (1/Δyv[3])*((Δyv[3]+Δyv[2])*bcv_loc[2,3]-Δyv[2]*uC)
-    elseif type_loc[2,3] === :Neumann
-        uS = uC - (1/2)*bcv_loc[2,3]*(Δyv[3]+Δyv[2])
-    elseif type_loc[2,3] === :periodic || type_loc[2,3] === :in
-        uS = u_loc[2,3]
-    end
-
-    # Heat flux for each face based on finite differences
-    qxW = -k.xx[1]*(uC - uW)/((1/2)*(Δxv[1]+Δxv[2]))
-    qxE = -k.xx[2]*(uE - uC)/((1/2)*(Δxv[2]+Δxv[3]))
-    qyS = -k.yy[1]*(uS - uC)/((1/2)*(Δyv[3]+Δyv[2]))
-    qyN = -k.yy[2]*(uC - uN)/((1/2)*(Δyv[2]+Δyv[1]))
-
-    # Return the residual function based on finite differences
-    return -(-(qxE - qxW)/Δxv[2] - (qyS - qyN)/Δyv[2] + s) *(Δxv[1]+Δxv[2]+Δxv[3])*(Δyv[1]+Δyv[2]+Δyv[3])
-end
-
-
-function Poisson2D_print(u_loc, k, s, type_loc, bcv_loc, Δxv, Δyv)
-
-    # u_loc is 3*3 matrix containing the current values of u for the whole stencil
-    #             0   uN  0
-    #     u_loc = uW  uC  uE
-    #             0   uS  0
-    # Therefore u_loc[2,2] is the current value of uC
-    uC       = u_loc[2,2]
-    #display("uC")
-    #display(uC)
     
     # Boundary conditions need to be applied on every boundaries
     # Here we define the values of the ghost nodes. For example at the west side uW needs to be defined  
@@ -105,8 +42,6 @@ function Poisson2D_print(u_loc, k, s, type_loc, bcv_loc, Δxv, Δyv)
     # West
     if type_loc[1,2] === :Dirichlet 
         uW = (1/Δxv[1])*((Δxv[1]+Δxv[2])*bcv_loc[1,2]-Δxv[2]*uC)
-        #display("uW")
-        #display(uW)
     elseif type_loc[1,2] === :Neumann
         uW = uC + (1/2)*bcv_loc[1,2]*(Δxv[1]+Δxv[2])
     elseif type_loc[1,2] === :periodic || type_loc[1,2] === :in
@@ -116,30 +51,24 @@ function Poisson2D_print(u_loc, k, s, type_loc, bcv_loc, Δxv, Δyv)
     # East
     if type_loc[3,2] === :Dirichlet
         uE = (1/Δxv[3])*((Δxv[3]+Δxv[2])*bcv_loc[3,2]-Δxv[2]*uC)
-        #display("uE")
-        #display(uE)
     elseif type_loc[3,2] === :Neumann
         uE = uC - (1/2)*bcv_loc[3,2]*(Δxv[2]+Δxv[3])
     elseif type_loc[3,2] === :periodic || type_loc[3,2] === :in
         uE = u_loc[3,2]
     end
 
-    # North
+    # South
     if type_loc[2,1] === :Dirichlet
         uS = (1/Δyv[1])*((Δyv[1]+Δyv[2])*bcv_loc[2,1]-Δyv[2]*uC)
-        #display("uS")
-        #display(uS)
     elseif type_loc[2,1] === :Neumann
         uS = uC + (1/2)*bcv_loc[2,1]*(Δyv[1]+Δyv[2])
     elseif type_loc[2,1] === :periodic || type_loc[2,1] === :in
         uS = u_loc[2,1]
     end
 
-    # South
+    # North
     if type_loc[2,3] === :Dirichlet
         uN = (1/Δyv[3])*((Δyv[3]+Δyv[2])*bcv_loc[2,3]-Δyv[2]*uC)
-        #display("uN")
-        #display(uN)
     elseif type_loc[2,3] === :Neumann
         uN = uC - (1/2)*bcv_loc[2,3]*(Δyv[3]+Δyv[2])
     elseif type_loc[2,3] === :periodic || type_loc[2,3] === :in
@@ -153,18 +82,7 @@ function Poisson2D_print(u_loc, k, s, type_loc, bcv_loc, Δxv, Δyv)
     qyN = -k.yy[2]*( (uN - uC) / ( (1/2)*(Δyv[2]+Δyv[3])) )
 
     # Return the residual function based on finite differences
-    #=display("qxW")
-    display(qxW)
-    display("qxE")
-    display(qxE)
-    display("qyS")
-    display(qyS)
-    display("qyN")
-    display(qyN)
-    display("diff")
-    print((-(qxE - qxW)/Δxv[2] - (qyS - qyN)/Δyv[2] + s)) =# #*(Δxv[1]+Δxv[2]+Δxv[3])*(Δyv[1]+Δyv[2]+Δyv[3]))
-    #return -(-(qxE - qxW)/Δxv[2] - (qyS - qyN)/Δyv[2] + s) * (Δxv[1]+Δxv[2]+Δxv[3])*(Δyv[1]+Δyv[2]+Δyv[3])
-    return -(-(qxE - qxW)/Δxv[2] - (qyN - qyS)/Δyv[2] + s) * (Δxv[1]+Δxv[2]+Δxv[3])*(Δyv[1]+Δyv[2]+Δyv[3])
+    return -(-(qxE - qxW)/Δxv[2] - (qyN - qyS)/Δyv[2] + s) * (Δxv[2]*Δyv[2])
 end
 
 
@@ -204,53 +122,14 @@ function ResidualPoisson2D!(R, u, k, s, type, bc_val, nc, Δ)  # u_loc, s, type_
         type_loc  = SMatrix{3,3}(  type.u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
 
         # This calls the residual function
-        R[i,j]    = Poisson2D_print(u_loc, k_loc, s[i,j], type_loc, bcv_loc, Δxv, Δyv)
-        #display("la valeur de R[i,j] est ")
-        #display(R[i,j])
+        R[i,j]    = Poisson2D(u_loc, k_loc, s[i,j], type_loc, bcv_loc, Δxv, Δyv)
     end
-    #display(R)
-    return nothing
-end
 
-# The 2 functions below do the same thing. They compute the partial derivatives of the residual function and puts the coefficient in the system matrix.
-# One function does it with ForwardDiff: https://github.com/JuliaDiff/ForwardDiff.jl
-# The other does it with Enzyme: https://github.com/EnzymeAD/Enzyme.jl
-
-# This function you can skip since we're going to use the second option
-function AssemblyPoisson_ForwardDiff!(K, u, k, s, number, type, pattern, bc_val, nc, Δxv, Δyv)
-
-    shift    = (x=1, y=1)
-
-    k_loc_shear = @SVector(zeros(2))
-
-    for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
-        
-        num_loc   = SMatrix{3,3}(number.u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1) .* pattern.u.u
-        u_loc     = SMatrix{3,3}(u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        k_loc_xx  = @SVector [k.x.xx[i-1,j-1], k.x.xx[i,j-1]]
-        k_loc_yy  = @SVector [k.y.yy[i-1,j-1], k.y.yy[i-1,j]]
-        k_loc     = (xx = k_loc_xx,    xy = k_loc_shear,
-                     yx = k_loc_shear, yy = k_loc_yy)
-        bcv_loc   = SMatrix{3,3}(bc_val.u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        type_loc  = SMatrix{3,3}(  type.u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
- 
-        ∂R∂u = ForwardDiff.gradient(
-            x -> Poisson2D(x, k_loc, s[i,j], type_loc, bcv_loc, Δxv, Δyv), 
-            u_loc
-        )
-
-        num_ij = number.u[i,j]
-        for jj in axes(num_loc,2), ii in axes(num_loc,1)
-            if num_loc[ii,jj] > 0
-                K.u.u[num_ij, num_loc[ii,jj]] = ∂R∂u[ii,jj] 
-            end
-        end
-    end
     return nothing
 end
 
 # Computation of the partial derivatives of the residual function. Sets the coefficient in the system matrix.
-function AssemblyPoisson_Enzyme!(K, u, k, s, number, type, pattern, bc_val, nc, Δxv, Δyv)
+function AssemblyPoisson_Enzyme!(K, u, k, s, number, type, pattern, bc_val, nc, Δ)
 
     # This is a local matrix that stores the partial derivatives.
      
@@ -270,6 +149,11 @@ function AssemblyPoisson_Enzyme!(K, u, k, s, number, type, pattern, bc_val, nc, 
 
     # Loop over the cells in 2D
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
+
+        # vecteur dx
+        Δxv = @SVector [ Δ.x[i-1], Δ.x[i], Δ.x[i+1] ]
+        # vecteur dy
+        Δyv = @SVector [ Δ.y[j-1], Δ.y[j], Δ.y[j+1] ]
 
         # This is a 3*3 matrix that contains the number of each equation in the stencil (each cell has one corresponding value of u, which has a unique equation number)
         num_loc   = SMatrix{3,3}(number.u[ii,jj] for ii in i-1:i+1, jj in j-1:j+1) .* pattern.u.u
@@ -322,7 +206,7 @@ let
     to = TimerOutput()
 
     # Resolution in FD cells
-    nc = (x = 3, y = 3)
+    nc = (x = 10, y = 10)
 
     # Get ranges
     ranges = Ranges(nc)
@@ -333,17 +217,17 @@ let
     type.u[2:end-1,2:end-1].= :in                   # inside nodes are all type :in    
     type.u[1,:]            .= :Dirichlet            # one BC type is :Dirichlet # West
     type.u[end,:]          .= :Dirichlet            # East
-    type.u[:,1]            .= :Dirichlet            # South
-    type.u[:,end]          .= :Dirichlet            # North
+    type.u[:,1]            .= :Neumann #Dirichlet            # South
+    type.u[:,end]          .= :Neumann #Dirichlet            # North
     
 
     # Define values of the boundary conditions
     bc_val = Fields( fill(0., (nc.x+2, nc.y+2)) )   # Achtung: geist nodes
     bc_val.u        .= zeros(nc.x+2, nc.y+2)        # useless ?!
     bc_val.u[1,:]   .= 1.0                          # Boundary value is 1.0 and this will be a Dirichlet (u at West = 1) # West
-    bc_val.u[end,:] .= 1.0                          # East
+    bc_val.u[end,:] .= 2.0                          # East
     bc_val.u[:,1]   .= 1.0                          # South
-    bc_val.u[:,end] .= 1.0                          # North
+    bc_val.u[:,end] .= 20.0                          # North
 
     # 5-point stencil, this is the definition of the stencil block. 
     # It basically states which points are being included in the stencil
@@ -385,39 +269,35 @@ let
     # Définir le maillage variable (gaussienne, sinh...) 
     true_variable_grid = true
     if true_variable_grid
-        μ = ( x = 0., y = 0.)
-        σ = ( x = 0.8, y = 0.8)
+        
+        μ = ( x = 0.0, y = 0.0)
+        σ = ( x = 0.2, y = 0.2)
         inflimit = (x = -L/2, y = -L/2)
-        suplimit = (x = L/2, y = L/2)
+        suplimit = (x =  L/2, y =  L/2)
 
         # nodes
-        xv = normal_linspace_interval(inflimit.x, suplimit.x, μ.x, σ.x, nc.x+3)
-        yv = normal_linspace_interval(inflimit.y, suplimit.y, μ.y, σ.y, nc.y+3)
-        display(xv)
-        display(yv)
+        xv_in = normal_linspace_interval(inflimit.x, suplimit.x, μ.x, σ.x, nc.x+1)
+        yv_in = normal_linspace_interval(inflimit.y, suplimit.y, μ.y, σ.y, nc.y+1)
 
         # spaces between nodes
         Δ = (x = zeros(nc.x+2), y = zeros(nc.y+2)) # nb cells
-        for i in 1:nc.x+2
-            Δ.x[i] = xv[i+1]-xv[i]
-        end
-        for i in 1:nc.y+2
-            Δ.y[i] = yv[i+1]-yv[i]
-        end
-        display(Δ.x)
-        display(Δ.y)
+        Δ.x[2:end-1] = diff(xv_in)
+        Δ.y[2:end-1] = diff(yv_in)
+        Δ.x[1]   = Δ.x[2]
+        Δ.x[end] = Δ.x[end-1]
+        Δ.y[1]   = Δ.y[2]
+        Δ.y[end] = Δ.y[end-1]
 
-        # cells
-        xc = zeros(nc.x+2)
-        for i in 1:nc.x+2
-            xc[i] = xv[i] + Δ.x[i]/2
-        end
-        yc = zeros(nc.y+2)
-        for j in 1:nc.y+2
-            yc[j] = xv[j] + Δ.y[j]/2
-        end
-        display(xc)
-        display(yc)
+        xv  = zeros(nc.x+3)
+        yv  = zeros(nc.y+3)
+        xv[2:end-1] .= xv_in
+        xv[1]   = xv[2] - Δ.x[1]
+        xv[end] = xv[end-1] + Δ.x[end]
+        yv[2:end-1] .= yv_in
+        yv[1]   = yv[2] - Δ.y[1]
+        yv[end] = yv[end-1] + Δ.y[end]
+        xc = 0.5*(xv[2:end] + xv[1:end-1])
+        yc = 0.5*(yv[2:end] + yv[1:end-1])
 
     else
 
@@ -441,21 +321,14 @@ let
     # Residual check: div( q ) - s = r
     @timeit to "Residual" ResidualPoisson2D!(r, u, k, s, type, bc_val, nc, Δ) 
     @info norm(r)/sqrt(length(r))
-    show(IOContext(stdout, :compact => false), r)
-    
-    @info "Symmetry résidu "
-    @show norm(r - r')
 
     # Sparse matrix assembly
     nu  = maximum(number.u)
     M   = Fields( Fields( ExtendableSparseMatrix(nu, nu) ))
     
     @timeit to "Assembly Enzyme" begin
-        AssemblyPoisson_Enzyme!(M, u, k, s, number, type, pattern, bc_val, nc, Δ.x, Δ.y)
+        AssemblyPoisson_Enzyme!(M, u, k, s, number, type, pattern, bc_val, nc, Δ)
     end
-    #@timeit to "Assembly ForwardDiff" begin
-    #    AssemblyPoisson_ForwardDiff!(M, u, k, s, number, type, pattern, bc_val, nc, Δ.x, Δ.y)
-    #end
 
     @info "Symmetry"
     @show norm(M.u.u - M.u.u')
@@ -468,28 +341,13 @@ let
     # Residual check
     @timeit to "Residual" ResidualPoisson2D!(r, u, k, s, type, bc_val, nc, Δ)
     @info norm(r)/sqrt(length(r))
-    
-    @info "Symmetry résidu"
-    @show norm(r - r')
-    
-    #=save("u_variable.jld", "u", u)
-    u_stag = load("u_staggered_dir.jld")
-    u_var = load("u_variable.jld")
-    if u_stag == u_var
-        display("Files are the same")
-    else
-        display("Files are different")
-    end=#
-    
-    p = spy(r, title="residu")
-    display(plot(p))
-    sleep(4)
+
     # Visualization
     p1 = heatmap(xc[inx], yc[iny], u[inx,iny]', aspect_ratio=1, xlim=extrema(xc), title="u")
-    qx = -diff(u[inx,iny],dims=1)/Δ.x[1]
-    qy = -diff(u[inx,iny],dims=2)/Δ.y[1]
-    p2 = heatmap(xc[2:end-2], yc[iny], qx', aspect_ratio=1, xlim=extrema(xc), title="qx")
-    p3 = heatmap(xc[inx], yc[2:end-2], qy', aspect_ratio=1, xlim=extrema(xc), title="qy")
+    qx = -diff(u[:,iny],dims=1)/Δ.x[1]
+    qy = -diff(u[inx,:],dims=2)/Δ.y[1]
+    p2 = heatmap(xv[2:end-1], yc[iny], qx', aspect_ratio=1, xlim=extrema(xc), title="qx")
+    p3 = heatmap(xc[inx], yv[2:end-1], qy', aspect_ratio=1, xlim=extrema(xc), title="qy")
     p4 = spy(M.u.u, title="M")
     display(plot(p1, p2, p3, p4))
     sleep(4)
