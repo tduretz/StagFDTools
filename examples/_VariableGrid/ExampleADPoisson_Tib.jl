@@ -39,7 +39,7 @@ function Poisson2D(u_loc, k, s, type_loc, bcv_loc, Δxv, Δyv)
     # For example, to set a Dirichlet values, we say: 1/2*(uW + uC) = u_BC, hence uW = 2*u_BC - uC
     # West
     if type_loc[1,2] === :Dirichlet 
-        uW = bcv_loc[1,2] #(1/Δxv[1])*((Δxv[1]+Δxv[2])*bcv_loc[1,2]-Δxv[2]*uC)
+        uW = (1/Δxv[1])*((Δxv[1]+Δxv[2])*bcv_loc[1,2]-Δxv[2]*uC)
     elseif type_loc[1,2] === :Neumann
         uW = uC + (1/2)*bcv_loc[1,2]*(Δxv[1]+Δxv[2])
     elseif type_loc[1,2] === :periodic || type_loc[1,2] === :in
@@ -48,7 +48,7 @@ function Poisson2D(u_loc, k, s, type_loc, bcv_loc, Δxv, Δyv)
 
     # East
     if type_loc[3,2] === :Dirichlet
-        uE = bcv_loc[3,2] #(1/Δxv[3])*((Δxv[3]+Δxv[2])*bcv_loc[3,2]-Δxv[2]*uC)
+        uE = (1/Δxv[3])*((Δxv[3]+Δxv[2])*bcv_loc[3,2]-Δxv[2]*uC)
     elseif type_loc[3,2] === :Neumann
         uE = uC - (1/2)*bcv_loc[3,2]*(Δxv[2]+Δxv[3])
     elseif type_loc[3,2] === :periodic || type_loc[3,2] === :in
@@ -57,7 +57,7 @@ function Poisson2D(u_loc, k, s, type_loc, bcv_loc, Δxv, Δyv)
 
     # South
     if type_loc[2,1] === :Dirichlet
-        uS = bcv_loc[2,1] #(1/Δyv[1])*((Δyv[1]+Δyv[2])*bcv_loc[2,1]-Δyv[2]*uC)
+        uS = (1/Δyv[1])*((Δyv[1]+Δyv[2])*bcv_loc[2,1]-Δyv[2]*uC)
     elseif type_loc[2,1] === :Neumann
         uS = uC + (1/2)*bcv_loc[2,1]*(Δyv[1]+Δyv[2])
     elseif type_loc[2,1] === :periodic || type_loc[2,1] === :in
@@ -66,7 +66,7 @@ function Poisson2D(u_loc, k, s, type_loc, bcv_loc, Δxv, Δyv)
 
     # North
     if type_loc[2,3] === :Dirichlet
-        uN = bcv_loc[2,3]#(1/Δyv[3])*((Δyv[3]+Δyv[2])*bcv_loc[2,3]-Δyv[2]*uC)
+        uN = (1/Δyv[3])*((Δyv[3]+Δyv[2])*bcv_loc[2,3]-Δyv[2]*uC)
     elseif type_loc[2,3] === :Neumann
         uN = uC - (1/2)*bcv_loc[2,3]*(Δyv[3]+Δyv[2])
     elseif type_loc[2,3] === :periodic || type_loc[2,3] === :in
@@ -315,12 +315,7 @@ let
         yc  = LinRange(-L/2-Δ.y[1]/2, L/2+Δ.y[end]/2, nc.y+2)
         yv  = LinRange(-L/2-Δ.y[1], L/2+Δ.y[end], nc.x+3)
     end
-
-    # DEBUG
-    display(Δ.x .- Δ.y)
-    display(xc .- yc)
-    display(xv .- yv)
-
+    
     # checker la cohérence:          |                   | 
     #                              xv[1]               xv[2]
     #                                |------ dx[1] ----- | 
