@@ -1,4 +1,4 @@
-using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf
+using StagFDTools, StagFDTools.StokesDeformed, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
@@ -7,12 +7,10 @@ using ExactFieldSolutions
 import CairoMakie as cm
 import CairoMakie.Makie.GeometryBasics as geom
 
-# This version uses routines from Stokes_Deformed.jl
+# This version uses routines from Stokesormed.jl
 # The velocity components are interpolated to centroids abd vertices
 # This allows to mimic a full stagerred grid
 # The results of ViscousInclusion are bad: the pressure error increases as function of the viscosity contrast
-
-include("Stokes_Deformed_VxVy.jl")
 
 function TransformCoordinates(ξ, params)
     h = params.Amp*exp(-(ξ[1] - params.x0)^2 / params.σx^2)
@@ -37,7 +35,7 @@ end
         g    = [0.0;  -0.0  ],
         n    = [1.0    1.0  ],
         η0   = [1.0    100  ],
-        ρ0   = [1.0    1.1  ], 
+        ρ0   = [1.0    1.0  ], 
         G    = [1e6    1e6  ],
         C    = [150    150  ],
         ϕ    = [30.    30.  ],
@@ -129,6 +127,7 @@ end
     Dc      = [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)]
     Dv      = [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)]
     𝐷       = (c=Dc, v=Dv, Vx=D_Vx, Vy=D_Vy)
+    ρ       = (c = zeros(size_c...),)
 
     D_ctl_Vx= [@MMatrix(zeros(4,4)) for _ in axes(V.x,1), _ in axes(V.x,2)]
     D_ctl_Vy= [@MMatrix(zeros(4,4)) for _ in axes(V.y,1), _ in axes(V.y,2)]
@@ -138,8 +137,9 @@ end
     phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...), Vx= ones(Int64, size_x...), Vy= ones(Int64, size_y...))  # phase on velocity points
 
     # Reference domain
-    𝜉  = (min=-3.0, max=3.0)
-    𝜂  = (min=-5.0, max=0.0)
+    L = 6.0
+    𝜉  = (min=-L/2, max=L/2)
+    𝜂  = (min=-L, max=0.0)
     Δ  = (ξ=(𝜉.max-𝜉.min)/nc.x, η=(𝜂.max-𝜂.min)/nc.y,           x=(𝜉.max-𝜉.min)/nc.x, y=(𝜂.max-𝜂.min)/nc.y, t = 1.0)
     ξv = LinRange(𝜉.min-Δ.ξ,   𝜉.max+Δ.ξ,   nc.x+3)
     ηv = LinRange(𝜂.min-Δ.η,   𝜂.max+Δ.η,   nc.y+3)
@@ -150,9 +150,9 @@ end
 
     # Reference coordinates ξ
     ξ = (
-        v =  [@MVector(zeros(2)) for _ in axes(ξv,1), _ in axes(ηv,1)],
-        c =  [@MVector(zeros(2)) for _ in axes(ξc,1), _ in axes(ηc,1)],
-        Vx =  [@MVector(zeros(2)) for _ in axes(ξv,1), _ in axes(ηVx,1)],
+        v  =  [@MVector(zeros(2)) for _ in axes(ξv,1),  _ in axes(ηv,1)],
+        c  =  [@MVector(zeros(2)) for _ in axes(ξc,1),  _ in axes(ηc,1)],
+        Vx =  [@MVector(zeros(2)) for _ in axes(ξv,1),  _ in axes(ηVx,1)],
         Vy =  [@MVector(zeros(2)) for _ in axes(ξVy,1), _ in axes(ηv,1)],
     )
     for I in CartesianIndices(ξ.v)
@@ -309,9 +309,9 @@ end
             # Residual check        
             @timeit to "Residual" begin
                 TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V,   Pt.c, ΔPt, type, BC, materials, phases, Δ)
-                ResidualContinuity2D_Def!(R, V, Pt.c, Pt0, ΔPt, τ0, 𝐷, Jinv, phases, materials, number, type, BC, nc, Δ) 
-                ResidualMomentum2D_x_Def!(R, V, Pt.c, Pt0, ΔPt, τ0, 𝐷, Jinv, phases, materials, number, type, BC, nc, Δ)
-                ResidualMomentum2D_y_Def!(R, V, Pt.c, Pt0, ΔPt, τ0, 𝐷, Jinv, phases, materials, number, type, BC, nc, Δ)
+                ResidualContinuity2D!(R, V, Pt.c, Pt0, ΔPt, τ0, 𝐷, Jinv, phases, materials, number, type, BC, nc, Δ) 
+                ResidualMomentum2D_x!(R, V, Pt.c, Pt0, ΔPt, τ0, 𝐷, Jinv, phases, materials, number, type, BC, nc, Δ)
+                ResidualMomentum2D_y!(R, V, Pt.c, Pt0, ΔPt, τ0, 𝐷, Jinv, phases, materials, number, type, BC, nc, Δ)
             end
 
             err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
@@ -326,9 +326,9 @@ end
             #--------------------------------------------#
             # Assembly
             @timeit to "Assembly" begin
-                AssembleContinuity2D_Def!(M, V, Pt.c, Pt0, ΔPt, τ0, 𝐷_ctl, Jinv, phases, materials, number, pattern, type, BC, nc, Δ)
-                AssembleMomentum2D_x_Def!(M, V, Pt.c, Pt0, ΔPt, τ0, 𝐷_ctl, Jinv, phases, materials, number, pattern, type, BC, nc, Δ)
-                AssembleMomentum2D_y_Def!(M, V, Pt.c, Pt0, ΔPt, τ0, 𝐷_ctl, Jinv, phases, materials, number, pattern, type, BC, nc, Δ)
+                AssembleContinuity2D!(M, V, Pt.c, Pt0, ΔPt, τ0, 𝐷_ctl, Jinv, phases, materials, number, pattern, type, BC, nc, Δ)
+                AssembleMomentum2D_x!(M, V, Pt.c, Pt0, ΔPt, τ0, 𝐷_ctl, Jinv, phases, materials, number, pattern, type, BC, nc, Δ)
+                AssembleMomentum2D_y!(M, V, Pt.c, Pt0, ΔPt, τ0, 𝐷_ctl, Jinv, phases, materials, number, pattern, type, BC, nc, Δ)
             end
     
             #--------------------------------------------# 
@@ -344,12 +344,14 @@ end
             fu   = -r[1:size(𝐊,1)]
             fp   = -r[size(𝐊,1)+1:end]
             u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:chol,  ηb=100*mean(η.c), niter_l=10, ϵ_l=1e-9)
+            # u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu,  ηb=100*mean(η.c), niter_l=10, ϵ_l=1e-9)
+
             dx[1:size(𝐊,1)]     .= u
             dx[size(𝐊,1)+1:end] .= p
 
             #--------------------------------------------#
             # Line search & solution update
-            @timeit to "Line search" imin = LineSearch_Def!(rvec, α, dx, R, V, Pt.c, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, Jinv, number, type, BC, materials, phases, nc, Δ)
+            @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt.c, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, Jinv, number, type, BC, materials, phases, nc, Δ)
             UpdateSolution!(V, Pt.c, α[imin]*dx, number, type, nc)
             TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V,   Pt.c, ΔPt, type, BC, materials, phases, Δ)
         end
@@ -408,7 +410,7 @@ end
 let
 
     # Resolution
-    nc = (x = 51, y = 51)
+    nc = (x = 50, y = 50)
 
     # # Boundary condition templates
     BCs = [
@@ -417,7 +419,9 @@ let
 
     # Boundary deformation gradient matrix
     D_BCs = [
-        @SMatrix( [0 0; 0 -0] ),
+        # @SMatrix( [1 0; 0 -1] ),
+        @SMatrix( [1 0; 0 -1] ),
+
     ]
 
     # Run them all
@@ -426,3 +430,4 @@ let
         main(nc, BCs[iBC], D_BCs[iBC])
     end
 end
+
