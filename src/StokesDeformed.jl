@@ -455,11 +455,7 @@ end
 
 function SetBCVy1(Vy, typey, bcy, Δ)
 
-    if size(Vy, 1) > 3
-        imax = 2
-    else
-        imax = 1
-    end
+    imax = size(Vy, 1) > 3 ? 2 : 1
 
     MVy = MMatrix(Vy)
     # E/W
