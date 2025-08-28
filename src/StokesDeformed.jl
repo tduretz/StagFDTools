@@ -311,7 +311,7 @@ function Numbering!(N, type, nc)
         N.Pt[:,1]   .= N.Pt[:,end-1]
         N.Pt[:,end] .= N.Pt[:,2]
     end
-    noisy ? printxy(N.Pt) : nothing
+    noisy && printxy(N.Pt)
 
     neq = maximum(N.Pt)
 end
