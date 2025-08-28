@@ -835,7 +835,7 @@ function LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, 
         V.y .= Vi.y
         Pt  .= Pti
         UpdateSolution!(V, Pt, α[i].*dx, number, type, nc)
-        TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
+        TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, Jinv, type, BC, materials, phases, Δ)
         ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, Jinv, phases, materials, number, type, BC, nc, Δ) 
         ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, Jinv, phases, materials, number, type, BC, nc, Δ)
         ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, Jinv, phases, materials, number, type, BC, nc, Δ)
@@ -848,31 +848,39 @@ function LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, 
     return imin
 end
 
-function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, ΔPt, type, BC, materials, phases, Δ)
+function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, ΔPt, J, type, BC, materials, phases, Δ)
 
     _ones = @SVector ones(4)
+    _Δξ = 1 / Δ.ξ
+    _Δη = 1 / Δ.η
+    _Δt = 1 / Δ.t
 
     # Loop over centroids
-    for j=1:size(ε̇.xx,2)-0, i=1:size(ε̇.xx,1)-0
+    for j=2:size(ε̇.xx,2)-1, i=2:size(ε̇.xx,1)-1
         if (i==1 && j==1) || (i==size(ε̇.xx,1) && j==1) || (i==1 && j==size(ε̇.xx,2)) || (i==size(ε̇.xx,1) && j==size(ε̇.xx,2))
             # Avoid the outer corners - nothing is well defined there ;)
         else
-            Vx     = SMatrix{2,3}(      V.x[ii,jj] for ii in i:i+1,   jj in j:j+2)
-            Vy     = SMatrix{3,2}(      V.y[ii,jj] for ii in i:i+2,   jj in j:j+1)
-            bcx    = SMatrix{2,3}(    BC.Vx[ii,jj] for ii in i:i+1,   jj in j:j+2)
-            bcy    = SMatrix{3,2}(    BC.Vy[ii,jj] for ii in i:i+2,   jj in j:j+1)
-            typex  = SMatrix{2,3}(  type.Vx[ii,jj] for ii in i:i+1,   jj in j:j+2)
-            typey  = SMatrix{3,2}(  type.Vy[ii,jj] for ii in i:i+2,   jj in j:j+1)
-            τxy0   = SMatrix{2,2}(    τ0.xy[ii,jj] for ii in i:i+1,   jj in j:j+1)
+            Vx     = @inline SMatrix{4,3}(@inbounds      V.x[ii,jj] for ii in i-1:i+2,   jj in j:j+2)
+            Vy     = @inline SMatrix{3,4}(@inbounds      V.y[ii,jj] for ii in i:i+2,   jj in j-1:j+2)
+            bcx    = @inline SMatrix{4,3}(@inbounds    BC.Vx[ii,jj] for ii in i-1:i+2,   jj in j:j+2)
+            bcy    = @inline SMatrix{3,4}(@inbounds    BC.Vy[ii,jj] for ii in i:i+2,   jj in j-1:j+2)
+            typex  = @inline SMatrix{4,3}(@inbounds  type.Vx[ii,jj] for ii in i-1:i+2,   jj in j:j+2)
+            typey  = @inline SMatrix{3,4}(@inbounds  type.Vy[ii,jj] for ii in i:i+2,   jj in j-1:j+2)
+            τxy0   = @inline SMatrix{2,2}(@inbounds    τ0.xy[ii,jj] for ii in i:i+1,   jj in j:j+1)
+
+            J_c    = @inline SMatrix{1,1}(@inbounds      J.c[ii,jj] for ii in i:i,   jj in j:j  )
+            J_v    = @inline SMatrix{2,2}(@inbounds      J.v[ii,jj] for ii in i:i+1,   jj in j:j+1  )
 
             Vx = SetBCVx1(Vx, typex, bcx, Δ)
             Vy = SetBCVy1(Vy, typey, bcy, Δ)
+            V̄x = av(Vx)
+            V̄y = av(Vy)
 
-            Dxx = ∂x_inn(Vx) / Δ.x 
-            Dyy = ∂y_inn(Vy) / Δ.y 
-            Dxy = ∂y(Vx) / Δ.y
-            Dyx = ∂x(Vy) / Δ.x
-            
+            Dxx = inn(∂x(Vx)) .* _Δξ .* getindex.(J_c, 1, 1) .+ ∂y_inn(V̄x)  .* _Δη .* getindex.(J_c, 1, 2)  # (1, 1)
+            Dyy = ∂x_inn(V̄y)  .* _Δξ .* getindex.(J_c, 2, 1) .+ inn(∂y(Vy)) .* _Δη .* getindex.(J_c, 2, 2)  # (1, 1)
+            Dxy = ∂x(V̄x)      .* _Δξ .* getindex.(J_v, 2, 1) .+ ∂y_inn(Vx)  .* _Δη .* getindex.(J_v, 2, 2)  # (2, 2)  
+            Dyx = ∂x_inn(Vy)  .* _Δξ .* getindex.(J_v, 1, 1) .+ ∂y(V̄y)      .* _Δη .* getindex.(J_v, 1, 2)  # (2, 2)
+
             Dkk = Dxx .+ Dyy
             ε̇xx = @. Dxx - Dkk ./ 3
             ε̇yy = @. Dyy - Dkk ./ 3
@@ -880,12 +888,12 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, ΔPt,
             ε̇̄xy = av(ε̇xy)
         
             # Visco-elasticity
-            G     = materials.G[phases.c[i,j]]
-            τ̄xy0  = av(τxy0)
-            ε̇vec  = @SVector([ε̇xx[1]+τ0.xx[i,j]/(2*G[1]*Δ.t), ε̇yy[1]+τ0.yy[i,j]/(2*G[1]*Δ.t), ε̇̄xy[1]+τ̄xy0[1]/(2*G[1]*Δ.t), Pt[i,j]])
+            G    = materials.G[phases.c[i,j]]
+            τ̄xy0 = av(τxy0)
+            ε̇vec = @SVector([ε̇xx[1]+τ0.xx[i,j]/(2*G[1]*Δ.t), ε̇yy[1]+τ0.yy[i,j]/(2*G[1]*Δ.t), ε̇̄xy[1]+τ̄xy0[1]/(2*G[1]*Δ.t), Pt[i,j]])
 
             # Tangent operator used for Newton Linearisation
-            jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector!, ε̇vec, Const(materials), Const(phases.c[i,j]), Const(Δ))
+            jac  = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector!, ε̇vec, Const(materials), Const(phases.c[i,j]), Const(Δ))
             
             # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
             @views 𝐷_ctl.c[i,j][:,1] .= jac.derivs[1][1][1]
@@ -909,24 +917,29 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, ΔPt,
     end
 
     # Loop over vertices
-    for j=1:size(ε̇.xy,2)-2, i=1:size(ε̇.xy,1)-2
-        Vx     = SMatrix{3,2}(      V.x[ii,jj] for ii in i:i+2,   jj in j+1:j+2)
-        Vy     = SMatrix{2,3}(      V.y[ii,jj] for ii in i+1:i+2, jj in j:j+2  )
-        bcx    = SMatrix{3,2}(    BC.Vx[ii,jj] for ii in i:i+2,   jj in j+1:j+2)
-        bcy    = SMatrix{2,3}(    BC.Vy[ii,jj] for ii in i+1:i+2, jj in j:j+2  )
-        typex  = SMatrix{3,2}(  type.Vx[ii,jj] for ii in i:i+2,   jj in j+1:j+2)
-        typey  = SMatrix{2,3}(  type.Vy[ii,jj] for ii in i+1:i+2, jj in j:j+2  )
-        τxx0   = SMatrix{2,2}(    τ0.xx[ii,jj] for ii in i:i+1,   jj in j:j+1)
-        τyy0   = SMatrix{2,2}(    τ0.yy[ii,jj] for ii in i:i+1,   jj in j:j+1)
-        P      = SMatrix{2,2}(       Pt[ii,jj] for ii in i:i+1,   jj in j:j+1)
+    for j=2:size(ε̇.xy,2)-1, i=2:size(ε̇.xy,1)-1
+        Vx     = @inline SMatrix{3,4}(@inbounds      V.x[ii,jj] for ii in i:i+2,   jj in j+0:j+3)
+        Vy     = @inline SMatrix{4,3}(@inbounds      V.y[ii,jj] for ii in i+0:i+3, jj in j:j+2  )
+        bcx    = @inline SMatrix{3,4}(@inbounds    BC.Vx[ii,jj] for ii in i:i+2,   jj in j+0:j+3)
+        bcy    = @inline SMatrix{4,3}(@inbounds    BC.Vy[ii,jj] for ii in i+0:i+3, jj in j:j+2  )
+        typex  = @inline SMatrix{3,4}(@inbounds  type.Vx[ii,jj] for ii in i:i+2,   jj in j+0:j+3)
+        typey  = @inline SMatrix{4,3}(@inbounds  type.Vy[ii,jj] for ii in i+0:i+3, jj in j:j+2  )
+        τxx0   = @inline SMatrix{2,2}(@inbounds    τ0.xx[ii,jj] for ii in i:i+1,   jj in j:j+1)
+        τyy0   = @inline SMatrix{2,2}(@inbounds    τ0.yy[ii,jj] for ii in i:i+1,   jj in j:j+1)
+        P      = @inline SMatrix{2,2}(@inbounds       Pt[ii,jj] for ii in i-1:i,   jj in j-1:j)
+
+        J_c    = @inline SMatrix{2,2}(@inbounds      J.c[ii,jj] for ii in i-1:i, jj in j-1:j  )
+        J_v    = @inline SMatrix{1,1}(@inbounds      J.v[ii,jj] for ii in i:i,   jj in j:j  )
 
         Vx     = SetBCVx1(Vx, typex, bcx, Δ)
         Vy     = SetBCVy1(Vy, typey, bcy, Δ)
-    
-        Dxx    = ∂x(Vx) / Δ.x
-        Dyy    = ∂y(Vy) / Δ.y
-        Dxy    = ∂y_inn(Vx) / Δ.y
-        Dyx    = ∂x_inn(Vy) / Δ.x
+        V̄x     = av(Vx)
+        V̄y     = av(Vy)
+
+        Dxx    = ∂x_inn(Vx)  .* _Δξ .* getindex.(J_c, 1, 1) .+ ∂y(V̄x)      .* _Δη .* getindex.(J_c, 1, 2)
+        Dyy    = ∂x(V̄y)      .* _Δξ .* getindex.(J_c, 2, 1) .+ ∂y_inn(Vy)  .* _Δη .* getindex.(J_c, 2, 2)
+        Dxy    = ∂x_inn(V̄x)  .* _Δξ .* getindex.(J_v, 2, 1) .+ inn(∂y(Vx)) .* _Δη .* getindex.(J_v, 2, 2)
+        Dyx    = inn(∂x(Vy)) .* _Δξ .* getindex.(J_v, 1, 2) .+ ∂y_inn(V̄y)  .* _Δη .* getindex.(J_v, 1, 2)
 
         Dkk   = @. Dxx + Dyy
         ε̇xx   = @. Dxx - Dkk / 3
@@ -936,30 +949,30 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, ΔPt,
         ε̇̄yy   = av(ε̇yy)
         
         # Visco-elasticity
-        G     = materials.G[phases.v[i+1,j+1]]
+        G     = materials.G[phases.v[i,j]]
         τ̄xx0  = av(τxx0)
         τ̄yy0  = av(τyy0)
         P̄     = av(   P)
-        ε̇vec  = @SVector([ε̇̄xx[1]+τ̄xx0[1]/(2*G[1]*Δ.t), ε̇̄yy[1]+τ̄yy0[1]/(2*G[1]*Δ.t), ε̇xy[1]+τ0.xy[i+1,j+1]/(2*G[1]*Δ.t), P̄[1]])
+        ε̇vec  = @SVector([ε̇̄xx[1]+τ̄xx0[1]/(2*G[1]*Δ.t), ε̇̄yy[1]+τ̄yy0[1]/(2*G[1]*Δ.t), ε̇xy[1]+τ0.xy[i,j]/(2*G[1]*Δ.t), P̄[1]])
         
         # Tangent operator used for Newton Linearisation
-        jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector!, ε̇vec, Const(materials), Const(phases.v[i+1,j+1]), Const(Δ))
+        jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector!, ε̇vec, Const(materials), Const(phases.v[i,j]), Const(Δ))
 
         # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
-        @views 𝐷_ctl.v[i+1,j+1][:,1] .= jac.derivs[1][1][1]
-        @views 𝐷_ctl.v[i+1,j+1][:,2] .= jac.derivs[1][2][1]
-        @views 𝐷_ctl.v[i+1,j+1][:,3] .= jac.derivs[1][3][1]
-        @views 𝐷_ctl.v[i+1,j+1][:,4] .= jac.derivs[1][4][1]
+        @views 𝐷_ctl.v[i,j][:,1] .= jac.derivs[1][1][1]
+        @views 𝐷_ctl.v[i,j][:,2] .= jac.derivs[1][2][1]
+        @views 𝐷_ctl.v[i,j][:,3] .= jac.derivs[1][3][1]
+        @views 𝐷_ctl.v[i,j][:,4] .= jac.derivs[1][4][1]
 
         # Tangent operator used for Picard Linearisation
-        𝐷.v[i+1,j+1] .= diagm(2*jac.val[2] * _ones)
-        𝐷.v[i+1,j+1][4,4] = 1
+        𝐷.v[i,j] .= diagm(2*jac.val[2] * _ones)
+        𝐷.v[i,j][4,4] = 1
 
         # Update stress
-        τ.xy[i+1,j+1] = jac.val[1][3]
-        ε̇.xy[i+1,j+1] = ε̇xy[1]
-        λ̇.v[i+1,j+1]  = jac.val[3]
-        η.v[i+1,j+1]  = jac.val[2]
+        τ.xy[i,j] = jac.val[1][3]
+        ε̇.xy[i,j] = ε̇xy[1]
+        λ̇.v[i,j]  = jac.val[3]
+        η.v[i,j]  = jac.val[2]
         # τ.xy[i+1,j+1] = 2*jac.val[2]*(ε̇xy[1]+τ0.xy[i+1,j+1]/(2*G[1]*Δ.t))
     end
 end
