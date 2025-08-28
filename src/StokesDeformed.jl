@@ -222,7 +222,7 @@ function Numbering!(N, type, nc)
     noisy = false
 
     ############ Numbering Vx ############
-    periodic_west  = sum(any(i->i==:periodic, type.Vx[1,3:end-2], dims=2)) > 0
+    periodic_west  = any(A[1,j] === :periodic for j in 3:size(A, 2)-2)
     periodic_south = sum(any(i->i==:periodic, type.Vx[3:end-2,2], dims=1)) > 0
 
     shift  = (periodic_west) ? 1 : 0 
