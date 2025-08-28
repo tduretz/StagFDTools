@@ -252,7 +252,7 @@ function Numbering!(N, type, nc)
         N.Vx[:,end]   .= N.Vx[:,4]
         N.Vx[:,end-1] .= N.Vx[:,3]
     end
-    noisy ? printxy(N.Vx) : nothing
+    noisy && printxy(N.Vx)
 
     neq = maximum(N.Vx)
 
