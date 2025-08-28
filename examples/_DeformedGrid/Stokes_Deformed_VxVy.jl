@@ -326,6 +326,9 @@ end
 
 function SMomentum_y_Generic_Def(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, J, phases, materials, type, bcv, Δ)
     
+
+    ρ = materials.ρ0[1]*materials.g[2]
+
     _Δξ, _Δη = 1 / Δ.ξ, 1 / Δ.η
 
     # BC

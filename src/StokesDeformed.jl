@@ -118,6 +118,21 @@ function set_boundaries_template!(type, config, nc)
         type.Vy[inx_Vy,end-1]   .= :Dirichlet_normal 
         # -------- Pt -------- #
         type.Pt[2:end-1,2:end-1] .= :in
+    elseif config == :free_surf
+        # -------- Vx -------- #
+        type.Vx[inx_Vx,iny_Vx]  .= :in       
+        type.Vx[2,iny_Vx]       .= :Dirichlet_normal 
+        type.Vx[end-1,iny_Vx]   .= :Dirichlet_normal 
+        type.Vx[inx_Vx,2]       .= :Neumann_tangent
+        type.Vx[inx_Vx,end-1]   .= :Neumann_tangent
+        # -------- Vy -------- #
+        type.Vy[inx_Vy,iny_Vy]  .= :in       
+        type.Vy[2,iny_Vy]       .= :Neumann_tangent
+        type.Vy[end-1,iny_Vy]   .= :Neumann_tangent
+        type.Vy[inx_Vy,2]       .= :Dirichlet_normal 
+        type.Vy[inx_Vy,end]     .= :Neumann_normal
+        # -------- Pt -------- #
+        type.Pt[2:end-1,2:end-1] .= :in
         
     end
 end
@@ -222,7 +237,8 @@ function Numbering!(N, type, nc)
     noisy = false
 
     ############ Numbering Vx ############
-    periodic_west  = any(A[1,j] === :periodic for j in 3:size(A, 2)-2)
+    # periodic_west  = any(A[1,j] === :periodic for j in 3:size(A, 2)-2)
+    periodic_west  = sum(any(i->i==:periodic, type.Vx[1,3:end-2], dims=2)) > 0
     periodic_south = sum(any(i->i==:periodic, type.Vx[3:end-2,2], dims=1)) > 0
 
     shift  = (periodic_west) ? 1 : 0 
@@ -261,6 +277,7 @@ function Numbering!(N, type, nc)
     periodic_west  = sum(any(i->i==:periodic, type.Vy[2,3:end-2], dims=2)) > 0
     periodic_south = sum(any(i->i==:periodic, type.Vy[3:end-2,1], dims=1)) > 0
     shift = periodic_south ? 1 : 0
+    
     # Loop through inner nodes of the mesh
     for j=2:nc.y+3-1, i=3:nc.x+4-2
         if type.Vy[i,j] == :Dirichlet_normal || (type.Vy[i,j] == :periodic && j==nc.y+3-1)
@@ -722,7 +739,7 @@ function ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, Jinv, phases, materi
             Vx_loc     = @inline SMatrix{4,4}(@inbounds       V.x[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
             Vy_loc     = @inline SMatrix{5,5}(@inbounds       V.y[ii,jj] for ii in i-2:i+2, jj in j-2:j+2)
             P_loc      = @inline SMatrix{3,4}(@inbounds         P[ii,jj] for ii in i-2:i,   jj in j-2:j+1)
-            ΔP_loc     = @inline SMatrix{3,2}(@inbounds        ΔP.c[ii,jj] for ii in i-2:i,   jj in j-1:j  )
+            ΔP_loc     = @inline SMatrix{3,2}(@inbounds      ΔP.c[ii,jj] for ii in i-2:i,   jj in j-1:j  )
             τ0_loc     = @inline SMatrix{2,2}(@inbounds     τ0.Vx[ii,jj] for ii in i-1:i, jj in j:j+1    )
             D_c        = @inline SMatrix{3,2}(@inbounds       𝐷.c[ii,jj] for ii in i-2:i,   jj in j-1:j+0)
             D_v        = @inline SMatrix{2,3}(@inbounds       𝐷.v[ii,jj] for ii in i-1:i,   jj in j-1:j+1)
@@ -914,14 +931,14 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, ΔPt,
 
     # Loop over vertices
     for j=2:size(ε̇.xy,2)-1, i=2:size(ε̇.xy,1)-1
-        Vx     = @inline SMatrix{3,4}(@inbounds      V.x[ii,jj] for ii in i:i+2,   jj in j+0:j+3)
-        Vy     = @inline SMatrix{4,3}(@inbounds      V.y[ii,jj] for ii in i+0:i+3, jj in j:j+2  )
-        bcx    = @inline SMatrix{3,4}(@inbounds    BC.Vx[ii,jj] for ii in i:i+2,   jj in j+0:j+3)
-        bcy    = @inline SMatrix{4,3}(@inbounds    BC.Vy[ii,jj] for ii in i+0:i+3, jj in j:j+2  )
-        typex  = @inline SMatrix{3,4}(@inbounds  type.Vx[ii,jj] for ii in i:i+2,   jj in j+0:j+3)
-        typey  = @inline SMatrix{4,3}(@inbounds  type.Vy[ii,jj] for ii in i+0:i+3, jj in j:j+2  )
-        τxx0   = @inline SMatrix{2,2}(@inbounds    τ0.xx[ii,jj] for ii in i:i+1,   jj in j:j+1)
-        τyy0   = @inline SMatrix{2,2}(@inbounds    τ0.yy[ii,jj] for ii in i:i+1,   jj in j:j+1)
+        Vx     = @inline SMatrix{3,4}(@inbounds      V.x[ii,jj] for ii in i-1:i+1,   jj in j-1:j+2)
+        Vy     = @inline SMatrix{4,3}(@inbounds      V.y[ii,jj] for ii in i-1:i+2, jj in j-1:j+1  )
+        bcx    = @inline SMatrix{3,4}(@inbounds    BC.Vx[ii,jj] for ii in i-1:i+1,   jj in j-1:j+2)
+        bcy    = @inline SMatrix{4,3}(@inbounds    BC.Vy[ii,jj] for ii in i-1:i+2, jj in j-1:j+1  )
+        typex  = @inline SMatrix{3,4}(@inbounds  type.Vx[ii,jj] for ii in i-1:i+1,   jj in j-1:j+2)
+        typey  = @inline SMatrix{4,3}(@inbounds  type.Vy[ii,jj] for ii in i-1:i+2, jj in j-1:j+1  )
+        τxx0   = @inline SMatrix{2,2}(@inbounds    τ0.xx[ii,jj] for ii in i-1:i,   jj in j-1:j)
+        τyy0   = @inline SMatrix{2,2}(@inbounds    τ0.yy[ii,jj] for ii in i-1:i,   jj in j-1:j)
         P      = @inline SMatrix{2,2}(@inbounds       Pt[ii,jj] for ii in i-1:i,   jj in j-1:j)
 
         J_c    = @inline SMatrix{2,2}(@inbounds      J.c[ii,jj] for ii in i-1:i, jj in j-1:j  )
