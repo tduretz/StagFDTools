@@ -150,7 +150,7 @@ function UpdateSolution!(V, Pt, dx, number, type, nc)
 
     nVx, nVy   = maximum(number.Vx), maximum(number.Vy)
 
-    for j=1:size(V.x,2), i=1:size(V.x,1)
+    for j=axes(V.x,2), i=axes(V.x,1)
         if type.Vx[i,j] == :in
             ind = number.Vx[i,j]
             V.x[i,j] += dx[ind]
