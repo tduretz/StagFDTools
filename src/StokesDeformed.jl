@@ -127,7 +127,7 @@ function SetRHS!(r, R, number, type, nc)
     nVx, nVy   = maximum(number.Vx), maximum(number.Vy)
 
     for j=2:nc.y+3-1, i=2:nc.x+3-1
-        if type.Vx[i,j] == :in
+        if type.Vx[i,j] === :in
             ind = number.Vx[i,j]
             r[ind] = R.x[i,j]
         end
