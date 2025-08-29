@@ -123,7 +123,7 @@ using TimerOutputs
     yv = LinRange(-L.y/2, L.y/2, nc.y+1)
     xc = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
     yc = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
-    phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...))  # phase on velocity points
+    # phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...))  # phase on velocity points
 
     # Initial velocity & pressure field
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
@@ -155,21 +155,24 @@ using TimerOutputs
     # Initialise phase field
     particle_args = phases, = init_cell_arrays(particles, Val(1))  # cool
 
-    for ip in cellaxes(phases)
-        # quick escape
-        JustPIC.@index(index[ip, I...]) == 0 && continue
-        x = JustPIC.@index px[ip, I...]
-        y = JustPIC.@index py[ip, I...]
-        if (x^2 + (y)^2) <= 0.1^2
-            JustPIC.@index phases[ip, I...] = 2.0
-        else
-            JustPIC.@index phases[ip, I...] = 1.0
+    for j in axes(phases, 2), i in axes(phases, 1)
+        for ip in cellaxes(phases)
+            # quick escape
+            @index(particles.index[ip, i, j]) == 0 && continue
+            x = @index particles.coords[1][ip, i, j]
+            y = @index particles.coords[2][ip, i, j]
+            if (x^2 + (y)^2) <= 0.1^2
+                @index phases[ip, i, j] = 2.0
+            else
+                @index phases[ip, i, j] = 1.0
+            end
         end
     end
+    error("stop")
 
-    # Set material geometry 
-    phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
-    phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= 0.1^2] .= 2
+    # # Set material geometry 
+    # phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
+    # phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= 0.1^2] .= 2
 
     #--------------------------------------------#
 
