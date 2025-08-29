@@ -683,23 +683,19 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, J, phases, mate
     V̄y  = av(Vy)
     P̄t  = av(Pt)
 
-    Dxxc = ∂x_inn(Vx) .* _Δξ .* inn_y(getindex.(J.c, 1, 1)) .+ ∂y(inn_x(V̄x)) .* _Δη .* inn_y(getindex.(J.c, 1, 2))        # centroids (3, 2)
-    Dxxv = ∂x(V̄x)     .* _Δξ .* inn_x(getindex.(J.v, 1, 1)) .+ ∂y_inn(Vx)    .* _Δη .* inn_x(getindex.(J.v, 1, 2))        # vertices  (2, 3)
-    Dyyc = ∂x(V̄y)     .* _Δξ .* getindex.(J.c, 2, 1)        .+ ∂y_inn(Vy)    .* _Δη .* getindex.(J.c, 2, 2)
-    Dyyv = ∂x_inn(Vy) .* _Δξ .* getindex.(J.v, 2, 1)        .+ ∂y(V̄y)        .* _Δη .* getindex.(J.v, 2, 2)
-    Dxyc = ∂x_inn(Vx) .* _Δξ .* inn_y(getindex.(J.c, 2, 1)) .+ ∂y(inn_x(V̄x)) .* _Δη .* inn_y(getindex.(J.c, 2, 2))        # centroids (3, 2)
-    Dxyv = ∂x(V̄x)     .* _Δξ .* inn_x(getindex.(J.v, 2, 1)) .+ ∂y_inn(Vx)    .* _Δη .* inn_x(getindex.(J.v, 2, 2))        # vertices  (2, 3)
-    Dyxc = ∂x(V̄y)     .* _Δξ .* getindex.(J.c, 1, 1)        .+ ∂y_inn(Vy)    .* _Δη .* getindex.(J.c, 1, 2)
-    Dyxv = ∂x_inn(Vy) .* _Δξ .* getindex.(J.v, 1, 1)        .+ ∂y(V̄y)        .* _Δη .* getindex.(J.v, 1, 2)
+    Dxxc = ∂x_inn(Vx)  .* _Δξ .* getindex.(J.c, 1, 1) .+ ∂y(V̄x)      .* _Δη .* getindex.(J.c, 1, 2)
+    Dyyc = ∂x_inn(V̄y)  .* _Δξ .* getindex.(J.c, 2, 1) .+ inn(∂y(Vy)) .* _Δη .* getindex.(J.c, 2, 2)
+    Dxyv = ∂x(V̄x)      .* _Δξ .* getindex.(J.v, 2, 1) .+ ∂y_inn(Vx)  .* _Δη .* getindex.(J.v, 2, 2)
+    Dyxv = inn(∂x(Vy)) .* _Δξ .* getindex.(J.v, 1, 1) .+ ∂y_inn(V̄y)  .* _Δη .* getindex.(J.v, 1, 2)
 
-    ε̇kkc = Dxxc .+ inn_y(Dyyc)
-    ε̇kkv = Dxxv .+ inn_x(Dyyv)
-    ε̇yyc = inn_y(Dyyc) .- 1/3 .* ε̇kkc
-    ε̇yyv = inn_x(Dyyv) .- 1/3 .* ε̇kkv
+    ε̇kkc = Dxxc .+ Dyyc
     ε̇xxc = Dxxc .- 1/3 .* ε̇kkc
-    ε̇xxv = Dxxv .- 1/3 .* ε̇kkv
-    ε̇xyc = 1/2 .* (Dxyc .+ inn_y(Dyxc))
-    ε̇xyv = 1/2 .* (Dxyv .+ inn_x(Dyxv))
+    ε̇yyc = Dyyc .- 1/3 .* ε̇kkc
+    ε̇xyv = 1/2 .* (Dxyv .+ Dyxv)
+
+    ε̇xxv = av(ε̇xxc)
+    ε̇yyv = av(ε̇yyc)
+    ε̇xyc = av(ε̇xyv)
 
     ϵ̇xxc = ε̇xxc
     ϵ̇xxv = ε̇xxv
@@ -710,17 +706,60 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, J, phases, mate
 
     D21, D22, D23, D24 = getindex.(𝐷.c, 2, 1) .- getindex.(𝐷.c, 4, 1), getindex.(𝐷.c, 2, 2) .- getindex.(𝐷.c, 4, 2), getindex.(𝐷.c, 2, 3) .- getindex.(𝐷.c, 4, 3),  getindex.(𝐷.c, 2, 4) .- getindex.(𝐷.c, 4, 4) .+ 1
     D31, D32, D33, D34 = getindex.(𝐷.c, 3, 1), getindex.(𝐷.c, 3, 2), getindex.(𝐷.c, 3, 3), getindex.(𝐷.c, 3, 4)
-    τyyc = D21 .* ϵ̇xxc .+ D22 .* ϵ̇yyc .+ D23 .* ϵ̇xyc .+  D24 .* inn_y(Pt) 
-    τxyc = D31 .* ϵ̇xxc .+ D32 .* ϵ̇yyc .+ D33 .* ϵ̇xyc .+  D34 .* inn_y(Pt) 
+    τyyc = D21 .* inn_x(ϵ̇xxc) .+ D22 .* inn_x(ϵ̇yyc) .+ D23 .* ϵ̇xyc .+  D24 .* inn_x(Pt) 
+    τxyc = D31 .* inn_x(ϵ̇xxc) .+ D32 .* inn_x(ϵ̇yyc) .+ D33 .* ϵ̇xyc .+  D34 .* inn_x(Pt) 
 
     D21, D22, D23, D24 = getindex.(𝐷.v, 2, 1) .- getindex.(𝐷.v, 4, 1), getindex.(𝐷.v, 2, 2) .- getindex.(𝐷.v, 4, 2), getindex.(𝐷.v, 2, 3) .- getindex.(𝐷.v, 4, 3),  getindex.(𝐷.v, 2, 4) .- getindex.(𝐷.v, 4, 4) .+ 1
     D31, D32, D33, D34 = getindex.(𝐷.v, 3, 1), getindex.(𝐷.v, 3, 2), getindex.(𝐷.v, 3, 3), getindex.(𝐷.v, 3, 4)
-    τyyv = D21 .* ϵ̇xxv  .+ D22 .* ϵ̇yyv .+ D23 .* ϵ̇xyv .+  D24 .* P̄t
-    τxyv = D31 .* ϵ̇xxv  .+ D32 .* ϵ̇yyv .+ D33 .* ϵ̇xyv .+  D34 .* P̄t
+    τyyv = D21 .* ϵ̇xxv  .+ D22 .* ϵ̇yyv .+ D23 .* inn_y(ϵ̇xyv) .+  D24 .* P̄t
+    τxyv = D31 .* ϵ̇xxv  .+ D32 .* ϵ̇yyv .+ D33 .* inn_y(ϵ̇xyv) .+  D34 .* P̄t
 
-    fy  = ∂x_inn(τyyv .- P̄t) * _Δξ .* getindex.(J.Vy, 2, 1) .+ ∂y_inn(τyyc .- inn(Pt)) * _Δη .* getindex.(J.Vy, 2, 2)
-    fy += ∂x_inn(τxyv) * _Δξ .* getindex.(J.Vy, 1, 1) .+ ∂y_inn(τxyc) * _Δη .* getindex.(J.Vy, 1, 2)
+    fy  = ∂x(τyyv .- P̄t) * _Δξ .* getindex.(J.Vy, 2, 1) .+ ∂y(τyyc .- inn_x(Pt)) * _Δη .* getindex.(J.Vy, 2, 2)
+    fy += ∂x(τxyv) * _Δξ .* getindex.(J.Vy, 1, 1) .+ ∂y(τxyc) * _Δη .* getindex.(J.Vy, 1, 2)
     fy *= -1/(_Δξ*_Δη)
+
+    # @show fy 
+
+    # error("stop")
+
+    # Dxxc = ∂x_inn(Vx) .* _Δξ .* inn_y(getindex.(J.c, 1, 1)) .+ ∂y(inn_x(V̄x)) .* _Δη .* inn_y(getindex.(J.c, 1, 2))        # centroids (3, 2)
+    # Dxxv = ∂x(V̄x)     .* _Δξ .* inn_x(getindex.(J.v, 1, 1)) .+ ∂y_inn(Vx)    .* _Δη .* inn_x(getindex.(J.v, 1, 2))        # vertices  (2, 3)
+    # Dyyc = ∂x(V̄y)     .* _Δξ .* getindex.(J.c, 2, 1)        .+ ∂y_inn(Vy)    .* _Δη .* getindex.(J.c, 2, 2)
+    # Dyyv = ∂x_inn(Vy) .* _Δξ .* getindex.(J.v, 2, 1)        .+ ∂y(V̄y)        .* _Δη .* getindex.(J.v, 2, 2)
+    # Dxyc = ∂x_inn(Vx) .* _Δξ .* inn_y(getindex.(J.c, 2, 1)) .+ ∂y(inn_x(V̄x)) .* _Δη .* inn_y(getindex.(J.c, 2, 2))        # centroids (3, 2)
+    # Dxyv = ∂x(V̄x)     .* _Δξ .* inn_x(getindex.(J.v, 2, 1)) .+ ∂y_inn(Vx)    .* _Δη .* inn_x(getindex.(J.v, 2, 2))        # vertices  (2, 3)
+    # Dyxc = ∂x(V̄y)     .* _Δξ .* getindex.(J.c, 1, 1)        .+ ∂y_inn(Vy)    .* _Δη .* getindex.(J.c, 1, 2)
+    # Dyxv = ∂x_inn(Vy) .* _Δξ .* getindex.(J.v, 1, 1)        .+ ∂y(V̄y)        .* _Δη .* getindex.(J.v, 1, 2)
+
+    # ε̇kkc = Dxxc .+ inn_y(Dyyc)
+    # ε̇kkv = Dxxv .+ inn_x(Dyyv)
+    # ε̇yyc = inn_y(Dyyc) .- 1/3 .* ε̇kkc
+    # ε̇yyv = inn_x(Dyyv) .- 1/3 .* ε̇kkv
+    # ε̇xxc = Dxxc .- 1/3 .* ε̇kkc
+    # ε̇xxv = Dxxv .- 1/3 .* ε̇kkv
+    # ε̇xyc = 1/2 .* (Dxyc .+ inn_y(Dyxc))
+    # ε̇xyv = 1/2 .* (Dxyv .+ inn_x(Dyxv))
+
+    # ϵ̇xxc = ε̇xxc
+    # ϵ̇xxv = ε̇xxv
+    # ϵ̇yyc = ε̇yyc
+    # ϵ̇yyv = ε̇yyv
+    # ϵ̇xyc = ε̇xyc
+    # ϵ̇xyv = ε̇xyv
+
+    # D21, D22, D23, D24 = getindex.(𝐷.c, 2, 1) .- getindex.(𝐷.c, 4, 1), getindex.(𝐷.c, 2, 2) .- getindex.(𝐷.c, 4, 2), getindex.(𝐷.c, 2, 3) .- getindex.(𝐷.c, 4, 3),  getindex.(𝐷.c, 2, 4) .- getindex.(𝐷.c, 4, 4) .+ 1
+    # D31, D32, D33, D34 = getindex.(𝐷.c, 3, 1), getindex.(𝐷.c, 3, 2), getindex.(𝐷.c, 3, 3), getindex.(𝐷.c, 3, 4)
+    # τyyc = D21 .* ϵ̇xxc .+ D22 .* ϵ̇yyc .+ D23 .* ϵ̇xyc .+  D24 .* inn_y(Pt) 
+    # τxyc = D31 .* ϵ̇xxc .+ D32 .* ϵ̇yyc .+ D33 .* ϵ̇xyc .+  D34 .* inn_y(Pt) 
+
+    # D21, D22, D23, D24 = getindex.(𝐷.v, 2, 1) .- getindex.(𝐷.v, 4, 1), getindex.(𝐷.v, 2, 2) .- getindex.(𝐷.v, 4, 2), getindex.(𝐷.v, 2, 3) .- getindex.(𝐷.v, 4, 3),  getindex.(𝐷.v, 2, 4) .- getindex.(𝐷.v, 4, 4) .+ 1
+    # D31, D32, D33, D34 = getindex.(𝐷.v, 3, 1), getindex.(𝐷.v, 3, 2), getindex.(𝐷.v, 3, 3), getindex.(𝐷.v, 3, 4)
+    # τyyv = D21 .* ϵ̇xxv  .+ D22 .* ϵ̇yyv .+ D23 .* ϵ̇xyv .+  D24 .* P̄t
+    # τxyv = D31 .* ϵ̇xxv  .+ D32 .* ϵ̇yyv .+ D33 .* ϵ̇xyv .+  D34 .* P̄t
+
+    # fy  = ∂x_inn(τyyv .- P̄t) * _Δξ .* getindex.(J.Vy, 2, 1) .+ ∂y_inn(τyyc .- inn(Pt)) * _Δη .* getindex.(J.Vy, 2, 2)
+    # fy += ∂x_inn(τxyv) * _Δξ .* getindex.(J.Vy, 1, 1) .+ ∂y_inn(τxyc) * _Δη .* getindex.(J.Vy, 1, 2)
+    # fy *= -1/(_Δξ*_Δη)
 
     return fy[1]
 end
@@ -732,21 +771,25 @@ function ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, Jinv, phases, materi
 
             bcx_loc    = @inline SMatrix{4,4}(@inbounds     BC.Vx[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
             bcy_loc    = @inline SMatrix{5,5}(@inbounds     BC.Vy[ii,jj] for ii in i-2:i+2, jj in j-2:j+2)
+           
+            @show i, j
+            @show size(V.y)
+       
             typex_loc  = @inline SMatrix{4,4}(@inbounds   type.Vx[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
             typey_loc  = @inline SMatrix{5,5}(@inbounds   type.Vy[ii,jj] for ii in i-2:i+2, jj in j-2:j+2)
             ph_loc     = @inline SMatrix{2,2}(@inbounds phases.Vx[ii,jj] for ii in i-1:i, jj in j:j+1)
 
             Vx_loc     = @inline SMatrix{4,4}(@inbounds       V.x[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
             Vy_loc     = @inline SMatrix{5,5}(@inbounds       V.y[ii,jj] for ii in i-2:i+2, jj in j-2:j+2)
-            P_loc      = @inline SMatrix{3,4}(@inbounds         P[ii,jj] for ii in i-2:i,   jj in j-2:j+1)
+            P_loc      = @inline SMatrix{3,2}(@inbounds         P[ii,jj] for ii in i-2:i,   jj in j-1:j+0)
             ΔP_loc     = @inline SMatrix{3,2}(@inbounds      ΔP.c[ii,jj] for ii in i-2:i,   jj in j-1:j  )
             τ0_loc     = @inline SMatrix{2,2}(@inbounds     τ0.Vx[ii,jj] for ii in i-1:i, jj in j:j+1    )
-            D_c        = @inline SMatrix{3,2}(@inbounds       𝐷.c[ii,jj] for ii in i-2:i,   jj in j-1:j+0)
-            D_v        = @inline SMatrix{2,3}(@inbounds       𝐷.v[ii,jj] for ii in i-1:i,   jj in j-1:j+1)
+            D_c        = @inline SMatrix{1,2}(@inbounds       𝐷.c[ii,jj] for ii in i-1:i-1,   jj in j-1:j+0)
+            D_v        = @inline SMatrix{2,1}(@inbounds       𝐷.v[ii,jj] for ii in i-1:i,   jj in j:j)
 
             J_Vy       = @inline SMatrix{1,1}(@inbounds    Jinv.Vy[ii,jj] for ii in i:i,   jj in j:j    )
-            J_c        = @inline SMatrix{3,4}(@inbounds    Jinv.c[ii,jj] for ii in i-2:i,   jj in j-2:j+1)
-            J_v        = @inline SMatrix{4,3}(@inbounds    Jinv.v[ii,jj] for ii in i-2:i+1, jj in j-1:j+1)
+            J_c        = @inline SMatrix{3,2}(@inbounds    Jinv.c[ii,jj] for ii in i-2:i,   jj in j-1:j)
+            J_v        = @inline SMatrix{2,3}(@inbounds    Jinv.v[ii,jj] for ii in i-1:i, jj in j-1:j+1)
 
             bcv_loc    = (x=bcx_loc, y=bcy_loc)
             type_loc   = (x=typex_loc, y=typey_loc)
@@ -763,11 +806,11 @@ function AssembleMomentum2D_y!(K, V, P, P0, ΔP, τ0, 𝐷, Jinv, phases, materi
     
     ∂R∂Vx = @MMatrix zeros(4,4)
     ∂R∂Vy = @MMatrix zeros(5,5)
-    ∂R∂Pt = @MMatrix zeros(3,4)
+    ∂R∂Pt = @MMatrix zeros(3,2)
     
     Vx_loc = @MMatrix zeros(4,4)
     Vy_loc = @MMatrix zeros(5,5)
-    P_loc  = @MMatrix zeros(3,4)
+    P_loc  = @MMatrix zeros(3,2)
        
     shift    = (x=2, y=1)
     K21 = K[2][1]
@@ -787,15 +830,15 @@ function AssembleMomentum2D_y!(K, V, P, P0, ΔP, τ0, 𝐷, Jinv, phases, materi
 
             Vx_loc    .= @inline SMatrix{4,4}(@inbounds       V.x[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
             Vy_loc    .= @inline SMatrix{5,5}(@inbounds       V.y[ii,jj] for ii in i-2:i+2, jj in j-2:j+2)
-            P_loc     .= @inline SMatrix{3,4}(@inbounds         P[ii,jj] for ii in i-2:i,   jj in j-2:j+1)
+            P_loc     .= @inline SMatrix{3,2}(@inbounds         P[ii,jj] for ii in i-2:i,   jj in j-1:j+0)
             ΔP_loc     = @inline SMatrix{3,2}(@inbounds        ΔP.c[ii,jj] for ii in i-2:i,   jj in j-1:j  )
             τ0_loc     = @inline SMatrix{2,2}(@inbounds     τ0.Vx[ii,jj] for ii in i-1:i, jj in j:j+1    )
-            D_c        = @inline SMatrix{3,2}(@inbounds       𝐷.c[ii,jj] for ii in i-2:i,   jj in j-1:j+0)
-            D_v        = @inline SMatrix{2,3}(@inbounds       𝐷.v[ii,jj] for ii in i-1:i,   jj in j-1:j+1)
+            D_c        = @inline SMatrix{1,2}(@inbounds       𝐷.c[ii,jj] for ii in i-1:i-1,   jj in j-1:j+0)
+            D_v        = @inline SMatrix{2,1}(@inbounds       𝐷.v[ii,jj] for ii in i-1:i,   jj in j:j)
 
             J_Vy       = @inline SMatrix{1,1}(@inbounds    Jinv.Vy[ii,jj] for ii in i:i,   jj in j:j    )
-            J_c        = @inline SMatrix{3,4}(@inbounds    Jinv.c[ii,jj] for ii in i-2:i,   jj in j-2:j+1)
-            J_v        = @inline SMatrix{4,3}(@inbounds    Jinv.v[ii,jj] for ii in i-2:i+1, jj in j-1:j+1)
+            J_c        = @inline SMatrix{3,2}(@inbounds    Jinv.c[ii,jj] for ii in i-2:i,   jj in j-1:j+0)
+            J_v        = @inline SMatrix{2,3}(@inbounds    Jinv.v[ii,jj] for ii in i-1:i+0, jj in j-1:j+1)
 
             bcv_loc    = (x=bcx_loc, y=bcy_loc)
             type_loc   = (x=typex_loc, y=typey_loc)
@@ -825,7 +868,7 @@ function AssembleMomentum2D_y!(K, V, P, P0, ΔP, τ0, 𝐷, Jinv, phases, materi
                 end
             end
             # Vy --- Pt
-            Local3 = SMatrix{3,4}(num.Pt[ii, jj] for ii in i-2:i, jj in j-2:j+1) .* pattern[2][3]
+            Local3 = SMatrix{3,2}(num.Pt[ii, jj] for ii in i-2:i, jj in j-1:j+0) .* pattern[2][3]
             for jj in axes(Local3,2), ii in axes(Local3,1)
                 if (Local3[ii,jj]>0) && bounds_Vy
                     @inbounds K23[num_Vy, Local3[ii,jj]] = ∂R∂Pt[ii,jj]  

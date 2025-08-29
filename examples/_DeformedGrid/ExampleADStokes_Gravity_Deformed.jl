@@ -7,7 +7,11 @@ using ExactFieldSolutions
 import CairoMakie as cm
 import CairoMakie.Makie.GeometryBasics as geom
 
-# This version uses routines from Stokesormed.jl
+# This is left as WIP because:
+# - one would need an additional layer at top/bottom for Vy
+# - not sure how to apply the free surface condition
+
+# This version uses routines from StokesDeformed.jl
 # The velocity components are interpolated to centroids abd vertices
 # This allows to mimic a full stagerred grid
 # The results of ViscousInclusion are bad: the pressure error increases as function of the viscosity contrast
@@ -85,7 +89,7 @@ end
     # Stencil extent for each block matrix
     pattern = Fields(
         Fields(@SMatrix([1 1 1 1 1; 1 1 1 1 1; 1 1 1 1 1; 1 1 1 1 1; 1 1 1 1 1]),     @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([1 1 1; 1 1 1; 1 1 1; 1 1 1])), 
-        Fields(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]),  @SMatrix([1 1 1 1 1; 1 1 1 1 1; 1 1 1 1 1; 1 1 1 1 1; 1 1 1 1 1]),                @SMatrix([1 1 1 1; 1 1 1 1; 1 1 1 1])), 
+        Fields(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]),  @SMatrix([1 1 1 1 1; 1 1 1 1 1; 1 1 1 1 1; 1 1 1 1 1; 1 1 1 1 1]),                @SMatrix([1 1 ; 1 1; 1 1])), 
         Fields(@SMatrix([1 1 1; 1 1 1]),                        @SMatrix([1 1; 1 1; 1 1]),                      @SMatrix([1]))
     )
 
@@ -322,6 +326,9 @@ end
             #--------------------------------------------#
             # Set global residual vector
             SetRHS!(r, R, number, type, nc)
+            @show norm(R.x)
+            @show norm(R.y)
+
 
             #--------------------------------------------#
             # Assembly
@@ -343,8 +350,8 @@ end
             # Direct-iterative solver
             fu   = -r[1:size(𝐊,1)]
             fp   = -r[size(𝐊,1)+1:end]
-            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:chol,  ηb=100*mean(η.c), niter_l=10, ϵ_l=1e-9)
-            # u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu,  ηb=100*mean(η.c), niter_l=10, ϵ_l=1e-9)
+            # u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:chol,  ηb=100*mean(η.c), niter_l=10, ϵ_l=1e-9)
+            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu,  ηb=100*mean(η.c), niter_l=10, ϵ_l=1e-9)
 
             dx[1:size(𝐊,1)]     .= u
             dx[size(𝐊,1)+1:end] .= p
@@ -380,19 +387,21 @@ end
         # Visu
         res = 800
         fig = cm.Figure(size = (res, res), fontsize=25)
-        # ----
+        # # ----
         ax  = cm.Axis(fig[1, 1], title = "p - numerics", xlabel = "x", ylabel = "y", aspect=1.0)
-        field = Pt.c[2:end-1,2:end-1]
-        cm.poly!(ax, pc, color = Pt.c[:], colormap = :vik, strokewidth = 0, strokecolormap = :white, colorrange=extrema(Pt.c))#, colorrange=limits
+        field = Pt.c
+        cm.poly!(ax, pc, color = field[:], colormap = :vik, strokewidth = 0, strokecolormap = :white, colorrange=extrema(field))#, colorrange=limits
         cm.Colorbar(fig[1, 2], colormap = :vik, flipaxis = true, size = 10, colorrange=extrema(Pt.c) )    
 
         # cm.spy!(ax, 𝐊)
         
-        # field = 1/2*(R.x[1:end-1,2:end-1].+R.x[2:end-0,2:end-1])
+        # field = 1/2*(R.x|[1:end-1,2:end-1].+R.x[2:end-0,2:end-1])
+        # field = 1/2*(R.y[2:end-1,1:end-1].+R.y[2:end-1,2:end-0])
+
         # field = Pt.c
         # cm.heatmap!(ax, field)
-        # cm.poly!(ax, pc, color = (field)[:], colormap = :vik, strokewidth = 0, strokecolormap = :white, colorrange=extrema(Pt.c[2:end-1,2:end-1]))#, colorrange=limits
-        # # cm.poly!(ax, pc, color = 1/2*(R.y[2:end-1,1:end-1].+R.y[2:end-1,2:end])[:], colormap = :vik, strokewidth = 0, strokecolormap = :white, colorrange=extrema(Pt.c[2:end-1,2:end-1]))#, colorrange=limits
+        # cm.poly!(ax, pc, color = (field)[:], colormap = :vik, strokewidth = 0, strokecolormap = :white)#, colorrange=limits, , colorrange=extrema(Pt.c[2:end-1,2:end-1])
+        # cm.poly!(ax, pc, color = 1/2*(R.y[2:end-1,1:end-1].+R.y[2:end-1,2:end])[:], colormap = :vik, strokewidth = 0, strokecolormap = :white, colorrange=extrema(Pt.c[2:end-1,2:end-1]))#, colorrange=limits
         # cm.Colorbar(fig[1, 2], colormap = :vik, flipaxis = true, size = 10, colorrange=extrema(field) )    
 
 
@@ -414,7 +423,7 @@ let
 
     # # Boundary condition templates
     BCs = [
-        :free_slip,
+        :free_surf,
     ]
 
     # Boundary deformation gradient matrix
