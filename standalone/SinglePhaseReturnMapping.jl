@@ -4,7 +4,7 @@ using GLMakie, Enzyme, LinearAlgebra
 
 invII(x) = sqrt(1/2*x[1]^2 + 1/2*x[2]^2 + x[3]^2) 
 
-function residual_single_phase!(x, ε̇II_eff, divV, P0, p)
+function residual_single_phase(x, ε̇II_eff, divV, P0, p)
     G, K, C, ϕ, ψ, ηvp, Δt = p.G, p.K, p.C, p.ϕ, p.ψ, p.ηvp, p.Δt
     eps   = -1e-13
     ηe    = G*Δt
@@ -17,6 +17,34 @@ function residual_single_phase!(x, ε̇II_eff, divV, P0, p)
         (f - ηvp*λ̇)*(f>=eps) +  λ̇*1*(f<eps)
     ]
 end
+
+function StressVector(σ, τ0, P0, params)
+
+    ε̇_eff = σ[1:3]
+    divV  = σ[4]
+
+    ε̇II_eff = invII(ε̇_eff) 
+    τII     = invII(τ0)
+
+    # Rheology update
+    x = [τII, P0, 0.0]
+
+    for iter=1:10
+        J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_single_phase, x, Const(ε̇II_eff), Const(divV), Const(P0), Const(params))
+        # display(J.derivs[1])
+        x .-= J.derivs[1]\J.val
+        @show norm(J.val)
+        if norm(J.val)<1e-10
+            break
+        end
+    end
+
+    # Recompute components
+    τII, P, λ̇ = x[1], x[2], x[3]
+    τ = ε̇_eff .* τII./ε̇II_eff
+    return [τ[1], τ[2], τ[3], P], λ̇
+end
+
 
 function single_phase_return_mapping()
 
@@ -40,9 +68,6 @@ function single_phase_return_mapping()
         Δt    = 1.0,
     )  
 
-    # Solution array return mapping
-    x = zeros(3)
-
     # Probes
     probes = (
         τ = zeros(nt),
@@ -61,30 +86,18 @@ function single_phase_return_mapping()
         τ0 = τ
         
         # Invariants
-        ε̇_eff   = ε̇ + τ0/(2*params.G*params.Δt)
-        ε̇II_eff = invII(ε̇_eff) 
-        τII     = invII(τ)
+        ε̇_eff = ε̇ + τ0/(2*params.G*params.Δt)
+        ϵ̇     = [ε̇_eff[1], ε̇_eff[2], ε̇_eff[3], divV]
+        σ, λ̇  = StressVector(ϵ̇, τ0, P0, params)
+        τ, P  = σ[1:3], σ[4]
 
-        # Rheology update
-        x[1], x[2], x[3] = τII, P, 0.0 
-        for iter=1:10
-            J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_single_phase!, x, Const(ε̇II_eff), Const(divV), Const(P0), Const(params))
-            # display(J.derivs[1])
-            x .-= J.derivs[1]\J.val
-            @show norm(J.val)
-            if norm(J.val)<1e-10
-                break
-            end
-        end
-
-        # Recompute components
-        τII, P, λ̇ = x[1], x[2], x[3]
-        τ   .= ε̇_eff .* τII./ε̇II_eff
-        @show x[1], invII(τ)
+        # Consistent tangent
+        J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector, ϵ̇, Const(τ0), Const(P0), Const(params))
+        display(J.derivs[1])
 
         # Probes
         probes.t[it] = it*params.Δt
-        probes.τ[it] = τII
+        probes.τ[it] = invII(τ)
         probes.P[it] = P
         probes.λ̇[it] = λ̇ 
     end
