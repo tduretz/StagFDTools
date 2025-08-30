@@ -31,7 +31,7 @@ function StressVector(σ, τ0, P0, params)
 
     for iter=1:10
         J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_single_phase, x, Const(ε̇II_eff), Const(divV), Const(P0), Const(params))
-        # display(J.derivs[1])
+        display(J.derivs[1])
         x .-= J.derivs[1]\J.val
         @show norm(J.val)
         if norm(J.val)<1e-10
@@ -92,8 +92,8 @@ function single_phase_return_mapping()
         τ, P  = σ[1:3], σ[4]
 
         # Consistent tangent
-        J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector, ϵ̇, Const(τ0), Const(P0), Const(params))
-        display(J.derivs[1])
+        # J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector, ϵ̇, Const(τ0), Const(P0), Const(params))
+        # display(J.derivs[1])
 
         # Probes
         probes.t[it] = it*params.Δt
