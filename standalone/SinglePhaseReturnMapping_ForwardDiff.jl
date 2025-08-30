@@ -142,9 +142,9 @@ function single_phase_return_mapping()
         τ, P  = σ[1:3], σ[4]
 
         # # Consistent tangent
-        # StressVector_closed = (ϵ̇) -> StressVector1(ϵ̇, τ0, P0, params)
-        # J = ForwardDiff.jacobian(StressVector_closed, ϵ̇)
-        # display(J)
+        StressVector_closed = (ϵ̇) -> StressVector(ϵ̇, τ0, P0, params)
+        J = ForwardDiff.jacobian(StressVector_closed, ϵ̇)
+        display(J)
         
         # Probes
         probes.t[it] = it*params.Δt
