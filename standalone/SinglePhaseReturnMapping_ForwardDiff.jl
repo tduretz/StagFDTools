@@ -1,4 +1,4 @@
-using GLMakie, Enzyme, LinearAlgebra#, ForwardDiff
+using GLMakie, LinearAlgebra, ForwardDiff
 
 # Intends to implement constitutive updates as in RheologicalCalculator
 
@@ -15,12 +15,12 @@ invII(x) = sqrt(1/2*x[1]^2 + 1/2*x[2]^2 + x[3]^2)
 #     # Rheology update
 #     x = [τII, P0, 0.0]
 
-#     for iter=1:10
-#         J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_single_phase, x, Const(ε̇II_eff), Const(divV), Const(P0), Const(params))
-#         # display(J.derivs[1])
-#         x .-= J.derivs[1]\J.val
-#         @show norm(J.val)
-#         if norm(J.val)<1e-10
+#    for iter=1:10
+#         f = residual_single_phase(x, ε̇II_eff, divV, P0, params)
+#         f_closed = (x) -> residual_single_phase(x, ε̇II_eff, divV, P0, params)
+#         J = ForwardDiff.jacobian(f_closed, x)
+#         x .-= J\f
+#         if norm(f)<1e-10
 #             break
 #         end
 #     end
@@ -38,21 +38,20 @@ invII(x) = sqrt(1/2*x[1]^2 + 1/2*x[2]^2 + x[3]^2)
 
 # function StressVector1(ϵ̇, τ0, P0, params)
 
-#     ε̇_eff = ϵ̇[1:3]
-#     divV  = ϵ̇[4]
+#     # ε̇_eff = ϵ̇[1:3]
+#     # divV  = ϵ̇[4]
+#     # τ     = @. τ0 + 2*params.G*params.Δt*ε̇_eff
+#     # P     = P0 -   params.K*params.Δt*divV
+#     # return [τ[1], τ[2], τ[3],  P]
 
-#     τ = @. τ0 + 2*params.G*params.Δt*ε̇_eff
-#     P = P0 -   params.K*params.Δt*divV
-#     return [τ[1], τ[2], τ[3],  P]
-
-    # η, λ̇, P = LocalRheology(ϵ̇, τ0, P0, params)
-    # η = params.G*params.Δt
-    # λ̇ = 0.0
-    # σ       = @SVector([2 * η * ϵ̇[1],
-    #                     2 * η * ϵ̇[2],
-    #                     2 * η * ϵ̇[3],
-    #                               P])
-    # return σ, η, λ̇
+#     η, λ̇, P = LocalRheology(ϵ̇, τ0, P0, params)
+#     η = params.G*params.Δt
+#     λ̇ = 0.0
+#     σ       = [2 * η * ϵ̇[1],
+#                         2 * η * ϵ̇[2],
+#                         2 * η * ϵ̇[3],
+#                                   P]
+#     return σ, η, λ̇
 # end
 
 
@@ -82,11 +81,11 @@ function StressVector(ϵ̇, τ0, P0, params)
     x = [τII, P0, 0.0]
 
     for iter=1:10
-        J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_single_phase, x, Const(ε̇II_eff), Const(divV), Const(P0), Const(params))
-        # display(J.derivs[1])
-        x .-= J.derivs[1]\J.val
-        @show norm(J.val)
-        if norm(J.val)<1e-10
+        f = residual_single_phase(x, ε̇II_eff, divV, P0, params)
+        f_closed = (x) -> residual_single_phase(x, ε̇II_eff, divV, P0, params)
+        J = ForwardDiff.jacobian(f_closed, x)
+        x .-= J\f
+        if norm(f)<1e-10
             break
         end
     end
@@ -96,7 +95,6 @@ function StressVector(ϵ̇, τ0, P0, params)
     τ = ε̇_eff .* τII./ε̇II_eff
     return [τ[1], τ[2], τ[3], P], λ̇
 end
-
 
 function single_phase_return_mapping()
 
@@ -144,9 +142,10 @@ function single_phase_return_mapping()
         τ, P  = σ[1:3], σ[4]
 
         # # Consistent tangent
-        # J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector1, ϵ̇, Const(τ0), Const(P0), Const(params))
-        # display(J.derivs[1])
-
+        # StressVector_closed = (ϵ̇) -> StressVector1(ϵ̇, τ0, P0, params)
+        # J = ForwardDiff.jacobian(StressVector_closed, ϵ̇)
+        # display(J)
+        
         # Probes
         probes.t[it] = it*params.Δt
         probes.τ[it] = invII(τ)
