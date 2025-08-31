@@ -143,9 +143,9 @@ function single_phase_return_mapping()
         σ, λ̇  = StressVector(ϵ̇, τ0, P0, params)
         τ, P  = σ[1:3], σ[4]
 
-        # # Consistent tangent
-        # J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector1, ϵ̇, Const(τ0), Const(P0), Const(params))
-        # display(J.derivs[1])
+        # Consistent tangent
+        J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector, ϵ̇, Const(τ0), Const(P0), Const(params))
+        display(J.derivs[1])
 
         # Probes
         probes.t[it] = it*params.Δt
