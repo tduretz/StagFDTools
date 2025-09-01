@@ -5,7 +5,7 @@ using GLMakie, Enzyme, LinearAlgebra#, ForwardDiff
 invII(x) = sqrt(1/2*x[1]^2 + 1/2*x[2]^2 + x[3]^2) 
 
 function residual_two_phase(x, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, p)
-    G, Kϕ, Ks, Kf, C, ϕ, ψ, ηvp, ηϕ, Δt = p.G, p.Kϕ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηϕ, p.Δt
+    G, Kϕ, Ks, Kf, C, ϕ, ψ, ηvp, ηΦ, Δt = p.G, p.Kϕ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηΦ, p.Δt
     eps   = -1e-13
     ηe    = G*Δt 
     χe    = Kϕ*Δt
@@ -13,48 +13,43 @@ function residual_two_phase(x, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, p)
     f       = τII  - C*cosd(ϕ) - (Pt - Pf)*sind(ϕ)
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
-    dΦdt    = 1/Kϕ * (dPfdt - dPtdt)  + λ̇*sind(ψ)*(f>=eps) #+ 1/ηϕ * (Pf - Pt)
+    dΦdt    = 1/Kϕ * (dPfdt - dPtdt) + 1/ηΦ * (Pf - Pt) + λ̇*sind(ψ)*(f>=eps)
     Φ       = Φ0 + dΦdt*Δt
-    # @show Φ, Φ0,  λ̇
     dlnρfdt = dPfdt / Kf
     dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
 
     Kd = (1-Φ)*(1/Kϕ + 1/Ks)^-1
     α  = 1 - Kd/Ks
     B  = (1/Kd - 1/Ks) / (1/Kd - 1/Ks + Φ*(1/Kf - 1/Ks))
+
+    # Most pristine form 
+    # fpt1 = dlnρsdt   - dΦdt/(1-Φ) +   divVs
+    # fpf1 = Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD
+
+    # # Equation from Yarushina (2015) adding dilation bu educated guess :D
+    # fpt2 = divVs     + 1/Kd*(dPtdt -   α*dPfdt) - 1/(1-Φ)*λ̇*sind(ψ)*(f>=eps) + (Pt-Pf)/((1-Φ)*ηΦ)
+    # fpf2 = divqD     - α/Kd*(dPtdt - 1/B*dPfdt) + 1/(1-Φ)*λ̇*sind(ψ)*(f>=eps) - (Pt-Pf)/((1-Φ)*ηΦ)
+
+    # # Equations self-rederived from Yarushina (2015) adding dilation
+    # fpt3 = divVs    + (1/Ks)/(1-Φ) * (dPtdt - Φ*dPfdt) + (1/Kϕ)/(1-Φ) * (dPtdt - dPfdt) + (Pt-Pf)/((1-Φ)*ηΦ) - 1/(1-Φ)*λ̇*sind(ψ)*(f>=eps)
+    # fpf3 = divqD    - (dPtdt - dPfdt)/Kϕ + Φ*dPfdt/Kf + Φ*divVs - (Pt-Pf)/ηΦ +   1/(1-Φ)*λ̇*sind(ψ)*(f>=eps)
+
     return [ 
         ε̇II_eff   -  (τII)/2/ηe - λ̇*(f>=eps),
-        dlnρsdt   - 1/(1-Φ) *  dΦdt + divVs,
-        Φ*dlnρfdt +            dΦdt + divqD + Φ*divVs ,
-        # divVs     + (1/Ks)/(1-Φ) * (dPtdt - Φ*dPfdt) + (1/Kϕ)/(1-Φ) * (dPtdt - dPfdt) - 1/(1-Φ)*λ̇*sind(ψ)*(f>=eps),# + (Pt-Pf)/((1-Φ)*ηΦ) ,
-        # divqD    - 1/Kϕ*(dPtdt - dPfdt) + Φ*dPfdt/Kf + Φ*divVs  +  λ̇*sind(ψ)*(f>=eps),# - (Pt-Pf)/((1-Φ)*ηΦ),
-        # divVs     + 1/Kd*(dPtdt -   α*dPfdt) - 1/(1-Φ)*λ̇*sind(ψ)*(f>=eps),# + (Pt-Pf)/((1-Φ)*ηΦ) ,
-        # divqD    - α/Kd*(dPtdt - 1/B*dPfdt) +         λ̇*sind(ψ)*(f>=eps),# - (Pt-Pf)/((1-Φ)*ηΦ),
+        dlnρsdt   - dΦdt/(1-Φ) +   divVs,
+        Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD,
         (f - ηvp*λ̇)*(f>=eps) +  λ̇*1*(f<eps)
-    ]#, Φ
-    # return [ 
-    #     ε̇II_eff  -  (τII)/2/ηe - λ̇*(f>=eps),
-    #     divVs     + (Pt - Pt0)/χe    - λ̇*sind(ψ)*(f>=eps),
-    #     divqD    - (Pf - Pf0)/Kf/Δt + λ̇*sind(ψ)*(f>=eps),
-    #     (f - ηvp*λ̇)*(f>=eps) +  λ̇*1*(f<eps)
-    # ]
-    # return [ 
-    #     ε̇II_eff  -  (τII)/2/ηe - λ̇*(f>=eps),
-        # divVs     + 1/Kd*(dPtdt -   α*dPfdt) - 1/(1-Φ)*λ̇*sind(ψ)*(f>=eps),# + (Pt-Pf)/((1-Φ)*ηΦ) ,
-        # divqD    - α/Kd*(dPtdt - 1/B*dPfdt) +         λ̇*sind(ψ)*(f>=eps),# - (Pt-Pf)/((1-Φ)*ηΦ),
-    #     (f - ηvp*λ̇)*(f>=eps) +  λ̇*1*(f<eps)
-    # ]
+    ]
 end
 
 function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
 
     ε̇_eff = ϵ̇[1:3]
-    divVs  = ϵ̇[4]
+    divVs = ϵ̇[4]
     divqD = ϵ̇[5]
 
     ε̇II_eff = invII(ε̇_eff) 
     τII     = invII(τ0)
-
 
     # Rheology update
     x = [τII, Pt0, Pf0, 0.0]
@@ -96,11 +91,10 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
     # Recompute components
     τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
     τ = ε̇_eff .* τII./ε̇II_eff
-    Kϕ, ηϕ, ψ, Δt = params.Kϕ, params.ηϕ, params.ψ, params.Δt
+    Kϕ, ηΦ, ψ, Δt = params.Kϕ, params.ηΦ, params.ψ, params.Δt
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
-    dΦdt    = 1/Kϕ * (dPfdt - dPtdt) + λ̇*sind(ψ) # + 1/ηϕ * (Pf - Pt)
-    @show  λ̇*sind(ψ), 1/Kϕ * (dPfdt - dPtdt)
+    dΦdt    = 1/Kϕ * (dPfdt - dPtdt) + 1/ηΦ * (Pf - Pt) + λ̇*sind(ψ) 
     Φ       = Φ0 + dΦdt*Δt
     return [τ[1], τ[2], τ[3], Pt, Pf], λ̇, Φ 
 end
@@ -110,7 +104,7 @@ function two_phase_return_mapping()
 
     # Kinematics
     ε̇     = [0.1, -0.1, 0]
-    divVs  = -0.02   
+    divVs = -0.02   
     divqD =   0.002
 
     # Initial conditions
@@ -131,7 +125,7 @@ function two_phase_return_mapping()
         ϕ     = 35.0,
         ψ     = 30.0,
         ηvp   = 10.0*0,
-        ηϕ    = 1.0,
+        ηΦ    = 1.0,
         Δt    = 5e-3,
     )  
 
@@ -178,7 +172,7 @@ function two_phase_return_mapping()
     end
 
     function figure()
-        fig = Figure(fontsize = 20, size = (800, 800) )     
+        fig = Figure(fontsize = 20, size = (600, 800) )     
         ax1 = Axis(fig[1,1], title="Deviatoric stress",  xlabel=L"$t$ [yr]",  ylabel=L"$\tau_{II}$ [MPa]", xlabelsize=20, ylabelsize=20)
         scatter!(ax1, probes.t, probes.τ)
         ax2 = Axis(fig[2,1], title="Pressure",  xlabel=L"$t$ [yr]",  ylabel=L"$P$ [MPa]", xlabelsize=20, ylabelsize=20)
@@ -197,8 +191,8 @@ function two_phase_return_mapping()
         display(fig)
     end
     with_theme(figure, theme_latexfonts())
-    display(probes.Pt)
-    display(probes.Pf)
+    # display(probes.Pt)
+    # display(probes.Pf)
 
 end
 
