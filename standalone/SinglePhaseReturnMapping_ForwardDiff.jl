@@ -78,13 +78,13 @@ function StressVector(ϵ̇, τ0, P0, params)
     τII     = invII(τ0)
 
     # Rheology update
-    x = [τII, P0, 0.0]
+    x = eltype(ϵ̇).([τII, P0, 0.0])
 
     for iter=1:10
         f = residual_single_phase(x, ε̇II_eff, divV, P0, params)
         f_closed = (x) -> residual_single_phase(x, ε̇II_eff, divV, P0, params)
         J = ForwardDiff.jacobian(f_closed, x)
-        x .-= J\f
+        x = x .- J\f
         if norm(f)<1e-10
             break
         end
@@ -93,7 +93,8 @@ function StressVector(ϵ̇, τ0, P0, params)
     # Recompute components
     τII, P, λ̇ = x[1], x[2], x[3]
     τ = ε̇_eff .* τII./ε̇II_eff
-    return [τ[1], τ[2], τ[3], P], λ̇
+    return [τ[1], τ[2], τ[3], P, λ̇]
+    # return [τ[1], τ[2], τ[3], P, λ̇]
 end
 
 function single_phase_return_mapping()
@@ -138,14 +139,13 @@ function single_phase_return_mapping()
         # Invariants
         ε̇_eff = ε̇ + τ0/(2*params.G*params.Δt)
         ϵ̇     = [ε̇_eff[1], ε̇_eff[2], ε̇_eff[3], divV]
-        σ, λ̇  = StressVector(ϵ̇, τ0, P0, params)
+        σ     = StressVector(ϵ̇, τ0, P0, params)
         τ, P  = σ[1:3], σ[4]
-
-        # # Consistent tangent
-        StressVector_closed = (ϵ̇) -> StressVector(ϵ̇, τ0, P0, params)
-        J = ForwardDiff.jacobian(StressVector_closed, ϵ̇)
+        λ̇     = σ[5]
+        # Consistent tangent
+        J = ForwardDiff.jacobian(ϵ̇-> StressVector(ϵ̇, τ0, P0, params), ϵ̇)
         display(J)
-        
+
         # Probes
         probes.t[it] = it*params.Δt
         probes.τ[it] = invII(τ)
