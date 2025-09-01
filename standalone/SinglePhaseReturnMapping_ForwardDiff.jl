@@ -94,7 +94,6 @@ function StressVector(ϵ̇, τ0, P0, params)
     τII, P, λ̇ = x[1], x[2], x[3]
     τ = ε̇_eff .* τII./ε̇II_eff
     return [τ[1], τ[2], τ[3], P, λ̇]
-    # return [τ[1], τ[2], τ[3], P, λ̇]
 end
 
 function single_phase_return_mapping()
