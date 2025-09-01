@@ -1,4 +1,4 @@
-using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf
+using StagFDTools, StagFDTools.StokesJustPIC, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf, GLMakie
 import Statistics:mean
 using JustPIC, JustPIC._2D
 import JustPIC.@index
@@ -6,6 +6,24 @@ const backend = JustPIC.CPUBackend
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 using TimerOutputs
+
+function set_phases!(phases, particles)
+    Threads.@threads for j in axes(phases, 2)
+        for i in axes(phases, 1)
+            for ip in cellaxes(phases)
+                # quick escape
+                @index(particles.index[ip, i, j]) == 0 && continue
+                x = @index particles.coords[1][ip, i, j]
+                y = @index particles.coords[2][ip, i, j]
+                if (x^2 + (y)^2) <= 0.1^2
+                    @index phases[ip, i, j] = 2.0
+                else
+                    @index phases[ip, i, j] = 1.0
+                end
+            end
+        end
+    end
+end
 
 @views function main(BC_template, D_template)
     #--------------------------------------------#
@@ -23,11 +41,11 @@ using TimerOutputs
         plasticity   = :none,
         n    = [1.0    1.0  ],
         η0   = [1e0    1e5  ], 
-        G    = [1e6    1e6  ],
+        G    = [1e6    2e6  ],
         C    = [150    150  ],
         ϕ    = [30.    30.  ],
         ηvp  = [0.5    0.5  ],
-        β    = [1e-2   1e-2 ],
+        β    = [1e-2   2e-2 ],
         ψ    = [3.0    3.0  ],
         B    = [0.     0.   ],
         cosϕ = [0.0    0.0  ],
@@ -102,6 +120,8 @@ using TimerOutputs
     V       = (x  = zeros(size_x...), y  = zeros(size_y...))
     Vi      = (x  = zeros(size_x...), y  = zeros(size_y...))
     η       = (c  =  ones(size_c...), v  =  ones(size_v...) )
+    G       = (c  =  ones(size_c...), v  =  ones(size_v...) )
+    β       = (c  =  ones(size_c...),)
     λ̇       = (c  = zeros(size_c...), v  = zeros(size_v...) )
     ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
@@ -123,7 +143,6 @@ using TimerOutputs
     yv = LinRange(-L.y/2, L.y/2, nc.y+1)
     xc = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
     yc = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
-    # phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...))  # phase on velocity points
 
     # Initial velocity & pressure field
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
@@ -155,24 +174,44 @@ using TimerOutputs
     # Initialise phase field
     particle_args = phases, = init_cell_arrays(particles, Val(1))  # cool
 
-    for j in axes(phases, 2), i in axes(phases, 1)
-        for ip in cellaxes(phases)
-            # quick escape
-            @index(particles.index[ip, i, j]) == 0 && continue
-            x = @index particles.coords[1][ip, i, j]
-            y = @index particles.coords[2][ip, i, j]
-            if (x^2 + (y)^2) <= 0.1^2
-                @index phases[ip, i, j] = 2.0
-            else
-                @index phases[ip, i, j] = 1.0
+    # Set material geometry 
+    set_phases!(phases, particles)
+
+    phase_ratios = JustPIC._2D.PhaseRatios(backend, 2, values(nc));
+
+    # Compute bulk and shear moduli
+    for I in CartesianIndices(β.c) 
+        i, j = I[1], I[2]
+        β.c[i,j] = 0.0
+        G.c[i,j] = 0.0
+        for p = 1:2 # loop on phases
+            if i>1 && j>1 && i<nc.x+2 && j<nc.y+2 
+                phase_ratio = phase_ratios.center.data[1, p, i-1 + (j-2)*nc.x]
+                β.c[i,j] += phase_ratio * materials.β[p]
+                G.c[i,j] += phase_ratio * materials.G[p]
             end
         end
     end
-    error("stop")
 
-    # # Set material geometry 
-    # phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
-    # phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= 0.1^2] .= 2
+    for I in CartesianIndices(G.v) 
+        i, j = I[1], I[2]
+        G.v[i,j] = 0.0
+        for p = 1:2 # loop on phases
+            if i>1 && j>1 && i<nc.x+3 && j<nc.y+3 
+                phase_ratio = phase_ratios.vertex.data[1, p, i-1 + (j-2)*(nc.x+1)]
+                G.v[i,j] += phase_ratio * materials.G[p]
+            end
+        end
+    end
+    
+    # Visualise
+    fig = Figure()
+    ax  = Axis(fig[1:3,1], aspect=DataAspect(), title="G", xlabel="x", ylabel="y")
+    heatmap!(ax, xc, yc,  (G.c[inx_c,iny_c]), colormap=:bluesreds)
+    display(fig)
+
+    error("sdf")
+
 
     #--------------------------------------------#
 
@@ -199,10 +238,13 @@ using TimerOutputs
 
             @printf("Iteration %04d\n", iter)
 
+            phase_ratios_vertex!(phase_ratios, particles, values(xvi), phases) 
+            phase_ratios_center!(phase_ratios, particles, values(xvi), phases)
+
             #--------------------------------------------#
             # Residual check        
             @timeit to "Residual" begin
-                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
+                TangentOperator_phase_ratios!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phase_ratios, Δ)
                 ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
                 ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
                 ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
@@ -245,7 +287,7 @@ using TimerOutputs
             # Line search & solution update
             @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
             UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
-            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
+            TangentOperator_phase_ratios!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phase_ratios, Δ)
         end
 
         # Update pressure
@@ -253,14 +295,14 @@ using TimerOutputs
 
         #--------------------------------------------#
 
-        p3 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Vx", color=:vik)
-        p4 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy", color=:vik)
-        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]'.-mean( Pt[inx_c,iny_c]), aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik)
-        p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright, title=BC_template)
-        p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
-        p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
-        p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
-        display(plot(p1, p2, p3, p4, layout=(2,2)))
+        # p3 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Vx", color=:vik)
+        # p4 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy", color=:vik)
+        # p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]'.-mean( Pt[inx_c,iny_c]), aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik)
+        # p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright, title=BC_template)
+        # p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
+        # p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
+        # p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
+        # display(plot(p1, p2, p3, p4, layout=(2,2)))
 
     end
 
