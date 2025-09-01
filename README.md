@@ -103,6 +103,12 @@ This package aims at generating flexible FD stencils that can interoperate with 
 <!-- 
 ![image](https://github.com/user-attachments/assets/e29d72a5-93cf-4cc5-84a1-c353a05a4edb) -->
 
+## Shear banding benchmark ([Duretz et al., 2018 - test 1](https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2018GC007877))
+
+see code [here](examples/_Stokes_VEP_SSG/ShearBanding_Duretz2018/Example_EP_Duretz2018.jl)
+
+![image](./results/EP_Duretz2018.png)
+
 ## Shear banding with compressibility and dilatancy
 ![image](./results/ShearBanding.gif)
 
