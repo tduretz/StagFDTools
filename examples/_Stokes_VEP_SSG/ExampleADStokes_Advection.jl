@@ -7,6 +7,39 @@ using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 using TimerOutputs
 
+function compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v)
+    sum       = (c  =  ones(size_c...), v  =  ones(size_v...) )
+
+    for I in CartesianIndices(β.c) 
+        i, j = I[1], I[2]
+        β.c[i,j] = 0.0
+        G.c[i,j] = 0.0
+        sum.c[i,j] = 0.0
+        for p = 1:2 # loop on phases
+            if i>1 && j>1 && i<nc.x+2 && j<nc.y+2 
+                phase_ratio = @index phase_ratios.center[p, i-1, j-1]
+                β.c[i,j]   += phase_ratio * materials.β[p]
+                G.c[i,j]   += phase_ratio * materials.G[p]
+                sum.c[i,j] += phase_ratio
+            end
+        end
+    end
+
+    for I in CartesianIndices(G.v) 
+        i, j = I[1], I[2]
+        G.v[i,j]   = 0.0
+        sum.v[i,j] = 0.0
+        for p = 1:2 # loop on phases
+            if i>1 && j>1 && i<nc.x+3 && j<nc.y+3 
+                phase_ratio = @index phase_ratios.vertex[p, i-1, j-1]
+                G.v[i,j]   += phase_ratio * materials.G[p]
+                sum.v[i,j] += phase_ratio
+            end
+        end
+    end
+    @show extrema(sum.c),  extrema(sum.v)
+end
+
 function set_phases!(phases, particles)
     Threads.@threads for j in axes(phases, 2)
         for i in axes(phases, 1)
@@ -180,29 +213,8 @@ end
     phase_ratios = JustPIC._2D.PhaseRatios(backend, 2, values(nc));
 
     # Compute bulk and shear moduli
-    for I in CartesianIndices(β.c) 
-        i, j = I[1], I[2]
-        β.c[i,j] = 0.0
-        G.c[i,j] = 0.0
-        for p = 1:2 # loop on phases
-            if i>1 && j>1 && i<nc.x+2 && j<nc.y+2 
-                phase_ratio = phase_ratios.center.data[1, p, i-1 + (j-2)*nc.x]
-                β.c[i,j] += phase_ratio * materials.β[p]
-                G.c[i,j] += phase_ratio * materials.G[p]
-            end
-        end
-    end
+    compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v)
 
-    for I in CartesianIndices(G.v) 
-        i, j = I[1], I[2]
-        G.v[i,j] = 0.0
-        for p = 1:2 # loop on phases
-            if i>1 && j>1 && i<nc.x+3 && j<nc.y+3 
-                phase_ratio = phase_ratios.vertex.data[1, p, i-1 + (j-2)*(nc.x+1)]
-                G.v[i,j] += phase_ratio * materials.G[p]
-            end
-        end
-    end
     
     # Visualise
     fig = Figure()
