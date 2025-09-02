@@ -198,6 +198,7 @@ end
     nxcell    = 16 # initial number of particles per cell
     max_xcell = 16 # maximum number of particles per cell
     min_xcell = 16 # minimum number of particles per cell
+    xci = (xc, yc)
     xvi = (xv, yv)
     d  = (Δ.x, Δ.y)
     particles = init_particles(
@@ -211,19 +212,11 @@ end
     set_phases!(phases, particles)
 
     phase_ratios = JustPIC._2D.PhaseRatios(backend, 2, values(nc));
+    phase_ratios_vertex!(phase_ratios, particles, values(xvi), phases) 
+    phase_ratios_center!(phase_ratios, particles, values(xvi), phases)
 
     # Compute bulk and shear moduli
     compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v)
-
-    
-    # Visualise
-    fig = Figure()
-    ax  = Axis(fig[1:3,1], aspect=DataAspect(), title="G", xlabel="x", ylabel="y")
-    heatmap!(ax, xc, yc,  (G.c[inx_c,iny_c]), colormap=:bluesreds)
-    display(fig)
-
-    error("sdf")
-
 
     #--------------------------------------------#
 
@@ -250,16 +243,15 @@ end
 
             @printf("Iteration %04d\n", iter)
 
-            phase_ratios_vertex!(phase_ratios, particles, values(xvi), phases) 
-            phase_ratios_center!(phase_ratios, particles, values(xvi), phases)
+            update_phase_ratios!(phase_ratios, particles, xci, xvi, phases)
 
             #--------------------------------------------#
             # Residual check        
             @timeit to "Residual" begin
-                TangentOperator_phase_ratios!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phase_ratios, Δ)
-                ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
-                ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-                ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, G, β, V, Pt, ΔPt, type, BC, materials, phase_ratios, Δ)
+                ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, β, materials, number, type, BC, nc, Δ) 
+                ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, G, materials, number, type, BC, nc, Δ)
+                ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, G, materials, number, type, BC, nc, Δ)
             end
 
             err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
@@ -274,9 +266,9 @@ end
             #--------------------------------------------#
             # Assembly
             @timeit to "Assembly" begin
-                AssembleContinuity2D!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-                AssembleMomentum2D_x!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-                AssembleMomentum2D_y!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+                AssembleContinuity2D!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, β, materials, number, pattern, type, BC, nc, Δ)
+                AssembleMomentum2D_x!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, G, materials, number, pattern, type, BC, nc, Δ)
+                AssembleMomentum2D_y!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, G, materials, number, pattern, type, BC, nc, Δ)
             end
 
             #--------------------------------------------# 
@@ -291,15 +283,15 @@ end
             # Direct-iterative solver
             fu   = -r[1:size(𝐊,1)]
             fp   = -r[size(𝐊,1)+1:end]
-            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:chol,  ηb=1e3, niter_l=10, ϵ_l=1e-11)
+            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:chol,  ηb=1e4, niter_l=10, ϵ_l=1e-10)
             dx[1:size(𝐊,1)]     .= u
             dx[size(𝐊,1)+1:end] .= p
 
             #--------------------------------------------#
             # Line search & solution update
-            @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+            @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, G, β, 𝐷, 𝐷_ctl, number, type, BC, materials, phase_ratios, nc, Δ)
             UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
-            TangentOperator_phase_ratios!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phase_ratios, Δ)
+            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, G, β, V, Pt, ΔPt, type, BC, materials, phase_ratios, Δ)
         end
 
         # Update pressure
@@ -307,15 +299,14 @@ end
 
         #--------------------------------------------#
 
-        # p3 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Vx", color=:vik)
-        # p4 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy", color=:vik)
-        # p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]'.-mean( Pt[inx_c,iny_c]), aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik)
-        # p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright, title=BC_template)
-        # p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
-        # p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
-        # p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
-        # display(plot(p1, p2, p3, p4, layout=(2,2)))
-
+        # Visualise
+        function visualisation()
+            fig = Figure()
+            ax  = Axis(fig[1,1], aspect=DataAspect(), title="Pressure", xlabel="x", ylabel="y")
+            heatmap!(ax, xc, yc,  (Pt[inx_c,iny_c]), colormap=:bluesreds)
+            display(fig)
+        end
+        with_theme(visualisation, theme_latexfonts())
     end
 
     display(to)
