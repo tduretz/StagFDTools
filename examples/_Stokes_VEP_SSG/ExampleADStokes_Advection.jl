@@ -89,7 +89,7 @@ end
 
     # Time steps
     Δt0   = 0.5
-    nt    = 20
+    nt    = 50
 
     # Newton solver
     niter = 2
@@ -198,8 +198,8 @@ end
 
     # Initialize particles
     nxcell    = (6,6) # initial number of particles per cell
-    max_xcell = 36 # maximum number of particles per cell
-    min_xcell = 16 # minimum number of particles per cell
+    max_xcell = 36*2 # maximum number of particles per cell
+    min_xcell = 1 # minimum number of particles per cell
     xci = (xc, yc)
     xvi = (xv, yv)
     d  = (Δ.x, Δ.y)
@@ -304,7 +304,7 @@ end
         grid_vx = (xv, yce)
         grid_vy = (xce, yv)
         V_adv   = (x=V.x[2:end-1,2:end-1], y=V.y[2:end-1,2:end-1])
-        advection_MQS!(particles, RungeKutta2(), values(V_adv), (grid_vx, grid_vy), Δ.t)
+        advection!(particles, RungeKutta4(), values(V_adv), (grid_vx, grid_vy), Δ.t)
         move_particles!(particles, values(xvi), particle_args)
         inject_particles_phase!(particles, phases, (), (), values(xvi))
         update_phase_ratios!(phase_ratios, particles, xci, xvi, phases)
@@ -336,6 +336,14 @@ end
             Vxc = 0.5.*(V_adv.x[1:end-1,2:end-1] .+ V_adv.x[2:end,2:end-1])
             Vyc = 0.5.*(V_adv.y[2:end-1,1:end-1] .+ V_adv.y[2:end-1,2:end])
             arrows2d!(ax, xc, yc, Vxc, Vyc, lengthscale = 0.05)
+            ax  = Axis(fig[1,2], aspect=DataAspect(), title="Particles", xlabel="x", ylabel="y")
+            p    = particles.coords
+            ppx, ppy = p
+            pxv  = ppx.data[:]
+            pyv  = ppy.data[:]
+            clr  = phases.data[:]
+            idxv = particles.index.data[:]
+            scatter!(ax, Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=2)
             display(fig)
         end
         with_theme(visualisation, theme_latexfonts())
