@@ -62,7 +62,7 @@ end
     #--------------------------------------------#
 
     # Resolution
-    nc = (x = 150, y = 150)
+    nc = (x = 50, y = 50)
 
     # Boundary loading type
     config = BC_template
@@ -89,7 +89,7 @@ end
 
     # Time steps
     Δt0   = 0.5
-    nt    = 1
+    nt    = 20
 
     # Newton solver
     niter = 2
@@ -172,10 +172,12 @@ end
     𝐷_ctl   = (c = D_ctl_c, v = D_ctl_v)
 
     # Mesh coordinates
-    xv = LinRange(-L.x/2, L.x/2, nc.x+1)
-    yv = LinRange(-L.y/2, L.y/2, nc.y+1)
-    xc = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
-    yc = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
+    xv  = LinRange(-L.x/2, L.x/2, nc.x+1)
+    yv  = LinRange(-L.y/2, L.y/2, nc.y+1)
+    xc  = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
+    yc  = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
+    xce = LinRange(-L.x/2-Δ.x/2, L.x/2+Δ.x/2, nc.x+2)
+    yce = LinRange(-L.y/2-Δ.y/2, L.y/2+Δ.y/2, nc.y+2)
 
     # Initial velocity & pressure field
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
@@ -195,8 +197,8 @@ end
     BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
 
     # Initialize particles
-    nxcell    = 16 # initial number of particles per cell
-    max_xcell = 16 # maximum number of particles per cell
+    nxcell    = (6,6) # initial number of particles per cell
+    max_xcell = 36 # maximum number of particles per cell
     min_xcell = 16 # minimum number of particles per cell
     xci = (xc, yc)
     xvi = (xv, yv)
@@ -242,8 +244,6 @@ end
         for iter=1:niter
 
             @printf("Iteration %04d\n", iter)
-
-            update_phase_ratios!(phase_ratios, particles, xci, xvi, phases)
 
             #--------------------------------------------#
             # Residual check        
@@ -294,8 +294,37 @@ end
             TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, G, β, V, Pt, ΔPt, type, BC, materials, phase_ratios, Δ)
         end
 
-        # Update pressure
+        # Update pressure    
         Pt .+= ΔPt.c 
+
+        # Advection with JustPIC
+        C       = 0.5
+        Vmax    = max(maximum(abs.(V.x)), maximum(abs.(V.y)))
+        Δ       = (x=L.x/nc.x, y=L.y/nc.y, t = C*min(Δ.x, Δ.y)/Vmax)
+        grid_vx = (xv, yce)
+        grid_vy = (xce, yv)
+        V_adv   = (x=V.x[2:end-1,2:end-1], y=V.y[2:end-1,2:end-1])
+        advection_MQS!(particles, RungeKutta2(), values(V_adv), (grid_vx, grid_vy), Δ.t)
+        move_particles!(particles, values(xvi), particle_args)
+        inject_particles_phase!(particles, phases, (), (), values(xvi))
+        update_phase_ratios!(phase_ratios, particles, xci, xvi, phases)
+
+        # if ALE
+        #     xlims[1] += xlims[1]*ε̇bg*Δt 
+        #     xlims[2] += xlims[2]*ε̇bg*Δt
+        #     ylims[1] -= ylims[1]*ε̇bg*Δt 
+        #     ylims[2] -= ylims[2]*ε̇bg*Δt
+        #     @show L  = ( x =(xlims[2]-xlims[1]), y =(ylims[2]-ylims[1]) )  
+        #     Δ  = (x=L.x/Nc.x, y=L.y/Nc.y )
+        #     verts     = (x=LinRange(-L.x/2, L.x/2, Nv.x), y=LinRange(-L.y/2, L.y/2, Nv.y))
+        #     cents_ext = (x=LinRange(-Δ.x/2-L.x/2, L.x/2+Δ.x/2, Nc.x+2), y=LinRange(-Δ.y/2-L.y/2, L.y+Δ.y/2+L.y/2, Nc.y+2))
+        #     grid_vx = (verts.x, cents_ext.y)
+        #     grid_vy = (cents_ext.x, verts.y)
+        #     Δt = C * min(Δ...) / max(maximum(abs.(V.x)), maximum(abs.(V.y)))
+        #     @parallel SetVelocity(V, verts, ε̇bg)
+        #     move_particles!(particles, values(verts), (phases,)) 
+        #     phase_ratios_vertex!(phase_ratios, particles, values(verts), phases)
+        # end
 
         #--------------------------------------------#
 
@@ -304,13 +333,14 @@ end
             fig = Figure()
             ax  = Axis(fig[1,1], aspect=DataAspect(), title="Pressure", xlabel="x", ylabel="y")
             heatmap!(ax, xc, yc,  (Pt[inx_c,iny_c]), colormap=:bluesreds)
+            Vxc = 0.5.*(V_adv.x[1:end-1,2:end-1] .+ V_adv.x[2:end,2:end-1])
+            Vyc = 0.5.*(V_adv.y[2:end-1,1:end-1] .+ V_adv.y[2:end-1,2:end])
+            arrows2d!(ax, xc, yc, Vxc, Vyc, lengthscale = 0.05)
             display(fig)
         end
         with_theme(visualisation, theme_latexfonts())
     end
-
-    display(to)
-    
+    # display(to)
 end
 
 
