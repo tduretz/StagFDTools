@@ -67,7 +67,10 @@ end
 
 module TwoPhases
     using StagFDTools, StaticArrays, ExtendableSparse, StaticArrays, LinearAlgebra, Enzyme
-    include("TwoPhases/TwoPhases_v2.jl")
+    # Material produced before 09/25 wew done with this
+    # include("TwoPhases/TwoPhases_v2.jl")
+    # Now this one is preferred because it fully accounts for porosity evolution
+    include("TwoPhases/TwoPhases_v3.jl") 
     export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx1, SetBCVy1
     export AssembleFluidContinuity2D!, ResidualFluidContinuity2D!, FluidContinuity
     export AssembleContinuity2D!, ResidualContinuity2D!, Continuity
