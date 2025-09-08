@@ -2,13 +2,12 @@ using GLMakie, Enzyme, LinearAlgebra, JLD2
 
 # Intends to implement constitutive updates as in RheologicalCalculator
 
-invII(x) = sqrt(1/2*x[1]^2 + 1/2*x[2]^2 + x[3]^2) 
+invII(x) = sqrt(1/2*x[1]^2 + 1/2*x[2]^2 + 1/2*(-x[1]-x[2])^2 + x[3]^2) 
 
 function residual_two_phase_trial(x, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, p)
     G, Kϕ, Ks, Kf, C, ϕ, ψ, ηvp, ηs, ηΦ, Δt = p.G, p.Kϕ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηs, p.ηΦ, p.Δt
     eps   = -1e-13
     ηe    = G*Δt 
-    χe    = Kϕ*Δt
     τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
     f       = -1e100
     dPtdt   = (Pt - Pt0) / Δt
@@ -27,14 +26,16 @@ function residual_two_phase_trial(x, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, p)
 end
 
 function residual_two_phase(x, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, p)
-    G, Kϕ, Ks, Kf, C, ϕ, ψ, ηvp, ηs, ηΦ, Δt = p.G, p.Kϕ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηs, p.ηΦ, p.Δt
+    G, Kϕ, Ks, Kf, C, ϕ, ψ, ηvp, ηv, ηΦ, Δt = p.G, p.Kϕ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηs, p.ηΦ, p.Δt
     eps   = -1e-13
     ηe    = G*Δt 
     χe    = Kϕ*Δt
+    ηve = inv(1/ηv + 1/ηe)
     τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
-    f       = τII  - C*cosd(ϕ) - (Pt - Pf)*sind(ϕ)
+    f       = τII - C*cosd(ϕ) - (Pt - Pf)*sind(ϕ)
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
+    @show λ̇*sind(ψ)
     dΦdt    = 1/Kϕ * (dPfdt - dPtdt) + 1/ηΦ * (Pf - Pt) + λ̇*sind(ψ)*(f>=eps)
     Φ       = Φ0 + dΦdt*Δt
     dlnρfdt = dPfdt / Kf
@@ -57,7 +58,7 @@ function residual_two_phase(x, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, p)
     # fpf3 = divqD    - (dPtdt - dPfdt)/Kϕ + Φ*dPfdt/Kf + Φ*divVs - (Pt-Pf)/ηΦ +   λ̇*sind(ψ)*(f>=eps)
 
     return [ 
-        ε̇II_eff   -  τII/2/ηs - τII/2/ηe - λ̇*(f>=eps),
+        ε̇II_eff   -  τII/2/ηve - λ̇/2*(f>=eps),
         dlnρsdt   - dΦdt/(1-Φ) +   divVs,
         Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD,
         (f - ηvp*λ̇)*(f>=eps) +  λ̇*1*(f<eps)
@@ -198,10 +199,10 @@ function two_phase_return_mapping()
         Kϕ      = 1e9/sc.σ,
         Ks      = 1e11/sc.σ,
         Kf      = 1e10/sc.σ,
-        C       = 1e70 /sc.σ,
+        C       = 1e7 /sc.σ,
         ϕ       = 1*35.0,
-        ψ       = 1*30.0,
-        ηvp     = 10.0*0/sc.σ/sc.t,
+        ψ       = 10.0,
+        ηvp     = 0/sc.σ/sc.t,
         ηs      = 1e22/sc.σ/sc.t,
         ηΦ      = 2e22/sc.σ/sc.t,
         Δt      = 1e10/sc.t,
@@ -267,7 +268,7 @@ function two_phase_return_mapping()
         lines!(ax2, probes.t*sc.t, probes.Pf*sc.σ)
         scatter!(ax2, data["probes"].t, data["probes"].Pt)
         scatter!(ax2, data["probes"].t, data["probes"].Pf)
-        ylims!(ax2, 1e5, 2e6)
+        # ylims!(ax2, 1e5, 2e6)
         
         ax3 = Axis(fig[3,1], title="Plastic multiplier",  xlabel=L"$t$ [yr]",  ylabel=L"$\dot{\lambda}$ [1/s]", xlabelsize=20, ylabelsize=20)    
         lines!(ax3, probes.t*sc.t, probes.λ̇/sc.t)
@@ -276,7 +277,7 @@ function two_phase_return_mapping()
         ax4 = Axis(fig[4,1], title="Porosity",  xlabel=L"$t$ [yr]",  ylabel=L"$\phi$", xlabelsize=20, ylabelsize=20)    
         lines!(ax4, probes.t*sc.t, probes.Φ)
         scatter!(ax4, data["probes"].t, data["probes"].Φ)
-        ylims!(ax4, 0, 0.1)
+        # ylims!(ax4, 0, 0.1)
 
         ax5 = Axis(fig[5,1], title="Residual",  xlabel=L"$t$ [yr]",  ylabel=L"$r$", xlabelsize=20, ylabelsize=20)    
         scatter!(ax5, probes.t*sc.t, log10.(probes.r))
