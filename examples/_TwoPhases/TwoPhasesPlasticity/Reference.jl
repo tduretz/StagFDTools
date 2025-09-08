@@ -221,12 +221,17 @@ using Enzyme  # AD backends you want to use
             @show extrema(λ̇.c)
             @show extrema(λ̇.v)
 
-            err.x[iter] = @views norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
-            err.y[iter] = @views norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
+            @info "Residuals"
+            @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
+            @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
+            @show norm(R.pt[inx_c,iny_c])/sqrt(nPt)
+            @show norm(R.pf[inx_c,iny_c])/sqrt(nPf)
+
+            err.x[iter]  = @views norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
+            err.y[iter]  = @views norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
             err.pt[iter] = @views norm(R.pt[inx_c,iny_c])/sqrt(nPt)
             err.pf[iter] = @views norm(R.pf[inx_c,iny_c])/sqrt(nPt)
-            max(err.x[iter], err.y[iter]) < ϵ_nl ? break : nothing
-
+            max(err.x[iter], err.y[iter], err.pt[iter], err.pf[iter]) < ϵ_nl ? break : nothing
 
             # Set global residual vector
             r = zeros(nVx + nVy + nPt + nPf)
@@ -332,27 +337,29 @@ using Enzyme  # AD backends you want to use
 
             #--------------------------------------------#
             UpdateSolution!(V, P, dx, number, type, nc)
-            TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ0, type, BC, materials, phases, Δ)
         end
 
         #--------------------------------------------#
+
         # Residual check
+        TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ0, type, BC, materials, phases, Δ)
         ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
         ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
         ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
         ResidualFluidContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
 
-        @info "Residuals"
+        @info "Residuals - posteriori"
         @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
         @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
         @show norm(R.pt[inx_c,iny_c])/sqrt(nPt)
         @show norm(R.pf[inx_c,iny_c])/sqrt(nPf)
 
+        #--------------------------------------------#
+
         # Include plasticity corrections
         P.t .= P.t .+ ΔP.t
         P.f .= P.f .+ ΔP.f
-
-        #--------------------------------------------#
+        
         τxyc = av2D(τ.xy)
         τII  = sqrt.( 0.5.*(τ.xx[inx_c,iny_c].^2 + τ.yy[inx_c,iny_c].^2 + (-τ.xx[inx_c,iny_c]-τ.yy[inx_c,iny_c]).^2) .+ τxyc[inx_c,iny_c].^2 )
         ε̇xyc = av2D(ε̇.xy)
@@ -360,13 +367,13 @@ using Enzyme  # AD backends you want to use
         
         # Post process 
         @time for i in eachindex(Φ.c)
-            Kϕ   = materials.Kϕ[phases.c[i]]
-            ηϕ   = materials.ηϕ[phases.c[i]] 
-            sinψ = materials.sinψ[phases.c[i]] 
-            dPtdt   = (P.t[i] - P0.t[i]) / Δ.t
-            dPfdt   = (P.f[i] - P0.f[i]) / Δ.t
-            dΦdt    = 1/Kϕ * (dPfdt - dPtdt) + 1/ηϕ * (P.f[i] - P.t[i]) + λ̇.c[i]*sinψ
-            Φ.c[i]  = Φ0.c[i] + dΦdt*Δ.t
+            Kϕ     = materials.Kϕ[phases.c[i]]
+            ηϕ     = materials.ηϕ[phases.c[i]] 
+            sinψ   = materials.sinψ[phases.c[i]] 
+            dPtdt  = (P.t[i] - P0.t[i]) / Δ.t
+            dPfdt  = (P.f[i] - P0.f[i]) / Δ.t
+            dΦdt   = 1/Kϕ * (dPfdt - dPtdt) + 1/ηϕ * (P.f[i] - P.t[i]) + λ̇.c[i]*sinψ
+            Φ.c[i] = Φ0.c[i] + dΦdt*Δ.t
         end
 
         Vxsc = 0.5*(V.x[1:end-1,2:end-1] + V.x[2:end,2:end-1])
@@ -396,11 +403,11 @@ using Enzyme  # AD backends you want to use
         display(fig)
 
         #--------------------------------------------#
-        probes.Pe[it]   = mean(P.t .- P.f)*sc.σ
-        probes.Pt[it]   = mean(P.t)*sc.σ
-        probes.Pf[it]   = mean(P.f)*sc.σ
+        probes.Pe[it]   = mean(P.t[inx_c,iny_c] .- P.f[inx_c,iny_c])*sc.σ
+        probes.Pt[it]   = mean(P.t[inx_c,iny_c])*sc.σ
+        probes.Pf[it]   = mean(P.f[inx_c,iny_c])*sc.σ
         probes.τ[it]    = mean(τII)*sc.σ
-        probes.Φ[it]    = mean(Φ.c)
+        probes.Φ[it]    = mean(Φ.c[inx_c,iny_c])
         probes.λ̇[it]    = mean(λ̇.c[inx_c,iny_c])/sc.t
         probes.t[it]    = it*Δ.t*sc.t
 

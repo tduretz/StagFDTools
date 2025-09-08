@@ -153,7 +153,7 @@ function Continuity(Vx, Vy, Pt, Pt0, Pf, Pf0, Φ0, phase, materials, type_loc, b
 
     dPtdt   = (Pt[1]   - Pt0[1]) / Δt
     dPfdt   = (Pf[2,2] - Pf0[1]) / Δt
-    dΦdt    = 1/KΦ * (dPfdt - dPtdt) + 1/ηΦ * (Pf[2,2] - Pt[1])
+    dΦdt    = (dPfdt - dPtdt)/KΦ + (Pf[2,2] - Pt[1])/ηΦ
     Φ       = Φ0 + dΦdt*Δt
     dlnρsdt = (1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks)
 
@@ -174,11 +174,11 @@ function FluidContinuity(Vx, Vy, Pt, Pt0, Pf, Pf0, Φ0, phase, materials, kμ, t
 
     dPtdt   = (Pt[1]   - Pt0[1]) / Δt
     dPfdt   = (Pf[2,2] - Pf0[1]) / Δt
-    dΦdt    = 1/KΦ * (dPfdt - dPtdt) + 1/ηΦ * (Pf[2,2] - Pt[1])
+    dΦdt    = (dPfdt - dPtdt)/KΦ + (Pf[2,2] - Pt[1])/ηΦ
     Φ       = Φ0 + dΦdt*Δt
-    dlnρfdt = (dPfdt / Kf)
+    dlnρfdt = dPfdt / Kf
 
-    PfC    = Pf[2,2]
+    PfC     = Pf[2,2]
 
     if type_loc[1,2] === :Dirichlet
         PfW = 2*bcv_loc[1,2] - PfC

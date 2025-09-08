@@ -29,14 +29,12 @@ function residual_two_phase(x, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, p)
     G, Kϕ, Ks, Kf, C, ϕ, ψ, ηvp, ηv, ηΦ, Δt = p.G, p.Kϕ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηs, p.ηΦ, p.Δt
     eps   = -1e-13
     ηe    = G*Δt 
-    χe    = Kϕ*Δt
     ηve = inv(1/ηv + 1/ηe)
     τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
     f       = τII - C*cosd(ϕ) - (Pt - Pf)*sind(ϕ)
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
-    @show λ̇*sind(ψ)
-    dΦdt    = 1/Kϕ * (dPfdt - dPtdt) + 1/ηΦ * (Pf - Pt) + λ̇*sind(ψ)*(f>=eps)
+    dΦdt    = (dPfdt - dPtdt)/Kϕ + (Pf - Pt)/ηΦ + λ̇*sind(ψ)*(f>=eps)
     Φ       = Φ0 + dΦdt*Δt
     dlnρfdt = dPfdt / Kf
     dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
@@ -103,7 +101,8 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
     # end
 
     # This is the proper retun mapping with plasticity
-    r0  = 1.0
+    ri  = residual_two_phase( x, (ε̇II_eff), (divVs), (divqD), (Pt0), (Pf0), (Φ0), (params))
+    r0  = norm(ri)
     tol = 1e-9
 
     for iter=1:10
@@ -142,7 +141,7 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
     # Check residual using trial state pressures: it is also zero !!!
     dPtdt   = (Pt_t - Pt0) / Δt
     dPfdt   = (Pf_t - Pf0) / Δt
-    dΦdt    = 1/Kϕ * (dPfdt - dPtdt) + 1/ηΦ * (Pf_t - Pt_t) 
+    dΦdt    = (dPfdt - dPtdt)/Kϕ + (Pf - Pt)/ηΦ  
     Φ       = Φ0 + dΦdt*Δt
     dlnρfdt = dPfdt / Kf
     dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
@@ -153,7 +152,7 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
     # Check residual should be zero
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
-    dΦdt    = 1/Kϕ * (dPfdt - dPtdt) + 1/ηΦ * (Pf - Pt) + λ̇*sind(ψ) 
+    dΦdt    = (dPfdt - dPtdt)/Kϕ + (Pf - Pt)/ηΦ  + λ̇*sind(ψ) 
     Φ       = Φ0 + dΦdt*Δt
     dlnρfdt = dPfdt / Kf
     dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
