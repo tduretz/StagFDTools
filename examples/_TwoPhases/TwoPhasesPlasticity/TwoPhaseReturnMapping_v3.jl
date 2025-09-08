@@ -1,11 +1,11 @@
-using GLMakie, Enzyme, LinearAlgebra#, ForwardDiff
+using GLMakie, Enzyme, LinearAlgebra, JLD2
 
 # Intends to implement constitutive updates as in RheologicalCalculator
 
 invII(x) = sqrt(1/2*x[1]^2 + 1/2*x[2]^2 + x[3]^2) 
 
 function residual_two_phase_trial(x, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, p)
-    G, Kϕ, Ks, Kf, C, ϕ, ψ, ηvp, ηΦ, Δt = p.G, p.Kϕ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηΦ, p.Δt
+    G, Kϕ, Ks, Kf, C, ϕ, ψ, ηvp, ηs, ηΦ, Δt = p.G, p.Kϕ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηs, p.ηΦ, p.Δt
     eps   = -1e-13
     ηe    = G*Δt 
     χe    = Kϕ*Δt
@@ -19,7 +19,7 @@ function residual_two_phase_trial(x, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, p)
     dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
 
     return [ 
-        ε̇II_eff   -  (τII)/2/ηe ,
+        ε̇II_eff   -  τII/2/ηs -  τII/2/ηe ,
         dlnρsdt   - dΦdt/(1-Φ) +   divVs,
         Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD,
         (f - ηvp*λ̇)*(f>=eps) +  λ̇*1*(f<eps)
@@ -27,7 +27,7 @@ function residual_two_phase_trial(x, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, p)
 end
 
 function residual_two_phase(x, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, p)
-    G, Kϕ, Ks, Kf, C, ϕ, ψ, ηvp, ηΦ, Δt = p.G, p.Kϕ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηΦ, p.Δt
+    G, Kϕ, Ks, Kf, C, ϕ, ψ, ηvp, ηs, ηΦ, Δt = p.G, p.Kϕ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηs, p.ηΦ, p.Δt
     eps   = -1e-13
     ηe    = G*Δt 
     χe    = Kϕ*Δt
@@ -57,7 +57,7 @@ function residual_two_phase(x, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, p)
     # fpf3 = divqD    - (dPtdt - dPfdt)/Kϕ + Φ*dPfdt/Kf + Φ*divVs - (Pt-Pf)/ηΦ +   λ̇*sind(ψ)*(f>=eps)
 
     return [ 
-        ε̇II_eff   -  (τII)/2/ηe - λ̇*(f>=eps),
+        ε̇II_eff   -  τII/2/ηs - τII/2/ηe - λ̇*(f>=eps),
         dlnρsdt   - dΦdt/(1-Φ) +   divVs,
         Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD,
         (f - ηvp*λ̇)*(f>=eps) +  λ̇*1*(f<eps)
@@ -76,6 +76,7 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
     # Rheology update
     x = [τII, Pt0, Pf0, 0.0]
     Φ = 0.0
+    r = 0.0
 
     # for iter=1:10
     #     J_enz = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase, x, Const(ε̇II_eff), Const(divVs), Const(divqD), Const(Pt0), Const(Pf0), Const(Φ0), Const(params))
@@ -100,13 +101,20 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
     #     error("stop")
     # end
 
-    # Thhs is the proper retun mapping with plasticity
+    # This is the proper retun mapping with plasticity
+    r0  = 1.0
+    tol = 1e-9
+
     for iter=1:10
         J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase, x, Const(ε̇II_eff), Const(divVs), Const(divqD), Const(Pt0), Const(Pf0), Const(Φ0), Const(params))
         # display(J.derivs[1])
         x .-= J.derivs[1]\J.val
-        # @show norm(J.val)
-        if norm(J.val)<1e-10
+        if iter==1 
+            r0 = norm(J.val)
+        end
+        r = norm(J.val)/r0
+        # @show r
+        if r<tol
             break
         end
     end
@@ -163,37 +171,40 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
     f2 = divqD    - (dPtdt - dPfdt)/Kϕ + Φ*dPfdt/Kf + Φ*divVs - (Pt-Pf)/ηΦ + λ̇*sind(ψ)
     @show f1, f2
 
-    return [τ[1], τ[2], τ[3], Pt, Pf], λ̇, Φ 
+    return [τ[1], τ[2], τ[3], Pt, Pf], λ̇, Φ, r 
 end
 
 
 function two_phase_return_mapping()
 
+    sc = (σ=1e7, t=1e10, L=1e3)
+
     # Kinematics
-    ε̇     = [0.1, -0.1, 0]
-    divVs = -0.02   
-    divqD =   0.002
+    ε̇     = [1e-15, -1e-15, 0].*sc.t
+    divVs =  0*1e-14 .*sc.t
+    divqD = -0*1e-14 .*sc.t
 
     # Initial conditions
-    Pt   = 0.0
-    Pf   = 0.0  
-    τ    = [0.0, -0.0, 0]
-    Φ    = 0.04 
+    Pt   = 1e6/sc.σ
+    Pf   = 1e6/sc.σ 
+    τ    = [0.0, -0.0, 0]./sc.σ
+    Φ    = 0.05 
 
     # Parameters
-    nt = 100
+    nt = 30
     
     params = (
-        G     = 1.0,
-        Kϕ    = 1.0,
-        Ks    = 3.0,
-        Kf    = 3.2,
-        C     = .02,
-        ϕ     = 35.0,
-        ψ     = 30.0,
-        ηvp   = 10.0*0,
-        ηΦ    = 1.0,
-        Δt    = 5e-3,
+        G       = 3e10/sc.σ,
+        Kϕ      = 1e9/sc.σ,
+        Ks      = 1e11/sc.σ,
+        Kf      = 1e10/sc.σ,
+        C       = 1e70 /sc.σ,
+        ϕ       = 1*35.0,
+        ψ       = 1*30.0,
+        ηvp     = 10.0*0/sc.σ/sc.t,
+        ηs      = 1e22/sc.σ/sc.t,
+        ηΦ      = 2e22/sc.σ/sc.t,
+        Δt      = 1e10/sc.t,
     )  
 
     # Probes
@@ -205,6 +216,7 @@ function two_phase_return_mapping()
         t  = zeros(nt),
         λ̇  = zeros(nt),
         Φ  = zeros(nt),
+        r  = zeros(nt),
     )
 
     # Time loop
@@ -219,10 +231,10 @@ function two_phase_return_mapping()
         Φ0  = Φ
         
         # Invariants
-        ε̇_eff     = ε̇ + τ0/(2*params.G*params.Δt)
-        ϵ̇         = [ε̇_eff[1], ε̇_eff[2], ε̇_eff[3], divVs, divqD]
-        σ, λ̇, Φ   = StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
-        τ, Pt, Pf = σ[1:3], σ[4], σ[5]
+        ε̇_eff      = ε̇ + τ0/(2*params.G*params.Δt)
+        ϵ̇          = [ε̇_eff[1], ε̇_eff[2], ε̇_eff[3], divVs, divqD]
+        σ, λ̇, Φ, r = StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
+        τ, Pt, Pf  = σ[1:3], σ[4], σ[5]
 
         # # Consistent tangent
         # J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector1, ϵ̇, Const(τ0), Const(P0), Const(params))
@@ -236,25 +248,38 @@ function two_phase_return_mapping()
         probes.Pe[it] = Pt - Pf
         probes.λ̇[it]  = λ̇ 
         probes.Φ[it]  = Φ
+        probes.r[it]  = r
     end
 
     function figure()
+
+        data = load("./examples/_TwoPhases/TwoPhasesPlasticity/VE_loading_homogeneous.jld2")
+
+        @show data["probes"].τ
+
         fig = Figure(fontsize = 20, size = (600, 800) )     
         ax1 = Axis(fig[1,1], title="Deviatoric stress",  xlabel=L"$t$ [yr]",  ylabel=L"$\tau_{II}$ [MPa]", xlabelsize=20, ylabelsize=20)
-        scatter!(ax1, probes.t, probes.τ)
+        lines!(ax1, probes.t*sc.t, probes.τ*sc.σ)
+        scatter!(ax1, data["probes"].t, data["probes"].τ)
+
         ax2 = Axis(fig[2,1], title="Pressure",  xlabel=L"$t$ [yr]",  ylabel=L"$P$ [MPa]", xlabelsize=20, ylabelsize=20)
-        scatter!(ax2, probes.t, probes.Pt)
-        scatter!(ax2, probes.t, probes.Pf)
+        lines!(ax2, probes.t*sc.t, probes.Pt*sc.σ)
+        lines!(ax2, probes.t*sc.t, probes.Pf*sc.σ)
+        scatter!(ax2, data["probes"].t, data["probes"].Pt)
+        scatter!(ax2, data["probes"].t, data["probes"].Pf)
+        ylims!(ax2, 1e5, 2e6)
+        
         ax3 = Axis(fig[3,1], title="Plastic multiplier",  xlabel=L"$t$ [yr]",  ylabel=L"$\dot{\lambda}$ [1/s]", xlabelsize=20, ylabelsize=20)    
-        scatter!(ax3, probes.t, probes.λ̇)
+        lines!(ax3, probes.t*sc.t, probes.λ̇/sc.t)
+        scatter!(ax3, data["probes"].t, data["probes"].λ̇)
+
         ax4 = Axis(fig[4,1], title="Porosity",  xlabel=L"$t$ [yr]",  ylabel=L"$\phi$", xlabelsize=20, ylabelsize=20)    
-        scatter!(ax4, probes.t, probes.Φ)
-        ax5 = Axis(fig[5,1], title="Invariant space",  xlabel=L"$P$ [MPa]",  ylabel=L"$\tau_{II}$ [MPa]", xlabelsize=20, ylabelsize=20)                
-        P1 = LinRange( extrema(probes.Pe)..., 100)
-        τ1 = LinRange( extrema(probes.τ)..., 100)
-        F  =  τ1' .- params.C*cosd(params.ϕ) .- P1*sind(params.ϕ)
-        contour!(ax5, P1, τ1,  F, levels =[0.])
-        scatter!(ax5, probes.Pe, probes.τ)
+        lines!(ax4, probes.t*sc.t, probes.Φ)
+        scatter!(ax4, data["probes"].t, data["probes"].Φ)
+        ylims!(ax4, 0, 0.1)
+
+        ax5 = Axis(fig[5,1], title="Residual",  xlabel=L"$t$ [yr]",  ylabel=L"$r$", xlabelsize=20, ylabelsize=20)    
+        scatter!(ax5, probes.t*sc.t, log10.(probes.r))
         display(fig)
     end
     with_theme(figure, theme_latexfonts())
