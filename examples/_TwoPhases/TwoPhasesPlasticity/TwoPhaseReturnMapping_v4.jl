@@ -17,7 +17,7 @@ function residual_two_phase_trial(x, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, p)
     dlnρfdt = dPfdt / Kf
     dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
 
-    ηve = (1-Φ)*inv(1/ηv + 1/ηe)
+    ηve = (1-Φ)*inv(1/ηv + 1/((1-Φ)*ηe))
 
     return [ 
         ε̇II_eff   -  τII/2/ηve,
@@ -31,13 +31,13 @@ function residual_two_phase(x, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, p)
     G, Kϕ, Ks, Kf, C, ϕ, ψ, ηvp, ηv, ηΦ, Δt = p.G, p.Kϕ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηs, p.ηΦ, p.Δt
     eps   = -1e-13
     ηe    = G*Δt 
-    τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
-    f       = τII - C*cosd(ϕ) - (Pt - Pf)*sind(ϕ)
+    τII, Pt, Pf, λ̇, Φ = x[1], x[2], x[3], x[4], x[5]
+    f       = τII - (1-Φ)*C*cosd(ϕ) - (Pt - Pf)*sind(ϕ)
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
     @show λ̇*sind(ψ)
     dΦdt    = (dPfdt - dPtdt)/Kϕ + (Pf - Pt)/ηΦ + λ̇*sind(ψ)*(f>=eps)
-    Φ       = Φ0 + dΦdt*Δt
+    # Φ       = Φ0 + dΦdt*Δt
     dlnρfdt = dPfdt / Kf
     dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
 
@@ -63,7 +63,8 @@ function residual_two_phase(x, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, p)
         ε̇II_eff   -  τII/2/ηve - λ̇/2*(f>=eps),
         dlnρsdt   - dΦdt/(1-Φ) +   divVs,
         Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD,
-        (f - ηvp*λ̇)*(f>=eps) +  λ̇*1*(f<eps)
+        (f - ηvp*λ̇)*(f>=eps) +  λ̇*1*(f<eps),
+        Φ    - (Φ0 + dΦdt*Δt),
     ]
 end
 
@@ -77,7 +78,7 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
     τII     = invII(τ0)
 
     # Rheology update
-    x = [τII, Pt0, Pf0, 0.0]
+    x = [τII, Pt0, Pf0, 0.0, Φ0]
     Φ = 0.0
     r = 0.0
 
@@ -110,7 +111,7 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
 
     for iter=1:10
         J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase, x, Const(ε̇II_eff), Const(divVs), Const(divqD), Const(Pt0), Const(Pf0), Const(Φ0), Const(params))
-        # display(J.derivs[1])
+        display(J.derivs[1])
         x .-= J.derivs[1]\J.val
         if iter==1 
             r0 = norm(J.val)
@@ -174,6 +175,7 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
     f2 = divqD    - (dPtdt - dPfdt)/Kϕ + Φ*dPfdt/Kf + Φ*divVs - (Pt-Pf)/ηΦ + λ̇*sind(ψ)
     @show f1, f2
 
+    Φ = x[5]
     return [τ[1], τ[2], τ[3], Pt, Pf], λ̇, Φ, r 
 end
 
@@ -183,7 +185,7 @@ function two_phase_return_mapping()
     sc = (σ=1e7, t=1e10, L=1e3)
 
     # Kinematics
-    ε̇     = [1e-15, -1e-15, 0].*sc.t
+    ε̇     = [2e-15,-2e-15, 0].*sc.t
     divVs =  0*1e-14 .*sc.t
     divqD = -0*1e-14 .*sc.t
 

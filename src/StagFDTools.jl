@@ -6,7 +6,7 @@ include("operators.jl")
 export inn, inn_x, inn_y, av, avx, avy, harm, ∂x, ∂y, ∂x_inn, ∂y_inn, ∂kk
 
 include("Utils.jl")
-export printxy, av2D
+export GenerateGrid, printxy, av2D
 
 include("Solvers.jl")
 export DecoupledSolver
@@ -71,7 +71,7 @@ module TwoPhases
     # include("TwoPhases/TwoPhases_v2.jl")
     # Now this one is preferred because it fully accounts for porosity evolution
     include("TwoPhases/TwoPhases_v3.jl") 
-    export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx1, SetBCVy1
+    export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx1, SetBCVy1, SetBCPf1
     export AssembleFluidContinuity2D!, ResidualFluidContinuity2D!, FluidContinuity
     export AssembleContinuity2D!, ResidualContinuity2D!, Continuity
     export AssembleMomentum2D_y!, ResidualMomentum2D_y!, Momentum_y

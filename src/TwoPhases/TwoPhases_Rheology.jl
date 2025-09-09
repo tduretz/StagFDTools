@@ -4,20 +4,20 @@ import ForwardDiff
 function residual_two_phase(x, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0,  G, Kϕ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, ηv, ηΦ, Δt)
     eps   = -1e-13
     ηe    = G*Δt 
-    ηve = inv(1/ηv + 1/ηe)
-    τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
-    f       = τII - C*cosϕ - (Pt - Pf)*sinϕ
+    τII, Pt, Pf, λ̇, Φ = x[1], x[2], x[3], x[4], x[5]
+    f       = τII - (1-Φ)*C*cosϕ - (Pt - Pf)*sinϕ
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
     dΦdt    = (dPfdt - dPtdt)/Kϕ + (Pf - Pt)/ηΦ + λ̇*sinψ*(f>=eps)
-    Φ       = Φ0 + dΦdt*Δt
     dlnρfdt = dPfdt / Kf
     dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
+    ηve     = (1-Φ)*inv(1/ηv + 1/ηe)
     return @SVector([ 
         ε̇II_eff   -  τII/2/ηve - λ̇/2*(f>=eps),
         dlnρsdt   - dΦdt/(1-Φ) +   divVs,
         Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD,
-        (f - ηvp*λ̇)*(f>=eps) +  λ̇*1*(f<eps)
+        (f - ηvp*λ̇)*(f>=eps) +  λ̇*1*(f<eps),
+        Φ  - (Φ0 + dΦdt*Δt)
     ])
 end
 
@@ -74,17 +74,17 @@ function LocalRheology(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases
     # Viscoplastic return mapping
     λ̇ = 0.
 
-    x = @MVector( [τII, Pt, Pf, λ̇] )
+    x = @MVector( [τII, Pt, Pf, λ̇, Φ0] )
 
     ri  = residual_two_phase( x, ε̇II, divVs, divqD, Pt0, Pf0, Φ0,  G, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, η0, ηΦ, Δ.t)
     r0  = norm(ri)
-    tol = 1e-10
+    tol = 1e-7
 
     for iter=1:10
         J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase, x, ε̇II, divVs, divqD, Pt0, Pf0, Φ0,  G, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, η0, ηΦ, Δ.t)
         f = J.val
         x .= x .- inv(J.derivs[1])*f
-        # @show iter, norm(f), J_enz[2], f
+        # @show iter, f
         if norm(f)<tol || norm(f)/r0<tol
             break
         end
@@ -95,12 +95,12 @@ function LocalRheology(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases
     #     error()
     # end
 
-    τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
+    τII, Pt, Pf, λ̇, Φ = x[1], x[2], x[3], x[4], x[5]
 
     # Effective viscosity
     ηvep = τII/(2*ε̇II)
 
-    return ηvep, λ̇, Pt, Pf
+    return ηvep, λ̇, Pt, Pf, Φ
 end
 
 function StressVector!(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases, Δ) 
@@ -127,10 +127,16 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
         typex  = SMatrix{2,3}(  type.Vx[ii,jj] for ii in i:i+1,   jj in j:j+2)
         typey  = SMatrix{3,2}(  type.Vy[ii,jj] for ii in i:i+2,   jj in j:j+1)
         τxy0   = SMatrix{2,2}(    τ0.xy[ii,jj] for ii in i:i+1,   jj in j:j+1)
+        Pf_loc = SMatrix{3,3}(      P.f[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+        typepf = SMatrix{3,3}(  type.Pf[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+        bcpf   = SMatrix{3,3}(    BC.Pf[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
 
+        # BCs
         Vx  = SetBCVx1(Vx, typex, bcx, Δ)
         Vy  = SetBCVy1(Vy, typey, bcy, Δ)
+        Pf  = SetBCPf1(Pf_loc, typepf, bcpf, Δ)
 
+        # Kinematics
         Dxx = ∂x_inn(Vx) / Δ.x 
         Dyy = ∂y_inn(Vy) / Δ.y 
         Dxy = ∂y(Vx) / Δ.y
@@ -142,8 +148,10 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
         ε̇xy = @. (Dxy + Dyx) ./ 2
         ε̇̄xy = av(ε̇xy)
 
-        divqD = 0.0
-    
+        qDx   = materials.k_ηf0[1] .*  ∂x_inn(Pf) / Δ.x 
+        qDy   = materials.k_ηf0[1] .*  ∂y_inn(Pf) / Δ.y
+        divqD = 0.0 #∂x(qDx) + ∂y(qDy)
+       
         # Visco-elasticity
         G     = materials.G[phases.c[i,j]]
         τ̄xy0  = av(τxy0)
@@ -178,19 +186,21 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
 
     # Loop over vertices
     for j=1:size(ε̇.xy,2)-2, i=1:size(ε̇.xy,1)-2
-        Vx     = SMatrix{3,2}(      V.x[ii,jj] for ii in i:i+2,   jj in j+1:j+2)
-        Vy     = SMatrix{2,3}(      V.y[ii,jj] for ii in i+1:i+2, jj in j:j+2  )
-        bcx    = SMatrix{3,2}(    BC.Vx[ii,jj] for ii in i:i+2,   jj in j+1:j+2)
-        bcy    = SMatrix{2,3}(    BC.Vy[ii,jj] for ii in i+1:i+2, jj in j:j+2  )
-        typex  = SMatrix{3,2}(  type.Vx[ii,jj] for ii in i:i+2,   jj in j+1:j+2)
-        typey  = SMatrix{2,3}(  type.Vy[ii,jj] for ii in i+1:i+2, jj in j:j+2  )
-        τxx0   = SMatrix{2,2}(    τ0.xx[ii,jj] for ii in i:i+1,   jj in j:j+1)
-        τyy0   = SMatrix{2,2}(    τ0.yy[ii,jj] for ii in i:i+1,   jj in j:j+1)
-        Pt     = SMatrix{2,2}(      P.t[ii,jj] for ii in i:i+1,   jj in j:j+1)
-        Pf     = SMatrix{2,2}(      P.f[ii,jj] for ii in i:i+1,   jj in j:j+1)
-        Φ0_loc = SMatrix{2,2}(     Φ0.c[ii,jj] for ii in i:i+1,   jj in j:j+1)
+        Vx      = SMatrix{3,2}(      V.x[ii,jj] for ii in i:i+2,   jj in j+1:j+2)
+        Vy      = SMatrix{2,3}(      V.y[ii,jj] for ii in i+1:i+2, jj in j:j+2  )
+        bcx     = SMatrix{3,2}(    BC.Vx[ii,jj] for ii in i:i+2,   jj in j+1:j+2)
+        bcy     = SMatrix{2,3}(    BC.Vy[ii,jj] for ii in i+1:i+2, jj in j:j+2  )
+        typex   = SMatrix{3,2}(  type.Vx[ii,jj] for ii in i:i+2,   jj in j+1:j+2)
+        typey   = SMatrix{2,3}(  type.Vy[ii,jj] for ii in i+1:i+2, jj in j:j+2  )
+        τxx0    = SMatrix{2,2}(    τ0.xx[ii,jj] for ii in i:i+1,   jj in j:j+1)
+        τyy0    = SMatrix{2,2}(    τ0.yy[ii,jj] for ii in i:i+1,   jj in j:j+1)
+        Pt      = SMatrix{2,2}(      P.t[ii,jj] for ii in i:i+1,   jj in j:j+1)
+        Pf      = SMatrix{2,2}(      P.f[ii,jj] for ii in i:i+1,   jj in j:j+1)
+        Φ0_loc  = SMatrix{2,2}(     Φ0.c[ii,jj] for ii in i:i+1,   jj in j:j+1)
         Pt0_loc = SMatrix{2,2}(     P0.t[ii,jj] for ii in i:i+1,   jj in j:j+1)
         Pf0_loc = SMatrix{2,2}(     P0.f[ii,jj] for ii in i:i+1,   jj in j:j+1)
+
+        # Pfex    = SMatrix{4,4}(      P.f[ii,jj] for ii in i-1:i+2,   jj in j-1:j+2)
  
         Vx     = SetBCVx1(Vx, typex, bcx, Δ)
         Vy     = SetBCVy1(Vy, typey, bcy, Δ)
