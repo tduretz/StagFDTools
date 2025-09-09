@@ -95,7 +95,7 @@ end
 
     # Time steps
     Δt0   = 0.5
-    nt    = 2
+    nt    = 20
     ALE   = true
 
     # Newton solver
@@ -353,7 +353,6 @@ end
             BC.Vy[     2, iny_Vy] .= (type.Vy[     2, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[    2, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[1]   .+ D_BC[2,2]*yv)
             BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
 
-
             Δ       = (x=L.x/nc.x, y=L.y/nc.y, t = C * min(Δ.x, Δ.y)/Vmax)
             move_particles!(particles, values(xvi), particle_args)
             inject_particles_phase!(particles, phases, (), (), values(xvi))
@@ -371,30 +370,25 @@ end
             #-----------
             ax  = Axis(fig[1,1], aspect=DataAspect(), title="Pressure", xlabel="x", ylabel="y")
             heatmap!(ax, xc, yc,  (Pt[inx_c,iny_c]), colormap=:bluesreds)
-            # heatmap!(ax, xc, yc,  V_adv.y, colormap=:bluesreds)
-            # Vxc = 0.5.*(V_adv.x[1:end-1,2:end-1] .+ V_adv.x[2:end,2:end-1])
-            # Vyc = 0.5.*(V_adv.y[2:end-1,1:end-1] .+ V_adv.y[2:end-1,2:end])
-            # arrows2d!(ax, xc, yc, Vxc, Vyc, lengthscale = 0.05)
-            # ax  = Axis(fig[1,2], aspect=DataAspect(), title="Particles", xlabel="x", ylabel="y")
-            # p    = particles.coords
-            # ppx, ppy = p
-            # pxv  = ppx.data[:]
-            # pyv  = ppy.data[:]
-            # clr  = phases.data[:]
-            # idxv = particles.index.data[:]
-            # scatter!(ax, Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=5)
-            # # heatmap!(ax, xc, yc,  (Pt[inx_c,iny_c]), colormap=:bluesreds)
-            # # heatmap!(ax, xc, yc,  p, colormap=:bluesreds)
-            # ax  = Axis(fig[2,1], aspect=DataAspect(), title="Txx", xlabel="x", ylabel="y")
-            # heatmap!(ax, xc, yc,  τ.xx, colormap=:bluesreds)
-            # ax  = Axis(fig[2,2], aspect=DataAspect(), title="Tyy", xlabel="x", ylabel="y")
-            # heatmap!(ax, xc, yc,  τ.yy, colormap=:bluesreds)
-
-            # ax  = Axis(fig[3,1], aspect=DataAspect(), title="phc", xlabel="x", ylabel="y")
-            # heatmap!(ax, xc, yc,  G.c[inx_c,iny_c], colormap=:bluesreds)
-            # ax  = Axis(fig[3,2], aspect=DataAspect(), title="phv", xlabel="x", ylabel="y")
-            # heatmap!(ax, xv, yv,  G.v[inx_v,iny_v], colormap=:bluesreds)
-
+            Vxc = 0.5.*(V_adv.x[1:end-1,2:end-1] .+ V_adv.x[2:end,2:end-1])
+            Vyc = 0.5.*(V_adv.y[2:end-1,1:end-1] .+ V_adv.y[2:end-1,2:end])
+            arrows2d!(ax, xc, yc, Vxc, Vyc, lengthscale = 0.05)
+            ax  = Axis(fig[1,2], aspect=DataAspect(), title="Particles", xlabel="x", ylabel="y")
+            p    = particles.coords
+            ppx, ppy = p
+            pxv  = ppx.data[:]
+            pyv  = ppy.data[:]
+            clr  = phases.data[:]
+            idxv = particles.index.data[:]
+            scatter!(ax, Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=5)
+            ax  = Axis(fig[2,1], aspect=DataAspect(), title="Txx", xlabel="x", ylabel="y")
+            heatmap!(ax, xc, yc,  τ.xx, colormap=:bluesreds)
+            ax  = Axis(fig[2,2], aspect=DataAspect(), title="Tyy", xlabel="x", ylabel="y")
+            heatmap!(ax, xc, yc,  τ.yy, colormap=:bluesreds)
+            ax  = Axis(fig[3,1], aspect=DataAspect(), title="phc", xlabel="x", ylabel="y")
+            heatmap!(ax, xc, yc,  G.c[inx_c,iny_c], colormap=:bluesreds)
+            ax  = Axis(fig[3,2], aspect=DataAspect(), title="phv", xlabel="x", ylabel="y")
+            heatmap!(ax, xv, yv,  G.v[inx_v,iny_v], colormap=:bluesreds)
             #-----------
             display(fig)
         end
