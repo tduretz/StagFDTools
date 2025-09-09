@@ -89,7 +89,7 @@ end
 
     # Time steps
     Δt0   = 0.5
-    nt    = 50
+    nt    = 2
 
     # Newton solver
     niter = 2
@@ -214,8 +214,7 @@ end
     set_phases!(phases, particles)
 
     phase_ratios = JustPIC._2D.PhaseRatios(backend, 2, values(nc));
-    phase_ratios_vertex!(phase_ratios, particles, values(xvi), phases) 
-    phase_ratios_center!(phase_ratios, particles, values(xvi), phases)
+    update_phase_ratios!(phase_ratios, particles, xci, xvi, phases)
 
     # Compute bulk and shear moduli
     compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v)
@@ -298,7 +297,7 @@ end
         Pt .+= ΔPt.c 
 
         # Advection with JustPIC
-        C       = 0.5
+        C       = 1e-6
         Vmax    = max(maximum(abs.(V.x)), maximum(abs.(V.y)))
         Δ       = (x=L.x/nc.x, y=L.y/nc.y, t = C*min(Δ.x, Δ.y)/Vmax)
         grid_vx = (xv, yce)
@@ -306,8 +305,9 @@ end
         V_adv   = (x=V.x[2:end-1,2:end-1], y=V.y[2:end-1,2:end-1])
         advection!(particles, RungeKutta4(), values(V_adv), (grid_vx, grid_vy), Δ.t)
         move_particles!(particles, values(xvi), particle_args)
-        inject_particles_phase!(particles, phases, (), (), values(xvi))
+        # inject_particles_phase!(particles, phases, (), (), values(xvi))
         update_phase_ratios!(phase_ratios, particles, xci, xvi, phases)
+        compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v)
 
         # if ALE
         #     xlims[1] += xlims[1]*ε̇bg*Δt 
@@ -330,9 +330,12 @@ end
 
         # Visualise
         function visualisation()
+            p = [p[1] for p in phase_ratios.center]
             fig = Figure()
             ax  = Axis(fig[1,1], aspect=DataAspect(), title="Pressure", xlabel="x", ylabel="y")
-            heatmap!(ax, xc, yc,  (Pt[inx_c,iny_c]), colormap=:bluesreds)
+            # heatmap!(ax, xc, yc,  (Pt[inx_c,iny_c]), colormap=:bluesreds)
+            # heatmap!(ax, xc, yc,  p, colormap=:bluesreds)
+            heatmap!(ax, xc, yc,  V_adv.y, colormap=:bluesreds)
             Vxc = 0.5.*(V_adv.x[1:end-1,2:end-1] .+ V_adv.x[2:end,2:end-1])
             Vyc = 0.5.*(V_adv.y[2:end-1,1:end-1] .+ V_adv.y[2:end-1,2:end])
             arrows2d!(ax, xc, yc, Vxc, Vyc, lengthscale = 0.05)
@@ -343,7 +346,7 @@ end
             pyv  = ppy.data[:]
             clr  = phases.data[:]
             idxv = particles.index.data[:]
-            scatter!(ax, Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=2)
+            scatter!(ax, Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=5)
             display(fig)
         end
         with_theme(visualisation, theme_latexfonts())
