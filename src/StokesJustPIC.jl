@@ -122,7 +122,7 @@ function set_boundaries_template!(type, config, nc)
     end
 end
 
-function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, G, materials, type, bcv, Δ)
+function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, materials, type, bcv, Δ)
     
     invΔx, invΔy = 1 / Δ.x, 1 / Δ.y
 
@@ -181,7 +181,7 @@ function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, G, materials, t
     return fx
 end
 
-function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, G, materials, type, bcv, Δ)
+function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, materials, type, bcv, Δ)
     
     invΔx, invΔy = 1 / Δ.x, 1 / Δ.y
 
@@ -262,8 +262,8 @@ function ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, G, materials, number
             bcy_loc    = SMatrix{4,4}(    BC.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
             typex_loc  = SMatrix{3,3}(  type.Vx[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             typey_loc  = SMatrix{4,4}(  type.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
-            Gc_loc     = SMatrix{2,1}(      G.c[ii,jj] for ii in i-1:i,   jj in j-1:j-1)
-            Gv_loc     = SMatrix{1,2}(      G.v[ii,jj] for ii in i-0:i-0, jj in j-1:j-0)
+            # Gc_loc     = SMatrix{2,1}(      G.c[ii,jj] for ii in i-1:i,   jj in j-1:j-1)
+            # Gv_loc     = SMatrix{1,2}(      G.v[ii,jj] for ii in i-0:i-0, jj in j-1:j-0)
             P_loc      = SMatrix{2,3}(        P[ii,jj] for ii in i-1:i,   jj in j-2:j  )
             ΔP_loc     = SMatrix{2,1}(       ΔP.c[ii,jj] for ii in i-1:i,   jj in j-1:j-1)
             τxx0       = SMatrix{2,3}(    τ0.xx[ii,jj]/(2*Δ.t*G.c[ii,jj]) for ii in i-1:i,   jj in j-2:j  )
@@ -274,11 +274,10 @@ function ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, G, materials, number
             Dv         = SMatrix{1,2}(      𝐷.v[ii,jj] for ii in i-0:i-0, jj in j-1:j-0)
             bcv_loc    = (x=bcx_loc, y=bcy_loc)
             type_loc   = (x=typex_loc, y=typey_loc)
-            G_loc      = (c=Gc_loc, v=Gv_loc)
             D          = (c=Dc, v=Dv)
             τ0_loc     = (xx=τxx0, yy=τyy0, xy=τxy0)
     
-            R.x[i,j]   = SMomentum_x_Generic(Vx_loc, Vy_loc, P_loc, ΔP_loc, τ0_loc, D, G_loc, materials, type_loc, bcv_loc, Δ)
+            R.x[i,j]   = SMomentum_x_Generic(Vx_loc, Vy_loc, P_loc, ΔP_loc, τ0_loc, D, materials, type_loc, bcv_loc, Δ)
         end
     end
     return nothing
@@ -304,8 +303,8 @@ function AssembleMomentum2D_x!(K, V, P, P0, ΔP, τ0, 𝐷, G, materials, num, p
             bcy_loc    = SMatrix{4,4}(    BC.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
             typex_loc  = SMatrix{3,3}(  type.Vx[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             typey_loc  = SMatrix{4,4}(  type.Vy[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
-            Gc_loc     = SMatrix{2,1}(      G.c[ii,jj] for ii in i-1:i,   jj in j-1:j-1)
-            Gv_loc     = SMatrix{1,2}(      G.v[ii,jj] for ii in i-0:i-0, jj in j-1:j-0)
+            # Gc_loc     = SMatrix{2,1}(      G.c[ii,jj] for ii in i-1:i,   jj in j-1:j-1)
+            # Gv_loc     = SMatrix{1,2}(      G.v[ii,jj] for ii in i-0:i-0, jj in j-1:j-0)
             
             Vx_loc    .= SMatrix{3,3}(      V.x[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             Vy_loc    .= SMatrix{4,4}(      V.y[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
@@ -320,14 +319,14 @@ function AssembleMomentum2D_x!(K, V, P, P0, ΔP, τ0, 𝐷, G, materials, num, p
             Dv         = SMatrix{1,2}(      𝐷.v[ii,jj] for ii in i-0:i-0, jj in j-1:j-0)
             bcv_loc    = (x=bcx_loc, y=bcy_loc)
             type_loc   = (x=typex_loc, y=typey_loc)
-            G_loc      = (c=Gc_loc, v=Gv_loc)
+            # G_loc      = (c=Gc_loc, v=Gv_loc)
             D          = (c=Dc, v=Dv)
             τ0_loc     = (xx=τxx0, yy=τyy0, xy=τxy0)
 
             fill!(∂R∂Vx, 0e0)
             fill!(∂R∂Vy, 0e0)
             fill!(∂R∂Pt, 0e0)
-            autodiff(Enzyme.Reverse, SMomentum_x_Generic, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ΔP_loc), Const(τ0_loc), Const(D), Const(G_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+            autodiff(Enzyme.Reverse, SMomentum_x_Generic, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ΔP_loc), Const(τ0_loc), Const(D), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
             # Vx --- Vx
             Local = SMatrix{3,3}(num.Vx[ii, jj] for ii in i-1:i+1, jj in j-1:j+1) .* pattern[1][1]
             for jj in axes(Local,2), ii in axes(Local,1)
@@ -364,8 +363,8 @@ function ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, G, materials, number
             bcy_loc    = SMatrix{3,3}(    BC.Vy[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             typex_loc  = SMatrix{4,4}(  type.Vx[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
             typey_loc  = SMatrix{3,3}(  type.Vy[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-            Gc_loc     = SMatrix{1,2}(     G.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
-            Gv_loc     = SMatrix{2,1}(     G.v[ii,jj] for ii in i-1:i-0, jj in j-0:j-0) 
+            # Gc_loc     = SMatrix{1,2}(     G.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
+            # Gv_loc     = SMatrix{2,1}(     G.v[ii,jj] for ii in i-1:i-0, jj in j-0:j-0) 
             P_loc      = SMatrix{3,2}(        P[ii,jj] for ii in i-2:i,   jj in j-1:j  )
             ΔP_loc     = SMatrix{1,2}(     ΔP.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
             τxx0       = SMatrix{3,2}(    τ0.xx[ii,jj]/(2*Δ.t*G.c[ii,jj]) for ii in i-2:i,   jj in j-1:j  )
@@ -375,11 +374,11 @@ function ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, G, materials, number
             Dv         = SMatrix{2,1}(      𝐷.v[ii,jj] for ii in i-1:i-0,   jj in j-0:j-0)
             bcv_loc    = (x=bcx_loc, y=bcy_loc)
             type_loc   = (x=typex_loc, y=typey_loc)
-            G_loc      = (c=Gc_loc, v=Gv_loc)
+            # G_loc      = (c=Gc_loc, v=Gv_loc)
             D          = (c=Dc, v=Dv)
             τ0_loc     = (xx=τxx0, yy=τyy0, xy=τxy0)
 
-            R.y[i,j]   = SMomentum_y_Generic(Vx_loc, Vy_loc, P_loc, ΔP_loc, τ0_loc, D, G_loc, materials, type_loc, bcv_loc, Δ)
+            R.y[i,j]   = SMomentum_y_Generic(Vx_loc, Vy_loc, P_loc, ΔP_loc, τ0_loc, D, materials, type_loc, bcv_loc, Δ)
         end
     end
     return nothing
@@ -411,8 +410,8 @@ function AssembleMomentum2D_y!(K, V, P, P0, ΔP, τ0, 𝐷, G, materials, num, p
             bcy_loc    = @inline SMatrix{3,3}(@inbounds     BC.Vy[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             typex_loc  = @inline SMatrix{4,4}(@inbounds   type.Vx[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
             typey_loc  = @inline SMatrix{3,3}(@inbounds   type.Vy[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-            Gc_loc     = @inline SMatrix{1,2}(@inbounds      G.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
-            Gv_loc     = @inline SMatrix{2,1}(@inbounds      G.v[ii,jj] for ii in i-1:i-0, jj in j-0:j-0) 
+            # Gc_loc     = @inline SMatrix{1,2}(@inbounds      G.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
+            # Gv_loc     = @inline SMatrix{2,1}(@inbounds      G.v[ii,jj] for ii in i-1:i-0, jj in j-0:j-0) 
             P_loc     .= @inline SMatrix{3,2}(@inbounds         P[ii,jj] for ii in i-2:i,   jj in j-1:j  )
             ΔP_loc    .= @inline SMatrix{1,2}(@inbounds      ΔP.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
             τxx0       = @inline SMatrix{3,2}(@inbounds     τ0.xx[ii,jj]/(2*Δ.t*G.c[ii,jj]) for ii in i-2:i,   jj in j-1:j  )
@@ -422,14 +421,14 @@ function AssembleMomentum2D_y!(K, V, P, P0, ΔP, τ0, 𝐷, G, materials, num, p
             Dv         = @inline SMatrix{2,1}(@inbounds       𝐷.v[ii,jj] for ii in i-1:i-0,   jj in j-0:j-0)
             bcv_loc    = (x=bcx_loc, y=bcy_loc)
             type_loc   = (x=typex_loc, y=typey_loc)
-            G_loc      = (c=Gc_loc, v=Gv_loc)
+            # G_loc      = (c=Gc_loc, v=Gv_loc)
             D          = (c=Dc, v=Dv)
             τ0_loc     = (xx=τxx0, yy=τyy0, xy=τxy0)
 
             fill!(∂R∂Vx, 0.0)
             fill!(∂R∂Vy, 0.0)
             fill!(∂R∂Pt, 0.0)
-            autodiff(Enzyme.Reverse, SMomentum_y_Generic, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ΔP_loc), Const(τ0_loc), Const(D), Const(G_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+            autodiff(Enzyme.Reverse, SMomentum_y_Generic, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ΔP_loc), Const(τ0_loc), Const(D), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
             
             num_Vy = @inbounds num.Vy[i,j]
             bounds_Vy = num_Vy > 0

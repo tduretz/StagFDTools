@@ -80,7 +80,7 @@ end
         plasticity   = :none,
         n    = [1.0    1.0  ],
         η0   = [1e0    1e5  ], 
-        G    = [1e6    2e6  ],
+        G    = [1e60   2e60 ],
         C    = [150    150  ],
         ϕ    = [30.    30.  ],
         ηvp  = [0.5    0.5  ],
@@ -96,6 +96,7 @@ end
     # Time steps
     Δt0   = 0.5
     nt    = 2
+    ALE   = true
 
     # Newton solver
     niter = 2
@@ -178,12 +179,14 @@ end
     𝐷_ctl   = (c = D_ctl_c, v = D_ctl_v)
 
     # Mesh coordinates
-    xv  = LinRange(-L.x/2, L.x/2, nc.x+1)
-    yv  = LinRange(-L.y/2, L.y/2, nc.y+1)
-    xc  = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
-    yc  = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
-    xce = LinRange(-L.x/2-Δ.x/2, L.x/2+Δ.x/2, nc.x+2)
-    yce = LinRange(-L.y/2-Δ.y/2, L.y/2+Δ.y/2, nc.y+2)
+    xlims = [-L.x/2, L.x/2]
+    ylims = [-L.y/2, L.y/2]
+    xv  = LinRange(xlims[1], xlims[2], nc.x+1)
+    yv  = LinRange(ylims[1], ylims[2], nc.y+1)
+    xc  = LinRange(xlims[1]+Δ.x/2, xlims[2]-Δ.x/2, nc.x)
+    yc  = LinRange(ylims[1]+Δ.y/2, ylims[2]-Δ.y/2, nc.y)
+    xce = LinRange(xlims[1]-Δ.x/2, xlims[2]+Δ.x/2, nc.x+2)
+    yce = LinRange(ylims[1]-Δ.y/2, ylims[2]+Δ.y/2, nc.y+2)
 
     # Initial velocity & pressure field
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
@@ -229,10 +232,6 @@ end
 
     #--------------------------------------------#
 
-    Rxcopy = copy(R.x)
-    Rycopy = copy(R.y)
-
-
     for it=1:nt
 
         @printf("Step %04d\n", it)
@@ -260,11 +259,6 @@ end
                 ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, β, materials, number, type, BC, nc, Δ) 
                 ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, G, materials, number, type, BC, nc, Δ)
                 ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, G, materials, number, type, BC, nc, Δ)
-            end
-
-            if iter==1
-                Rxcopy = copy(R.x)
-                Rycopy = copy(R.y)
             end
 
             err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
@@ -311,34 +305,41 @@ end
         Pt .+= ΔPt.c 
 
         # Advection with JustPIC
-        C       = 1e-6
+        C       = 0.1
         Vmax    = max(maximum(abs.(V.x)), maximum(abs.(V.y)))
         Δ       = (x=L.x/nc.x, y=L.y/nc.y, t = C * min(Δ.x, Δ.y)/Vmax)
         grid_vx = (xv, yce)
         grid_vy = (xce, yv)
         V_adv   = (x=V.x[2:end-1,2:end-1], y=V.y[2:end-1,2:end-1])
-        # advection!(particles, RungeKutta4(), values(V_adv), (grid_vx, grid_vy), Δ.t)
-        # move_particles!(particles, values(xvi), particle_args)
-        # inject_particles_phase!(particles, phases, (), (), values(xvi))
-        # update_phase_ratios!(phase_ratios, particles, xci, xvi, phases)
-        # compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v)
+        advection!(particles, RungeKutta4(), values(V_adv), (grid_vx, grid_vy), Δ.t)
+        move_particles!(particles, values(xvi), particle_args)
+        inject_particles_phase!(particles, phases, (), (), values(xvi))
+        update_phase_ratios!(phase_ratios, particles, xci, xvi, phases)
+        compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v)
 
-        # if ALE
-        #     xlims[1] += xlims[1]*ε̇bg*Δt 
-        #     xlims[2] += xlims[2]*ε̇bg*Δt
-        #     ylims[1] -= ylims[1]*ε̇bg*Δt 
-        #     ylims[2] -= ylims[2]*ε̇bg*Δt
-        #     @show L  = ( x =(xlims[2]-xlims[1]), y =(ylims[2]-ylims[1]) )  
-        #     Δ  = (x=L.x/Nc.x, y=L.y/Nc.y )
-        #     verts     = (x=LinRange(-L.x/2, L.x/2, Nv.x), y=LinRange(-L.y/2, L.y/2, Nv.y))
-        #     cents_ext = (x=LinRange(-Δ.x/2-L.x/2, L.x/2+Δ.x/2, Nc.x+2), y=LinRange(-Δ.y/2-L.y/2, L.y+Δ.y/2+L.y/2, Nc.y+2))
-        #     grid_vx = (verts.x, cents_ext.y)
-        #     grid_vy = (cents_ext.x, verts.y)
-        #     Δt = C * min(Δ...) / max(maximum(abs.(V.x)), maximum(abs.(V.y)))
-        #     @parallel SetVelocity(V, verts, ε̇bg)
-        #     move_particles!(particles, values(verts), (phases,)) 
-        #     phase_ratios_vertex!(phase_ratios, particles, values(verts), phases)
-        # end
+        if ALE
+            ε̇bg = D_BC[1,1]
+            xlims[1] += xlims[1]*ε̇bg*Δ.t 
+            xlims[2] += xlims[2]*ε̇bg*Δ.t
+            ylims[1] -= ylims[1]*ε̇bg*Δ.t 
+            ylims[2] -= ylims[2]*ε̇bg*Δ.t
+            @show L  = ( x =(xlims[2]-xlims[1]), y =(ylims[2]-ylims[1]) )  
+            Δ  = (x=L.x/nc.x, y=L.y/nc.y )
+            xv  = LinRange(xlims[1], xlims[2], nc.x+1)
+            yv  = LinRange(ylims[1], ylims[2], nc.y+1)
+            xc  = LinRange(xlims[1]+Δ.x/2, xlims[2]-Δ.x/2, nc.x)
+            yc  = LinRange(ylims[1]+Δ.y/2, ylims[2]-Δ.y/2, nc.y)
+            xce = LinRange(xlims[1]-Δ.x/2, xlims[2]+Δ.x/2, nc.x+2)
+            yce = LinRange(ylims[1]-Δ.y/2, ylims[2]+Δ.y/2, nc.y+2)
+            grid_vx = (xv, yce)
+            grid_vy = (xce, yv)
+            # Δt = C * min(Δ...) / max(maximum(abs.(V.x)), maximum(abs.(V.y)))
+            # @parallel SetVelocity(V, verts, ε̇bg)
+            Δ       = (x=L.x/nc.x, y=L.y/nc.y, t = C * min(Δ.x, Δ.y)/Vmax)
+            move_particles!(particles, values(xvi), particle_args)
+            inject_particles_phase!(particles, phases, (), (), values(xvi))
+            update_phase_ratios!(phase_ratios, particles, xci, xvi, phases)
+        end
 
         #--------------------------------------------#
 
@@ -346,40 +347,34 @@ end
         function visualisation()
             phc = [p[1] for p in phase_ratios.center]
             phv = [p[1] for p in phase_ratios.vertex]
-            #-----------    
+            #-----------  
             fig = Figure(size=(500,800))
             #-----------
             ax  = Axis(fig[1,1], aspect=DataAspect(), title="Pressure", xlabel="x", ylabel="y")
             heatmap!(ax, xc, yc,  (Pt[inx_c,iny_c]), colormap=:bluesreds)
             # heatmap!(ax, xc, yc,  V_adv.y, colormap=:bluesreds)
-            Vxc = 0.5.*(V_adv.x[1:end-1,2:end-1] .+ V_adv.x[2:end,2:end-1])
-            Vyc = 0.5.*(V_adv.y[2:end-1,1:end-1] .+ V_adv.y[2:end-1,2:end])
+            # Vxc = 0.5.*(V_adv.x[1:end-1,2:end-1] .+ V_adv.x[2:end,2:end-1])
+            # Vyc = 0.5.*(V_adv.y[2:end-1,1:end-1] .+ V_adv.y[2:end-1,2:end])
             # arrows2d!(ax, xc, yc, Vxc, Vyc, lengthscale = 0.05)
-            ax  = Axis(fig[1,2], aspect=DataAspect(), title="Particles", xlabel="x", ylabel="y")
-            p    = particles.coords
-            ppx, ppy = p
-            pxv  = ppx.data[:]
-            pyv  = ppy.data[:]
-            clr  = phases.data[:]
-            idxv = particles.index.data[:]
-            scatter!(ax, Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=5)
-            ax  = Axis(fig[1,1], aspect=DataAspect(), title="Pressure", xlabel="x", ylabel="y")
-            # heatmap!(ax, xc, yc,  (Pt[inx_c,iny_c]), colormap=:bluesreds)
-            # heatmap!(ax, xc, yc,  p, colormap=:bluesreds)
-            ax  = Axis(fig[2,1], aspect=DataAspect(), title="Txx", xlabel="x", ylabel="y")
-            heatmap!(ax, xc, yc,  τ.xx, colormap=:bluesreds)
-            ax  = Axis(fig[2,2], aspect=DataAspect(), title="Tyy", xlabel="x", ylabel="y")
-            heatmap!(ax, xc, yc,  τ.yy, colormap=:bluesreds)
+            # ax  = Axis(fig[1,2], aspect=DataAspect(), title="Particles", xlabel="x", ylabel="y")
+            # p    = particles.coords
+            # ppx, ppy = p
+            # pxv  = ppx.data[:]
+            # pyv  = ppy.data[:]
+            # clr  = phases.data[:]
+            # idxv = particles.index.data[:]
+            # scatter!(ax, Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=5)
+            # # heatmap!(ax, xc, yc,  (Pt[inx_c,iny_c]), colormap=:bluesreds)
+            # # heatmap!(ax, xc, yc,  p, colormap=:bluesreds)
+            # ax  = Axis(fig[2,1], aspect=DataAspect(), title="Txx", xlabel="x", ylabel="y")
+            # heatmap!(ax, xc, yc,  τ.xx, colormap=:bluesreds)
+            # ax  = Axis(fig[2,2], aspect=DataAspect(), title="Tyy", xlabel="x", ylabel="y")
+            # heatmap!(ax, xc, yc,  τ.yy, colormap=:bluesreds)
 
-            ax  = Axis(fig[3,1], aspect=DataAspect(), title="phc", xlabel="x", ylabel="y")
-            heatmap!(ax, xc, yc,  G.c[inx_c,iny_c], colormap=:bluesreds)
+            # ax  = Axis(fig[3,1], aspect=DataAspect(), title="phc", xlabel="x", ylabel="y")
+            # heatmap!(ax, xc, yc,  G.c[inx_c,iny_c], colormap=:bluesreds)
             # ax  = Axis(fig[3,2], aspect=DataAspect(), title="phv", xlabel="x", ylabel="y")
             # heatmap!(ax, xv, yv,  G.v[inx_v,iny_v], colormap=:bluesreds)
-
-            ax  = Axis(fig[3,1], aspect=DataAspect(), title="Rx", xlabel="x", ylabel="y")
-            heatmap!(ax, xv, yc,  Rxcopy[inx_Vx,iny_Vx], colormap=:bluesreds)
-            ax  = Axis(fig[3,2], aspect=DataAspect(), title="Ry", xlabel="x", ylabel="y")
-            heatmap!(ax, xc, yv,  Rycopy[inx_Vy,iny_Vy], colormap=:bluesreds)
 
             #-----------
             display(fig)
