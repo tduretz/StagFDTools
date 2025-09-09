@@ -153,14 +153,12 @@ function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, G, materials, t
     τ̄0xy = av(τ0.xy)
 
     # Effective strain rate
-    tmpc = @. inv(2 * G.c * Δ.t)
-    tmpv = @. inv(2 * G.v * Δ.t)
-    ϵ̇xx  = @. ε̇xx[:,2] + τ0.xx[:,2] * tmpc
-    ϵ̇yy  = @. ε̇yy[:,2] + τ0.yy[:,2] * tmpc
-    ϵ̇̄xy  = @. ε̇̄xy[:]   + τ̄0xy[:]    * tmpc
-    ϵ̇̄xx  = @. ε̇̄xx[:]   + τ̄0xx[:]    * tmpv
-    ϵ̇̄yy  = @. ε̇̄yy[:]   + τ̄0yy[:]    * tmpv
-    ϵ̇xy  = @. ε̇xy[2,:] + τ0.xy[2,:] * tmpv
+    ϵ̇xx  = @. ε̇xx[:,2] + τ0.xx[:,2]
+    ϵ̇yy  = @. ε̇yy[:,2] + τ0.yy[:,2]
+    ϵ̇̄xy  = @. ε̇̄xy[:]   + τ̄0xy[:]   
+    ϵ̇̄xx  = @. ε̇̄xx[:]   + τ̄0xx[:]   
+    ϵ̇̄yy  = @. ε̇̄yy[:]   + τ̄0yy[:]   
+    ϵ̇xy  = @. ε̇xy[2,:] + τ0.xy[2,:]
 
     # Corrected pressure
     comp = materials.compressible
@@ -214,14 +212,12 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, G, materials, t
     τ̄0xy = av(τ0.xy)
     
     # Effective strain rate
-    tmpc = (2*G.c.*Δ.t)
-    tmpv = (2*G.v.*Δ.t)
-    ϵ̇xx  = @. ε̇xx[2,:] + τ0.xx[2,:] / tmpc
-    ϵ̇yy  = @. ε̇yy[2,:] + τ0.yy[2,:] / tmpc
-    ϵ̇̄xy  = @. ε̇̄xy[:]   + τ̄0xy[:]    / tmpc
-    ϵ̇̄xx  = @. ε̇̄xx[:]   + τ̄0xx[:]    / tmpv
-    ϵ̇̄yy  = @. ε̇̄yy[:]   + τ̄0yy[:]    / tmpv
-    ϵ̇xy  = @. ε̇xy[:,2] + τ0.xy[:,2] / tmpv
+    ϵ̇xx  = @. ε̇xx[2,:] + τ0.xx[2,:]
+    ϵ̇yy  = @. ε̇yy[2,:] + τ0.yy[2,:]
+    ϵ̇̄xy  = @. ε̇̄xy[:]   + τ̄0xy[:]   
+    ϵ̇̄xx  = @. ε̇̄xx[:]   + τ̄0xx[:]   
+    ϵ̇̄yy  = @. ε̇̄yy[:]   + τ̄0yy[:]   
+    ϵ̇xy  = @. ε̇xy[:,2] + τ0.xy[:,2]
 
     # Corrected pressure
     comp = materials.compressible
@@ -270,9 +266,9 @@ function ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, G, materials, number
             Gv_loc     = SMatrix{1,2}(      G.v[ii,jj] for ii in i-0:i-0, jj in j-1:j-0)
             P_loc      = SMatrix{2,3}(        P[ii,jj] for ii in i-1:i,   jj in j-2:j  )
             ΔP_loc     = SMatrix{2,1}(       ΔP.c[ii,jj] for ii in i-1:i,   jj in j-1:j-1)
-            τxx0       = SMatrix{2,3}(    τ0.xx[ii,jj] for ii in i-1:i,   jj in j-2:j  )
-            τyy0       = SMatrix{2,3}(    τ0.yy[ii,jj] for ii in i-1:i,   jj in j-2:j  )
-            τxy0       = SMatrix{3,2}(    τ0.xy[ii,jj] for ii in i-1:i+1, jj in j-1:j  )
+            τxx0       = SMatrix{2,3}(    τ0.xx[ii,jj]/(2*Δ.t*G.c[ii,jj]) for ii in i-1:i,   jj in j-2:j  )
+            τyy0       = SMatrix{2,3}(    τ0.yy[ii,jj]/(2*Δ.t*G.c[ii,jj]) for ii in i-1:i,   jj in j-2:j  )
+            τxy0       = SMatrix{3,2}(    τ0.xy[ii,jj]/(2*Δ.t*G.v[ii,jj]) for ii in i-1:i+1, jj in j-1:j  )
 
             Dc         = SMatrix{2,1}(      𝐷.c[ii,jj] for ii in i-1:i,   jj in j-1:j-1)
             Dv         = SMatrix{1,2}(      𝐷.v[ii,jj] for ii in i-0:i-0, jj in j-1:j-0)
@@ -316,9 +312,9 @@ function AssembleMomentum2D_x!(K, V, P, P0, ΔP, τ0, 𝐷, G, materials, num, p
             P_loc     .= SMatrix{2,3}(        P[ii,jj] for ii in i-1:i,   jj in j-2:j  )
             ΔP_loc    .= SMatrix{2,1}(       ΔP.c[ii,jj] for ii in i-1:i,   jj in j-1:j-1)
 
-            τxx0       = SMatrix{2,3}(    τ0.xx[ii,jj] for ii in i-1:i,   jj in j-2:j  )
-            τyy0       = SMatrix{2,3}(    τ0.yy[ii,jj] for ii in i-1:i,   jj in j-2:j  )
-            τxy0       = SMatrix{3,2}(    τ0.xy[ii,jj] for ii in i-1:i+1, jj in j-1:j  )
+            τxx0       = SMatrix{2,3}(    τ0.xx[ii,jj]/(2*Δ.t*G.c[ii,jj]) for ii in i-1:i,   jj in j-2:j  )
+            τyy0       = SMatrix{2,3}(    τ0.yy[ii,jj]/(2*Δ.t*G.c[ii,jj]) for ii in i-1:i,   jj in j-2:j  )
+            τxy0       = SMatrix{3,2}(    τ0.xy[ii,jj]/(2*Δ.t*G.v[ii,jj]) for ii in i-1:i+1, jj in j-1:j  )
             
             Dc         = SMatrix{2,1}(      𝐷.c[ii,jj] for ii in i-1:i,   jj in j-1:j-1)
             Dv         = SMatrix{1,2}(      𝐷.v[ii,jj] for ii in i-0:i-0, jj in j-1:j-0)
@@ -371,10 +367,10 @@ function ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, G, materials, number
             Gc_loc     = SMatrix{1,2}(     G.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
             Gv_loc     = SMatrix{2,1}(     G.v[ii,jj] for ii in i-1:i-0, jj in j-0:j-0) 
             P_loc      = SMatrix{3,2}(        P[ii,jj] for ii in i-2:i,   jj in j-1:j  )
-            ΔP_loc     = SMatrix{1,2}(       ΔP.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
-            τxx0       = SMatrix{3,2}(    τ0.xx[ii,jj] for ii in i-2:i,   jj in j-1:j  )
-            τyy0       = SMatrix{3,2}(    τ0.yy[ii,jj] for ii in i-2:i,   jj in j-1:j  )
-            τxy0       = SMatrix{2,3}(    τ0.xy[ii,jj] for ii in i-1:i,   jj in j-1:j+1)
+            ΔP_loc     = SMatrix{1,2}(     ΔP.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
+            τxx0       = SMatrix{3,2}(    τ0.xx[ii,jj]/(2*Δ.t*G.c[ii,jj]) for ii in i-2:i,   jj in j-1:j  )
+            τyy0       = SMatrix{3,2}(    τ0.yy[ii,jj]/(2*Δ.t*G.c[ii,jj]) for ii in i-2:i,   jj in j-1:j  )
+            τxy0       = SMatrix{2,3}(    τ0.xy[ii,jj]/(2*Δ.t*G.v[ii,jj]) for ii in i-1:i,   jj in j-1:j+1)
             Dc         = SMatrix{1,2}(      𝐷.c[ii,jj] for ii in i-1:i-1,   jj in j-1:j)
             Dv         = SMatrix{2,1}(      𝐷.v[ii,jj] for ii in i-1:i-0,   jj in j-0:j-0)
             bcv_loc    = (x=bcx_loc, y=bcy_loc)
@@ -418,10 +414,10 @@ function AssembleMomentum2D_y!(K, V, P, P0, ΔP, τ0, 𝐷, G, materials, num, p
             Gc_loc     = @inline SMatrix{1,2}(@inbounds      G.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
             Gv_loc     = @inline SMatrix{2,1}(@inbounds      G.v[ii,jj] for ii in i-1:i-0, jj in j-0:j-0) 
             P_loc     .= @inline SMatrix{3,2}(@inbounds         P[ii,jj] for ii in i-2:i,   jj in j-1:j  )
-            ΔP_loc    .= @inline SMatrix{1,2}(@inbounds        ΔP.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
-            τxx0       = @inline SMatrix{3,2}(@inbounds     τ0.xx[ii,jj] for ii in i-2:i,   jj in j-1:j  )
-            τyy0       = @inline SMatrix{3,2}(@inbounds     τ0.yy[ii,jj] for ii in i-2:i,   jj in j-1:j  )
-            τxy0       = @inline SMatrix{2,3}(@inbounds     τ0.xy[ii,jj] for ii in i-1:i,   jj in j-1:j+1)
+            ΔP_loc    .= @inline SMatrix{1,2}(@inbounds      ΔP.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
+            τxx0       = @inline SMatrix{3,2}(@inbounds     τ0.xx[ii,jj]/(2*Δ.t*G.c[ii,jj]) for ii in i-2:i,   jj in j-1:j  )
+            τyy0       = @inline SMatrix{3,2}(@inbounds     τ0.yy[ii,jj]/(2*Δ.t*G.c[ii,jj]) for ii in i-2:i,   jj in j-1:j  )
+            τxy0       = @inline SMatrix{2,3}(@inbounds     τ0.xy[ii,jj]/(2*Δ.t*G.v[ii,jj]) for ii in i-1:i,   jj in j-1:j+1)
             Dc         = @inline SMatrix{1,2}(@inbounds       𝐷.c[ii,jj] for ii in i-1:i-1,   jj in j-1:j)
             Dv         = @inline SMatrix{2,1}(@inbounds       𝐷.v[ii,jj] for ii in i-1:i-0,   jj in j-0:j-0)
             bcv_loc    = (x=bcx_loc, y=bcy_loc)
@@ -480,8 +476,8 @@ function ResidualContinuity2D!(R, V, P, P0, ΔP, τ0, 𝐷, β, materials, numbe
                 
     for j in 2:size(R.p,2)-1, i in 2:size(R.p,1)-1
         if type.Pt[i,j] !== :constant 
-            Vx_loc     = SMatrix{3,2}(      V.x[ii,jj] for ii in i:i+2, jj in j:j+1)
-            Vy_loc     = SMatrix{2,3}(      V.y[ii,jj] for ii in i:i+1, jj in j:j+2)
+            Vx_loc     = SMatrix{2,3}(      V.x[ii,jj] for ii in i:i+1, jj in j:j+2)
+            Vy_loc     = SMatrix{3,2}(      V.y[ii,jj] for ii in i:i+2, jj in j:j+1)
             bcv_loc    = (;)
             type_loc   = (;)
             D          = (;)

@@ -24,6 +24,10 @@ function compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, 
             end
         end
     end
+    G.c[[1 end],:] .=  G.c[[2 end-1],:]
+    G.c[:,[1 end]] .=  G.c[:,[2 end-1]]
+    β.c[[1 end],:] .=  β.c[[2 end-1],:]
+    β.c[:,[1 end]] .=  β.c[:,[2 end-1]]
 
     for I in CartesianIndices(G.v) 
         i, j = I[1], I[2]
@@ -37,6 +41,8 @@ function compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, 
             end
         end
     end
+    G.v[[1 end],:] .=  G.v[[2 end-1],:]
+    G.v[:,[1 end]] .=  G.v[:,[2 end-1]]
     @show extrema(sum.c),  extrema(sum.v)
 end
 
@@ -62,7 +68,7 @@ end
     #--------------------------------------------#
 
     # Resolution
-    nc = (x = 50, y = 50)
+    nc = (x = 25, y = 25)
 
     # Boundary loading type
     config = BC_template
@@ -212,12 +218,8 @@ end
 
     # Set material geometry 
     set_phases!(phases, particles)
-
     phase_ratios = JustPIC._2D.PhaseRatios(backend, 2, values(nc));
     update_phase_ratios!(phase_ratios, particles, xci, xvi, phases)
-
-    # Compute bulk and shear moduli
-    compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v)
 
     #--------------------------------------------#
 
@@ -227,7 +229,11 @@ end
 
     #--------------------------------------------#
 
-    for it=1:2
+    Rxcopy = copy(R.x)
+    Rycopy = copy(R.y)
+
+
+    for it=1:nt
 
         @printf("Step %04d\n", it)
         err.x .= 0.
@@ -240,6 +246,9 @@ end
         τ0.xy .= τ.xy
         Pt0   .= Pt
 
+        # Compute bulk and shear moduli
+        compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v)
+
         for iter=1:niter
 
             @printf("Iteration %04d\n", iter)
@@ -251,6 +260,11 @@ end
                 ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, β, materials, number, type, BC, nc, Δ) 
                 ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, G, materials, number, type, BC, nc, Δ)
                 ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, G, materials, number, type, BC, nc, Δ)
+            end
+
+            if iter==1
+                Rxcopy = copy(R.x)
+                Rycopy = copy(R.y)
             end
 
             err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
@@ -330,15 +344,17 @@ end
 
         # Visualise
         function visualisation()
-            p = [p[1] for p in phase_ratios.center]
-            fig = Figure()
+            phc = [p[1] for p in phase_ratios.center]
+            phv = [p[1] for p in phase_ratios.vertex]
+            #-----------    
+            fig = Figure(size=(500,800))
+            #-----------
             ax  = Axis(fig[1,1], aspect=DataAspect(), title="Pressure", xlabel="x", ylabel="y")
-            # heatmap!(ax, xc, yc,  (Pt[inx_c,iny_c]), colormap=:bluesreds)
-            # heatmap!(ax, xc, yc,  p, colormap=:bluesreds)
-            heatmap!(ax, xc, yc,  V_adv.y, colormap=:bluesreds)
+            heatmap!(ax, xc, yc,  (Pt[inx_c,iny_c]), colormap=:bluesreds)
+            # heatmap!(ax, xc, yc,  V_adv.y, colormap=:bluesreds)
             Vxc = 0.5.*(V_adv.x[1:end-1,2:end-1] .+ V_adv.x[2:end,2:end-1])
             Vyc = 0.5.*(V_adv.y[2:end-1,1:end-1] .+ V_adv.y[2:end-1,2:end])
-            arrows2d!(ax, xc, yc, Vxc, Vyc, lengthscale = 0.05)
+            # arrows2d!(ax, xc, yc, Vxc, Vyc, lengthscale = 0.05)
             ax  = Axis(fig[1,2], aspect=DataAspect(), title="Particles", xlabel="x", ylabel="y")
             p    = particles.coords
             ppx, ppy = p
@@ -347,6 +363,25 @@ end
             clr  = phases.data[:]
             idxv = particles.index.data[:]
             scatter!(ax, Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=5)
+            ax  = Axis(fig[1,1], aspect=DataAspect(), title="Pressure", xlabel="x", ylabel="y")
+            # heatmap!(ax, xc, yc,  (Pt[inx_c,iny_c]), colormap=:bluesreds)
+            # heatmap!(ax, xc, yc,  p, colormap=:bluesreds)
+            ax  = Axis(fig[2,1], aspect=DataAspect(), title="Txx", xlabel="x", ylabel="y")
+            heatmap!(ax, xc, yc,  τ.xx, colormap=:bluesreds)
+            ax  = Axis(fig[2,2], aspect=DataAspect(), title="Tyy", xlabel="x", ylabel="y")
+            heatmap!(ax, xc, yc,  τ.yy, colormap=:bluesreds)
+
+            ax  = Axis(fig[3,1], aspect=DataAspect(), title="phc", xlabel="x", ylabel="y")
+            heatmap!(ax, xc, yc,  G.c[inx_c,iny_c], colormap=:bluesreds)
+            # ax  = Axis(fig[3,2], aspect=DataAspect(), title="phv", xlabel="x", ylabel="y")
+            # heatmap!(ax, xv, yv,  G.v[inx_v,iny_v], colormap=:bluesreds)
+
+            ax  = Axis(fig[3,1], aspect=DataAspect(), title="Rx", xlabel="x", ylabel="y")
+            heatmap!(ax, xv, yc,  Rxcopy[inx_Vx,iny_Vx], colormap=:bluesreds)
+            ax  = Axis(fig[3,2], aspect=DataAspect(), title="Ry", xlabel="x", ylabel="y")
+            heatmap!(ax, xc, yv,  Rycopy[inx_Vy,iny_Vy], colormap=:bluesreds)
+
+            #-----------
             display(fig)
         end
         with_theme(visualisation, theme_latexfonts())
