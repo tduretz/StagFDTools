@@ -248,7 +248,6 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materia
     return fy
 end
 
-
 function Continuity(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δ)
     invΔx = 1 / Δ.x
     invΔy = 1 / Δ.y
@@ -486,8 +485,8 @@ function ResidualContinuity2D!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, n
                 
     for j in 2:size(R.p,2)-1, i in 2:size(R.p,1)-1
         if type.Pt[i,j] !== :constant 
-            Vx_loc     = SMatrix{3,2}(      V.x[ii,jj] for ii in i:i+2, jj in j:j+1)
-            Vy_loc     = SMatrix{2,3}(      V.y[ii,jj] for ii in i:i+1, jj in j:j+2)
+            Vx_loc     = SMatrix{2,3}(      V.x[ii,jj] for ii in i:i+1, jj in j:j+2)
+            Vy_loc     = SMatrix{3,2}(      V.y[ii,jj] for ii in i:i+2, jj in j:j+1)
             bcv_loc    = (;)
             type_loc   = (;)
             D          = (;)
