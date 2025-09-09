@@ -227,7 +227,7 @@ end
 
     #--------------------------------------------#
 
-    for it=1:nt
+    for it=1:2
 
         @printf("Step %04d\n", it)
         err.x .= 0.
@@ -299,15 +299,15 @@ end
         # Advection with JustPIC
         C       = 1e-6
         Vmax    = max(maximum(abs.(V.x)), maximum(abs.(V.y)))
-        Δ       = (x=L.x/nc.x, y=L.y/nc.y, t = C*min(Δ.x, Δ.y)/Vmax)
+        Δ       = (x=L.x/nc.x, y=L.y/nc.y, t = C * min(Δ.x, Δ.y)/Vmax)
         grid_vx = (xv, yce)
         grid_vy = (xce, yv)
         V_adv   = (x=V.x[2:end-1,2:end-1], y=V.y[2:end-1,2:end-1])
-        advection!(particles, RungeKutta4(), values(V_adv), (grid_vx, grid_vy), Δ.t)
-        move_particles!(particles, values(xvi), particle_args)
+        # advection!(particles, RungeKutta4(), values(V_adv), (grid_vx, grid_vy), Δ.t)
+        # move_particles!(particles, values(xvi), particle_args)
         # inject_particles_phase!(particles, phases, (), (), values(xvi))
-        update_phase_ratios!(phase_ratios, particles, xci, xvi, phases)
-        compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v)
+        # update_phase_ratios!(phase_ratios, particles, xci, xvi, phases)
+        # compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v)
 
         # if ALE
         #     xlims[1] += xlims[1]*ε̇bg*Δt 
