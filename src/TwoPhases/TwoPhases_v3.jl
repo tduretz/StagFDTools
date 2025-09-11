@@ -490,13 +490,13 @@ function FluidContinuity(Vx, Vy, Pt, Pt0, Pf_loc, Pf0, Φ0, phase, materials, k�
     qyS = -kμ.yy[1]*(Pf[2,2] - Pf[2,1])/Δ.y
     qyN = -kμ.yy[2]*(Pf[2,3] - Pf[2,2])/Δ.y
 
-    divqD = (qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y
-    divVs = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy 
+    divqD = ((qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y)
+    divVs = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy) 
 
     if materials.oneway
         f   = divqD
     else
-        f = Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD
+        f = (Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD)/ηΦ
     end
 
     return f
@@ -582,6 +582,38 @@ function AssembleFluidContinuity2D!(K, V, P, P0, ϕ0, phases, materials, num, pa
             end
         end
            
+    end
+    return nothing
+end
+
+function UpdatePorosity2D!(R, V, P, P0, Φ, Φ0, phases, materials, number, type, BC, nc, Δ) 
+                
+    shift    = (x=1, y=1)
+    for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
+        if type.Pf[i,j] !== :constant 
+            KΦ        = materials.Kϕ[phases.c[i,j]]
+            ηΦ        = materials.ηϕ[phases.c[i,j]]
+            dPtdt     = (P.t[i,j] - P0.t[i,j]) / Δ.t
+            dPfdt     = (P.f[i,j] - P0.f[i,j]) / Δ.t
+            dΦdt      = (dPfdt - dPtdt)/KΦ + (P.f[i,j] - P.t[i,j])/ηΦ
+            Φ.c[i,j]  = Φ0.c[i,j] + dΦdt*Δ.t
+        end
+    end
+    return nothing
+end
+
+function ResidualPorosity2D!(R, V, P, P0, Φ, Φ0, phases, materials, number, type, BC, nc, Δ) 
+                
+    shift    = (x=1, y=1)
+    for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
+        if type.Pf[i,j] !== :constant 
+            KΦ        = materials.Kϕ[phases.c[i,j]]
+            ηΦ        = materials.ηϕ[phases.c[i,j]]
+            dPtdt     = (P.t[i,j] - P0.t[i,j]) / Δ.t
+            dPfdt     = (P.f[i,j] - P0.f[i,j]) / Δ.t
+            dΦdt      = (dPfdt - dPtdt)/KΦ + (P.f[i,j] - P.t[i,j])/ηΦ
+            R.Φ[i,j]  = Φ.c[i,j] - (Φ0.c[i,j] + dΦdt*Δ.t)
+        end
     end
     return nothing
 end
