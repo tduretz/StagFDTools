@@ -37,6 +37,7 @@ using Enzyme  # AD backends you want to use
         Kf    = [1e30 1e30],
         k_ηf0 = [k_ηf0 k_ηf0],
     )
+    @show ηs0, ε̇, ηb0, ϕ0
     
     # Resolution
     inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, inx_v, iny_v, size_x, size_y, size_c, size_v = Ranges(nc)

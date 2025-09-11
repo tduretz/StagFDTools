@@ -6,7 +6,9 @@ using Enzyme  # AD backends you want to use
 
     sc = (σ=1e7, t=1e10, L=1e3)
 
-    nt     = 1
+    homo = true
+
+    nt     = 15
     Δt0    = 1e10/sc.t
     niter  = 10
     ϵ_nl   = 1e-10
@@ -36,7 +38,7 @@ using Enzyme  # AD backends you want to use
         k_ηf0 = [1e-15  1e-15]./(sc.L^2/sc.σ/sc.t),
         ψ     = [10.    10.  ],
         ϕ     = [35.    35.  ],
-        C     = [1e70   1e7 ]./sc.σ,
+        C     = [1e7    1e7  ]./sc.σ,
         ηvp   = [0.0    0.0  ]./sc.σ/sc.t,
         cosϕ  = [0.0    0.0  ],
         sinϕ  = [0.0    0.0  ],
@@ -112,7 +114,7 @@ using Enzyme  # AD backends you want to use
     # Intialise field
     L   = (x=40e3/sc.L, y=20e3/sc.L)
     Δ   = (x=L.x/nc.x, y=L.y/nc.y, t=Δt0)
-    R   = (x=zeros(size_x...), y=zeros(size_y...), pt=zeros(size_c...), pf=zeros(size_c...))
+    R   = (x=zeros(size_x...), y=zeros(size_y...), pt=zeros(size_c...), pf=zeros(size_c...), Φ=zeros(size_c...))
     V   = (x=zeros(size_x...), y=zeros(size_y...))
     η   = (c  =  ones(size_c...), v  =  ones(size_v...) )
     Φ   = (c=Φi.*ones(size_c...), v=Φi.*ones(size_v...) )
@@ -142,19 +144,20 @@ using Enzyme  # AD backends you want to use
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*X.v.x .+ D_BC[1,2]*X.c.y' 
     V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*X.c.x .+ D_BC[2,2]*X.v.y'
 
-    # for I in CartesianIndices(Φ.c)
-    #     i, j = I[1], I[2]
-    #     if i>1 && i<size(Φ.c,1) && j>1 && j<size(Φ.c,2)
-    #         if (X.c.x[i-1]^2 + X.c.y[j-1]^2) < rad^2
-    #             Φ.c[i,j] = 1.1*Φi
-    #         end
-    #     end 
-    # end
+    if !homo
+        # for I in CartesianIndices(Φ.c)
+        #     i, j = I[1], I[2]
+        #     if i>1 && i<size(Φ.c,1) && j>1 && j<size(Φ.c,2)
+        #         if (X.c.x[i-1]^2 + X.c.y[j-1]^2) < rad^2
+        #             Φ.c[i,j] = 1.1*Φi
+        #         end
+        #     end 
+        # end
 
-    # Set material geometry 
-    @views phases.c[inx_c, iny_c][(X.c.x.^2 .+ (X.c.y').^2) .<= rad^2] .= 2
-    @views phases.v[inx_v, iny_v][(X.v.x.^2 .+ (X.v.y').^2) .<= rad^2] .= 2
-
+        # Set material geometry 
+        @views phases.c[inx_c, iny_c][(X.c.x.^2 .+ (X.c.y').^2) .<= rad^2] .= 2
+        @views phases.v[inx_v, iny_v][(X.v.x.^2 .+ (X.v.y').^2) .<= rad^2] .= 2
+    end
 
     # Xc = xc .+ 0*yc'
     # Yc = 0*xc .+ yc'
@@ -222,6 +225,17 @@ using Enzyme  # AD backends you want to use
 
             #--------------------------------------------#
             # Residual check
+
+            # @info "Residuals ONLY P"
+            # ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
+            # ResidualFluidContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
+            # ResidualPorosity2D!(R, V, P, P0, Φ, Φ0, phases, materials, number, type, BC, nc, Δ) 
+            # @show norm(R.pt[inx_c,iny_c])/sqrt(nPt)
+            # @show norm(R.pf[inx_c,iny_c])/sqrt(nPf)
+            # @show extrema(R.pt[inx_c,iny_c])
+            # @show extrema(R.pf[inx_c,iny_c])
+            # @show extrema(R.Φ[inx_c,iny_c])
+
             TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ0, type, BC, materials, phases, Δ)
             ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
             ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
@@ -230,6 +244,9 @@ using Enzyme  # AD backends you want to use
 
             @show extrema(λ̇.c[inx_c,iny_c])
             @show extrema(λ̇.v[inx_v,iny_v])
+
+            @show extrema(ΔP.t[inx_c,iny_c])
+            @show extrema(ΔP.f[inx_c,iny_c])
 
             @info "Residuals"
             @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
@@ -349,22 +366,23 @@ using Enzyme  # AD backends you want to use
 
             #--------------------------------------------#
             UpdateSolution!(V, P, dx, number, type, nc)
+            UpdatePorosity2D!(R, V, P, P0, Φ, Φ0, phases, materials, number, type, BC, nc, Δ) 
         end
 
         #--------------------------------------------#
 
-        # Residual check
-        TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ0, type, BC, materials, phases, Δ)
-        ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-        ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-        ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
-        ResidualFluidContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
+        # # Residual check
+        # TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ0, type, BC, materials, phases, Δ)
+        # ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+        # ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+        # ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
+        # ResidualFluidContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
 
-        @info "Residuals - posteriori"
-        @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
-        @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-        @show norm(R.pt[inx_c,iny_c])/sqrt(nPt)
-        @show norm(R.pf[inx_c,iny_c])/sqrt(nPf)
+        # @info "Residuals - posteriori"
+        # @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
+        # @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
+        # @show norm(R.pt[inx_c,iny_c])/sqrt(nPt)
+        # @show norm(R.pf[inx_c,iny_c])/sqrt(nPf)
 
         #--------------------------------------------#
 
@@ -403,6 +421,15 @@ using Enzyme  # AD backends you want to use
         hm=heatmap!(ax1, X.c.x, X.c.y, τII, colormap=(GLMakie.Reverse(:matter), 1))
         Colorbar(fig[2, 1], hm, label = L"$τII$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
 
+        # ax1 = Axis(fig[1,1], title="ΔP",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
+        # hm=heatmap!(ax1, X.c.x, X.c.y, ΔP.t[inx_c,iny_c], colormap=(GLMakie.Reverse(:matter), 1))
+        # Colorbar(fig[2, 1], hm, label = L"$ΔP$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
+
+        # ax1 = Axis(fig[1,1], title="RPf",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
+        # hm=heatmap!(ax1, X.c.x, X.c.y, R.pf[inx_c,iny_c], colormap=(GLMakie.Reverse(:matter), 1))
+        # Colorbar(fig[2, 1], hm, label = L"$RPf$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
+
+
         # ax1 = Axis(fig[1,1], title="ϕ",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
         # hm=heatmap!(ax1, X.c.x, X.c.y, Φ.c[inx_c,iny_c], colormap=(GLMakie.Reverse(:matter), 1))
         # Colorbar(fig[2, 1], hm, label = L"$ϕ$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
@@ -437,7 +464,7 @@ end
 
 function Run()
 
-    nc = (x=100, y=50)
+    nc = (x=25, y=12)
 
     # Mode 0   
     main(nc);

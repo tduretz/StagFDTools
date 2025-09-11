@@ -6,7 +6,7 @@ using Enzyme  # AD backends you want to use
 
     nt  = 1
     Δt0 = 1e4
-    viscoelastic = false
+    viscoelastic = true
 
     # nt  = 1
     # Δt0 = 5e9

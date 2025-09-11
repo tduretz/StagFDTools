@@ -203,12 +203,11 @@ function two_phase_return_mapping()
         scatter!(ax2, probes.t*sc.t, probes.Pf*sc.σ)
         ax4 = Axis(fig[3,1], title="Porosity",  xlabel=L"$t$ [yr]",  ylabel=L"$\phi$", xlabelsize=20, ylabelsize=20)    
         scatter!(ax4, probes.t*sc.t, probes.Φ)
-        display(fig)
         # ax3 = Axis(fig[3,1], title="Plastic multiplier",  xlabel=L"$t$ [yr]",  ylabel=L"$\dot{\lambda}$ [1/s]", xlabelsize=20, ylabelsize=20)    
         # scatter!(ax3, probes.t, probes.λ̇)
         ax4 = Axis(fig[4,1], title="Residual",  xlabel=L"$t$ [yr]",  ylabel=L"$r$", xlabelsize=20, ylabelsize=20)    
         scatter!(ax4, probes.t*sc.t, log10.(probes.r))
-        @show probes.Pf
+        display(fig)
     end
     with_theme(figure, theme_latexfonts())
     # display(probes.Pt)
