@@ -14,11 +14,11 @@ function residual_two_phase(x, ε̇II_eff, divVs, divqD, Pt_t, Pf_t, Pt0, Pf0, �
     dΦdt    = (dPfdt - dPtdt)/Kϕ + (Pf - Pt)/ηΦ + λ̇*sinψ*(f>=eps)
     dlnρfdt = dPfdt / Kf
     dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
-    ηve     = inv(1/ηv + 1/ηe)
+    ηve     = (1-Φ)*inv(1/ηv + 1/ηe)
     return @SVector([ 
         ε̇II_eff   -  τII/2/ηve - λ̇/2*(f>=eps),
         dlnρsdt   - dΦdt/(1-Φ) +   divVs,
-        (Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD)/ηΦ,
+        (Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD),
         (f - ηvp*λ̇)*(f>=eps) +  λ̇*1*(f<eps),
         Φ  - (Φ0 + dΦdt*Δt)
     ])
@@ -82,10 +82,10 @@ function LocalRheology(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases
     f   = copy(fi) 
     fn  = norm(fi)
     fn0 = fn
-    tol = 1e-9
+    tol = 1e-10
     converged = false
 
-    # @show fi[2:3]
+    # @show  fi[2:3]
 
     for iter=1:10
         J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase, x, ε̇II, divVs, divqD, Pt, Pf, Pt0, Pf0, Φ0, G, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, η0, ηΦ, Δ.t)
@@ -98,14 +98,15 @@ function LocalRheology(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases
         end
         x .= x .- inv(J.derivs[1])*f
     end
+    #  @show x
 
-    # # if converged === false
+    if converged === false
     # if abs(x[2])>1e-5
-    #     @show fi
-    #     @show f
-    #     @show x
-    #     error()
-    # end
+        @show fi
+        @show f
+        @show x
+        error("Local convergence failed !")
+    end
 
 
     # τII =  x[1]
@@ -118,12 +119,12 @@ function LocalRheology(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases
 end
 
 function StressVector!(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases, Δ) 
-    η, λ̇, Pt, Pf = LocalRheology(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases, Δ)
-    τ            = @SVector([2 * η * ε̇[1],
-                             2 * η * ε̇[2],
-                             2 * η * ε̇[3],
-                                       Pt,
-                                       Pf,])
+    η, λ̇, Pt, Pf, Φ = LocalRheology(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases, Δ)
+    τ               = @SVector([2 * η * ε̇[1],
+                                2 * η * ε̇[2],
+                                2 * η * ε̇[3],
+                                          Pt,
+                                          Pf,])
     return τ, η, λ̇
 end
 
@@ -132,7 +133,7 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
     _ones = @SVector ones(5)
 
     # Loop over centroids
-    # @show "CENTROIDS"
+    @show "CENTROIDS"
     for j=2:size(ε̇.xx,2)-1, i=2:size(ε̇.xx,1)-1
  
         Vx     = SMatrix{2,3}(      V.x[ii,jj] for ii in i:i+1,   jj in j:j+2)
@@ -195,12 +196,17 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
         ε̇.yy[i,j] = ε̇yy[1]
         λ̇.c[i,j]  = jac.val[3]
         η.c[i,j]  = jac.val[2]
-        ΔP.t[i,j] = (jac.val[1][4] - P.t[i,j])
-        ΔP.f[i,j] = (jac.val[1][5] - P.f[i,j])
+        dPt, dPf = 0., 0. 
+        # if abs( (jac.val[1][4] - P.t[i,j])) > 1e-13
+            dPt = jac.val[1][4] - P.t[i,j]
+            dPf = jac.val[1][5] - P.f[i,j]
+        # end
+        ΔP.t[i,j] = dPt
+        ΔP.f[i,j] = dPf
     end
 
     # Loop over vertices
-    # @show "VERTICES"
+    @show "VERTICES" 
     for j=3:size(ε̇.xy,2)-2, i=3:size(ε̇.xy,1)-2
         Vx      = SMatrix{3,2}(      V.x[ii,jj] for ii in i-1:i+1,   jj in j-1+1:j+1)
         Vy      = SMatrix{2,3}(      V.y[ii,jj] for ii in i-1+1:i+1, jj in j-1:j+1  )

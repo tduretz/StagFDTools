@@ -6,11 +6,11 @@ using Enzyme  # AD backends you want to use
 
     sc = (σ=1e7, t=1e10, L=1e3)
 
-    homo = true
+    homo   = false
 
-    nt     = 15
+    nt     = 1
     Δt0    = 1e10/sc.t
-    niter  = 10
+    niter  = 1
     ϵ_nl   = 1e-10
 
     Φ0     = 0.05
@@ -94,8 +94,8 @@ using Enzyme  # AD backends you want to use
     pattern = Fields(
         Fields(@SMatrix([0 1 0; 1 1 1; 0 1 0]),                 @SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]), @SMatrix([0 1 0;  0 1 0]),        @SMatrix([0 1 0;  0 1 0])), 
         Fields(@SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]),  @SMatrix([0 1 0; 1 1 1; 0 1 0]),                @SMatrix([0 0; 1 1; 0 0]),        @SMatrix([0 0; 1 1; 0 0])),
-        Fields(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]),                    @SMatrix([1])),
-        Fields(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]),                    @SMatrix([1 1 1; 1 1 1; 1 1 1])),
+        Fields(@SMatrix([0 1 0;  0 1 0]),                       @SMatrix([0 0; 1 1; 0 0]),                       @SMatrix([1]),                    @SMatrix([1])),
+        Fields(@SMatrix([0 1 0;  0 1 0]),                       @SMatrix([0 0; 1 1; 0 0]),                       @SMatrix([1]),                    @SMatrix([1 1 1; 1 1 1; 1 1 1])),
     )
 
     # Sparse matrix assembly
@@ -112,7 +112,8 @@ using Enzyme  # AD backends you want to use
 
     #--------------------------------------------#
     # Intialise field
-    L   = (x=40e3/sc.L, y=20e3/sc.L)
+    # L   = (x=40e3/sc.L, y=20e3/sc.L)
+    L   = (x=20e3/sc.L, y=20e3/sc.L)
     Δ   = (x=L.x/nc.x, y=L.y/nc.y, t=Δt0)
     R   = (x=zeros(size_x...), y=zeros(size_y...), pt=zeros(size_c...), pf=zeros(size_c...), Φ=zeros(size_c...))
     V   = (x=zeros(size_x...), y=zeros(size_y...))
@@ -218,7 +219,7 @@ using Enzyme  # AD backends you want to use
 
         for iter=1:niter
 
-            @printf("Iteration %04d\n", iter)
+            @printf("     Step %04d --- Iteration %04d\n", it, iter)
 
             λ̇.c   .= 0.0
             λ̇.v   .= 0.0
@@ -236,17 +237,21 @@ using Enzyme  # AD backends you want to use
             # @show extrema(R.pf[inx_c,iny_c])
             # @show extrema(R.Φ[inx_c,iny_c])
 
+            ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+            ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+            ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
+            ResidualFluidContinuity2D!(R, V, P, ΔP, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
+
             TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ0, type, BC, materials, phases, Δ)
             ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
             ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
             ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
-            ResidualFluidContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
+            ResidualFluidContinuity2D!(R, V, P, ΔP, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
 
-            @show extrema(λ̇.c[inx_c,iny_c])
-            @show extrema(λ̇.v[inx_v,iny_v])
-
-            @show extrema(ΔP.t[inx_c,iny_c])
-            @show extrema(ΔP.f[inx_c,iny_c])
+            println("min/max λ̇.c  - ",  extrema(λ̇.c[inx_c,iny_c]))
+            println("min/max λ̇.v  - ",  extrema(λ̇.v[3:end-2,3:end-2]))
+            println("min/max ΔP.t - ",  extrema(ΔP.t[inx_c,iny_c]))
+            println("min/max ΔP.f - ",  extrema(ΔP.f[inx_c,iny_c]))
 
             @info "Residuals"
             @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
@@ -258,7 +263,10 @@ using Enzyme  # AD backends you want to use
             err.y[iter]  = @views norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
             err.pt[iter] = @views norm(R.pt[inx_c,iny_c])/sqrt(nPt)
             err.pf[iter] = @views norm(R.pf[inx_c,iny_c])/sqrt(nPt)
-            max(err.x[iter], err.y[iter], err.pt[iter], err.pf[iter]) < ϵ_nl ? break : nothing
+            if max(err.x[iter], err.y[iter], err.pt[iter], err.pf[iter]) < ϵ_nl 
+                println("Converged")
+                break 
+            end
 
             # Set global residual vector
             r = zeros(nVx + nVy + nPt + nPf)
@@ -272,7 +280,7 @@ using Enzyme  # AD backends you want to use
             # AssembleMomentum2D_x!(M, V, P, P0, ΔP, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
             # AssembleMomentum2D_y!(M, V, P, P0, ΔP, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
             AssembleContinuity2D!(M, V, P, P0, Φ0, phases, materials, number, pattern, type, BC, nc, Δ)
-            AssembleFluidContinuity2D!(M, V, P, P0, Φ0, phases, materials, number, pattern, type, BC, nc, Δ)
+            AssembleFluidContinuity2D!(M, V, P, ΔP, P0, Φ0, phases, materials, number, pattern, type, BC, nc, Δ)
 
             # Two-phases operator as block matrix
             𝑀 = [
@@ -371,18 +379,22 @@ using Enzyme  # AD backends you want to use
 
         #--------------------------------------------#
 
-        # # Residual check
+        # Residual check
         # TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ0, type, BC, materials, phases, Δ)
-        # ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-        # ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-        # ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
-        # ResidualFluidContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
+        ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+        ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+        ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
+        ResidualFluidContinuity2D!(R, V, P, ΔP, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
 
-        # @info "Residuals - posteriori"
-        # @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
-        # @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-        # @show norm(R.pt[inx_c,iny_c])/sqrt(nPt)
-        # @show norm(R.pf[inx_c,iny_c])/sqrt(nPf)
+        @info "Residuals - posteriori"
+        @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
+        @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
+        @show norm(R.pt[inx_c,iny_c])/sqrt(nPt)
+        @show norm(R.pf[inx_c,iny_c])/sqrt(nPf)
+
+        if norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx) > ϵ_nl || norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy) > ϵ_nl
+            error("Global convergence failed !")
+        end 
 
         #--------------------------------------------#
 
@@ -394,7 +406,8 @@ using Enzyme  # AD backends you want to use
         τII  = sqrt.( 0.5.*(τ.xx[inx_c,iny_c].^2 + τ.yy[inx_c,iny_c].^2 + (-τ.xx[inx_c,iny_c]-τ.yy[inx_c,iny_c]).^2) .+ τxyc[inx_c,iny_c].^2 )
         ε̇xyc = av2D(ε̇.xy)
         ε̇II  = sqrt.( 0.5.*(ε̇.xx[inx_c,iny_c].^2 + ε̇.yy[inx_c,iny_c].^2 + (-ε̇.xx[inx_c,iny_c]-ε̇.yy[inx_c,iny_c]).^2) .+ ε̇xyc[inx_c,iny_c].^2 )
-        
+        @show mean(τII)*sc.σ
+
         # Post process 
         @time for i in eachindex(Φ.c)
             Kϕ     = materials.Kϕ[phases.c[i]]
@@ -417,32 +430,47 @@ using Enzyme  # AD backends you want to use
 
         fig = Figure(fontsize = 20, size = (600, 400) )    
         #-------------------------------------------# 
-        ax1 = Axis(fig[1,1], title="τII",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
-        hm=heatmap!(ax1, X.c.x, X.c.y, τII, colormap=(GLMakie.Reverse(:matter), 1))
-        Colorbar(fig[2, 1], hm, label = L"$τII$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
+        # ax1 = Axis(fig[1,1], title="τII",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
+        # hm=heatmap!(ax1, X.c.x, X.c.y, τII, colormap=(GLMakie.Reverse(:matter), 1))
+        # Colorbar(fig[2, 1], hm, label = L"$τII$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
 
         # ax1 = Axis(fig[1,1], title="ΔP",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
         # hm=heatmap!(ax1, X.c.x, X.c.y, ΔP.t[inx_c,iny_c], colormap=(GLMakie.Reverse(:matter), 1))
         # Colorbar(fig[2, 1], hm, label = L"$ΔP$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
 
-        # ax1 = Axis(fig[1,1], title="RPf",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
-        # hm=heatmap!(ax1, X.c.x, X.c.y, R.pf[inx_c,iny_c], colormap=(GLMakie.Reverse(:matter), 1))
-        # Colorbar(fig[2, 1], hm, label = L"$RPf$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
-
-
         # ax1 = Axis(fig[1,1], title="ϕ",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
         # hm=heatmap!(ax1, X.c.x, X.c.y, Φ.c[inx_c,iny_c], colormap=(GLMakie.Reverse(:matter), 1))
         # Colorbar(fig[2, 1], hm, label = L"$ϕ$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
 
-        ax2 = Axis(fig[1,2], title="λ̇.v",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
-        hm=heatmap!(ax2, X.v.x, X.v.y, λ̇.v[inx_v,iny_v], colormap=(GLMakie.Reverse(:matter), 1))
-        Colorbar(fig[2, 2], hm, label = L"$λ̇.v$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
-        display(fig)
+        # ax2 = Axis(fig[1,2], title="λ̇.v",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
+        # hm=heatmap!(ax2, X.v.x, X.v.y, λ̇.v[inx_v,iny_v], colormap=(GLMakie.Reverse(:matter), 1))
+        # Colorbar(fig[2, 2], hm, label = L"$λ̇.v$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
+        # display(fig)
 
         # ax2 = Axis(fig[1,2], title="Pt",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
         # hm=heatmap!(ax2, X.c.x, X.c.y, P.t[inx_c,iny_c], colormap=(GLMakie.Reverse(:matter), 1))
         # Colorbar(fig[2, 2], hm, label = L"$Pt$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
         # display(fig)
+
+        ax = Axis(fig[1,1], title="Rx",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
+        hm=heatmap!(ax, X.v.x, X.c.y, R.x[inx_Vx,iny_Vx], colormap=(GLMakie.Reverse(:matter), 1))
+        # Colorbar(fig[2, 1], hm, label = L"$Rx$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
+       
+        ax = Axis(fig[1,2], title="Ry",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
+        hm=heatmap!(ax, X.c.x, X.v.y, R.y[inx_Vy,iny_Vy], colormap=(GLMakie.Reverse(:matter), 1))
+        # Colorbar(fig[2, 2], hm, label = L"$Ry$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
+       
+        ax1 = Axis(fig[2,2], title="RPf",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
+        hm=heatmap!(ax1, X.c.x, X.c.y, R.pf[inx_c,iny_c], colormap=(GLMakie.Reverse(:matter), 1))
+        # Colorbar(fig[2, 1], hm, label = L"$RPf$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
+       
+        ax1 = Axis(fig[2,1], title="RPt",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
+        hm=heatmap!(ax1, X.c.x, X.c.y, R.pt[inx_c,iny_c], colormap=(GLMakie.Reverse(:matter), 1))
+        # Colorbar(fig[2, 1], hm, label = L"$RPf$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
+
+
+       
+        display(fig) 
 
         #--------------------------------------------#
         probes.Pe[it]   = mean(P.t[inx_c,iny_c] .- P.f[inx_c,iny_c])*sc.σ
@@ -464,7 +492,7 @@ end
 
 function Run()
 
-    nc = (x=25, y=12)
+    nc = (x=25, y=25)
 
     # Mode 0   
     main(nc);
