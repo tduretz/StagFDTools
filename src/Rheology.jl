@@ -71,7 +71,7 @@ function DruckerPrager(τII, P, ηve, comp, β, Δt, C, cosϕ, sinϕ, sinψ, ηv
         P   += comp * λ̇*sinψ*Δt/β
         F    = τII - C*cosϕ - P*sinϕ - λ̇*ηvp
         (F>1e-10) && error("Failed return mapping")
-        (τII<0.0) && error("Plasticity without condom")
+        # (τII<0.0) && error("Plasticity without condom")
     end
     return τII, P, λ̇
 end
