@@ -510,14 +510,14 @@ function AssembleContinuity2D!(K, V, P, Pt0, ΔP, τ0, 𝐷, β, materials, num,
         autodiff(Enzyme.Reverse, Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂P), Const(Pt0[i,j]), Const(D), Const(β.c[i,j]), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
 
         # Pt --- Vx
-        Local = SMatrix{2,3}(num.Vx[ii,jj] for ii in i:i+1, jj in j:j+2)# .* pattern[3][1]        
+        Local = SMatrix{2,3}(num.Vx[ii,jj] for ii in i:i+1, jj in j:j+2) .* pattern[3][1]        
         for jj in axes(Local,2), ii in axes(Local,1)
             if Local[ii,jj]>0 && num.Pt[i,j]>0
                 K[3][1][num.Pt[i,j], Local[ii,jj]] = ∂R∂Vx[ii,jj] 
             end
         end
         # Pt --- Vy
-        Local = SMatrix{3,2}(num.Vy[ii,jj] for ii in i:i+2, jj in j:j+1) #.* pattern[3][2]
+        Local = SMatrix{3,2}(num.Vy[ii,jj] for ii in i:i+2, jj in j:j+1) .* pattern[3][2]
         for jj in axes(Local,2), ii in axes(Local,1)
             if Local[ii,jj]>0 && num.Pt[i,j]>0
                 K[3][2][num.Pt[i,j], Local[ii,jj]] = ∂R∂Vy[ii,jj] 
