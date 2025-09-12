@@ -14,6 +14,7 @@ module Rheology
     using StaticArrays, Enzyme, StagFDTools, LinearAlgebra
     include("Rheology.jl")
     export LocalRheology, StressVector!
+    export LocalRheology_phase_ratios, StressVector_phase_ratios! 
     export Kiss2023
 end
 
@@ -25,6 +26,19 @@ end
 module Stokes
     using LinearAlgebra, StaticArrays, ExtendableSparse, StaticArrays, Enzyme, StagFDTools, StagFDTools.Rheology
     include("Stokes.jl")
+    export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx!, SetBCVy!, set_boundaries_template!, SetBCVx1, SetBCVy1
+    export Continuity, SMomentum_x_Generic, SMomentum_y_Generic
+    export ResidualContinuity2D!, ResidualMomentum2D_x!, ResidualMomentum2D_y!
+    export AssembleContinuity2D!, AssembleMomentum2D_x!, AssembleMomentum2D_y!
+    export TangentOperator!
+    export LineSearch!
+end
+
+module StokesJustPIC
+    using LinearAlgebra, StaticArrays, ExtendableSparse, StaticArrays, Enzyme, StagFDTools, StagFDTools.Rheology
+    using JustPIC, JustPIC._2D
+    import JustPIC.@index
+    include("StokesJustPIC.jl")
     export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx!, SetBCVy!, set_boundaries_template!, SetBCVx1, SetBCVy1
     export Continuity, SMomentum_x_Generic, SMomentum_y_Generic
     export ResidualContinuity2D!, ResidualMomentum2D_x!, ResidualMomentum2D_y!

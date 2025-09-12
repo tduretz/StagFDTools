@@ -1,4 +1,4 @@
-using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf
+using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, GLMakie, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
@@ -208,7 +208,7 @@ using TimerOutputs
             # Direct-iterative solver
             fu   = -r[1:size(𝐊,1)]
             fp   = -r[size(𝐊,1)+1:end]
-            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu,  ηb=1e3, niter_l=10, ϵ_l=1e-11)
+            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:chol,  ηb=1e3, niter_l=10, ϵ_l=1e-11)
             dx[1:size(𝐊,1)]     .= u
             dx[size(𝐊,1)+1:end] .= p
 
@@ -225,18 +225,22 @@ using TimerOutputs
 
         #--------------------------------------------#
 
-        p3 = heatmap(xv, yc, (V.x[inx_Vx,iny_Vx])', aspect_ratio=1, xlim=extrema(xv), title="Vx")
-        p4 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy")
-        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt")
-        p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright, title=BC_template)
-        p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
-        p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
-        p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
-        p5 = heatmap(xc, yc,  (λ̇.c[inx_c, iny_c] .> 0.)', aspect_ratio=1, xlim=extrema(xc), title="ηc")
-        p6 = heatmap(xv, yv,  (λ̇.v[inx_v, iny_v] .> 0.)', aspect_ratio=1, xlim=extrema(xv), title="ηv")
- 
-        display(plot(p1, p2, p3, p4, layout=(2,2)))
-
+        #-----------  
+        fig = Figure(size=(600, 600))
+        #-----------
+        ax  = Axis(fig[1,1], aspect=DataAspect(), title="Vx", xlabel="x", ylabel="y")
+        heatmap!(ax, xv, yc, (V.x[inx_Vx,iny_Vx])')
+        ax  = Axis(fig[1,2], aspect=DataAspect(), title="Vy", xlabel="x", ylabel="y")
+        heatmap!(ax, xc, yv, V.y[inx_Vy,iny_Vy]')
+        ax  = Axis(fig[2,1], aspect=DataAspect(), title="Vy", xlabel="x", ylabel="y")
+        heatmap!(ax, xc, yc,  Pt[inx_c,iny_c]')
+        ax  = Axis(fig[2,2], aspect=DataAspect(), title="Convergence", xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error")
+        scatter!(ax, 1:niter, log10.(err.x[1:niter]), label="Vx")
+        scatter!(ax, 1:niter, log10.(err.y[1:niter]), label="Vy")
+        scatter!(ax, 1:niter, log10.(err.p[1:niter]), label="Pt")
+        #-----------
+        display(fig)
+        #-----------
     end
 
     display(to)
