@@ -92,6 +92,7 @@ function LocalRheology(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases
         f = J.val
         fn = norm(f)
         # @show iter, f
+        println(J.derivs[1])
         if fn<tol || fn/fn0<tol
             converged = true
             break
