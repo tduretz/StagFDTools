@@ -1,77 +1,44 @@
-using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf
+using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, GLMakie, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 using TimerOutputs
 
-function line(p, K, Δt, η_ve, ψ, p1, t1)
-    p2 = p1 + K*Δt*sind(ψ)
-    t2 = t1 - η_ve  
-    a  = (t2-t1)/(p2-p1)
-    b  = t2 - a*p2
-    return a*p + b
-end
-
-@views function main(nc)
+@views function main(BC_template, D_template)
     #--------------------------------------------#
 
-    # Intialise field
-    radius = 0.1
-
-    Δt0 = 0.5
-    L   = (x=1.0, y=1.0)
-    Δ   = (x=L.x/nc.x, y=L.y/nc.y, t = Δt0)
-    xc = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
-    yc = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
+    # Resolution
+    nc = (x = 20, y = 40)
 
     # Boundary loading type
-    config = :free_slip
-    D_BC   = @SMatrix( [ -1e-3    0.;   # Make background shear rate negligible
-                          0    1e-3 ])
+    config = BC_template
+    D_BC   = D_template
 
     # Material parameters
     materials = ( 
         compressible = true,
-        plasticity   = :Kiss2023,
+        plasticity   = :none,
         n    = [1.0    1.0  ],
-        η0   = [1e3    1e-1 ], 
+        η0   = [1e2    1e-1 ], 
         G    = [1e1    1e1  ],
-        C    = [100.0  100.0],
-        σT   = [50.0   50.0 ], # Kiss2023
-        δσT  = [10.0   10.0 ], # Kiss2023
-        P1   = [0.0    0.0  ], # Kiss2023
-        τ1   = [0.0    0.0  ], # Kiss2023
-        P2   = [0.0    0.0  ], # Kiss2023
-        τ2   = [0.0    0.0  ], # Kiss2023
-        ϕ    = [30.0   30.0 ],
-        ηvp  = [0.1    0.1  ],
+        C    = [150    150  ],
+        ϕ    = [30.    30.  ],
+        ηvp  = [0.5    0.5  ],
         β    = [1e-2   1e-2 ],
         ψ    = [3.0    3.0  ],
-        B    = [0.0    0.0  ],
+        B    = [0.     0.   ],
         cosϕ = [0.0    0.0  ],
         sinϕ = [0.0    0.0  ],
         sinψ = [0.0    0.0  ],
     )
-    # For power law
-    @. materials.B  = (2*materials.η0)^(-materials.n)
-
-    # For plasticity
-    @. materials.cosϕ  = cosd(materials.ϕ)
-    @. materials.sinϕ  = sind(materials.ϕ)
-    @. materials.sinψ  = sind(materials.ψ)
-    
-    # For Kiss2023: calculate corner coordinates 
-    @. materials.P1 = -(materials.σT - materials.δσT)                                         # p at the intersection of cutoff and Mode-1
-    @. materials.τ1 = materials.δσT                                                           # τII at the intersection of cutoff and Mode-1
-    @. materials.P2 = -(materials.σT - materials.C*cosd(materials.ϕ))/(1.0-sind(materials.ϕ)) # p at the intersection of Drucker-Prager and Mode-1
-    @. materials.τ2 = materials.P2 + materials.σT                                             # τII at the intersection of Drucker-Prager and Mode-1
+    materials.B   .= (2*materials.η0).^(-materials.n)
 
     # Time steps
     Δt0   = 0.5
-    nt    = 245
+    nt    = 1
 
     # Newton solver
-    niter = 20
+    niter = 3
     ϵ_nl  = 1e-8
     α     = LinRange(0.05, 1.0, 10)
 
@@ -88,9 +55,6 @@ end
         fill(:out, (nc.x+2, nc.y+2)),
     )
     set_boundaries_template!(type, config, nc)
-
-    # Add a constrant pressure within a circular region
-    @views type.Pt[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= radius^2] .= :constant
 
     #--------------------------------------------#
     # Equation numbering
@@ -126,6 +90,9 @@ end
     r  = zeros(nVx + nVy + nPt)
 
     #--------------------------------------------#
+    # Intialise field
+    L   = (x=1.0, y=1.0)
+    Δ   = (x=L.x/nc.x, y=L.y/nc.y, t = Δt0)
 
     # Allocations
     R       = (x  = zeros(size_x...), y  = zeros(size_y...), p  = zeros(size_c...))
@@ -157,54 +124,46 @@ end
     phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...))  # phase on velocity points
 
     # Initial velocity & pressure field
-    @views V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
-    @views V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
-    @views Pt[inx_c, iny_c ]  .= 0.
-    @views Pt[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 1.0     
+    V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
+    V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
+    Pt[inx_c, iny_c ]  .= 10.                 
     UpdateSolution!(V, Pt, dx, number, type, nc)
 
     # Boundary condition values
     BC = ( Vx = zeros(size_x...), Vy = zeros(size_y...))
-    @views begin
-        BC.Vx[     2, iny_Vx] .= (type.Vx[     1, iny_Vx] .== :Neumann_normal) .* D_BC[1,1]
-        BC.Vx[ end-1, iny_Vx] .= (type.Vx[   end, iny_Vx] .== :Neumann_normal) .* D_BC[1,1]
-        BC.Vx[inx_Vx,      2] .= (type.Vx[inx_Vx,      2] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[inx_Vx,     2] .== :Dirichlet_tangent) .* (D_BC[1,1]*xv .+ D_BC[1,2]*yv[1]  )
-        BC.Vx[inx_Vx,  end-1] .= (type.Vx[inx_Vx,  end-1] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[inx_Vx, end-1] .== :Dirichlet_tangent) .* (D_BC[1,1]*xv .+ D_BC[1,2]*yv[end])
-        BC.Vy[inx_Vy,     2 ] .= (type.Vy[inx_Vy,     1 ] .== :Neumann_normal) .* D_BC[2,2]
-        BC.Vy[inx_Vy, end-1 ] .= (type.Vy[inx_Vy,   end ] .== :Neumann_normal) .* D_BC[2,2]
-        BC.Vy[     2, iny_Vy] .= (type.Vy[     2, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[    2, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[1]   .+ D_BC[2,2]*yv)
-        BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
-    end
+    BC.Vx[     2, iny_Vx] .= (type.Vx[     1, iny_Vx] .== :Neumann_normal) .* D_BC[1,1]
+    BC.Vx[ end-1, iny_Vx] .= (type.Vx[   end, iny_Vx] .== :Neumann_normal) .* D_BC[1,1]
+    BC.Vx[inx_Vx,      2] .= (type.Vx[inx_Vx,      2] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[inx_Vx,     2] .== :Dirichlet_tangent) .* (D_BC[1,1]*xv .+ D_BC[1,2]*yv[1]  )
+    BC.Vx[inx_Vx,  end-1] .= (type.Vx[inx_Vx,  end-1] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[inx_Vx, end-1] .== :Dirichlet_tangent) .* (D_BC[1,1]*xv .+ D_BC[1,2]*yv[end])
+    BC.Vy[inx_Vy,     2 ] .= (type.Vy[inx_Vy,     1 ] .== :Neumann_normal) .* D_BC[2,2]
+    BC.Vy[inx_Vy, end-1 ] .= (type.Vy[inx_Vy,   end ] .== :Neumann_normal) .* D_BC[2,2]
+    BC.Vy[     2, iny_Vy] .= (type.Vy[     2, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[    2, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[1]   .+ D_BC[2,2]*yv)
+    BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
 
     # Set material geometry 
-    # @views phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
-    # @views phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= 0.1^2] .= 2
+    phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
+    phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= 0.1^2] .= 2
 
     #--------------------------------------------#
 
     rvec = zeros(length(α))
     err  = (x = zeros(niter), y = zeros(niter), p = zeros(niter))
     to   = TimerOutput()
-    time = 0.0
 
     #--------------------------------------------#
 
-    anim = @animate for it=1:nt
+    for it=1:nt
 
-        time += Δ.t
-        @printf("Step %04d --- time = %1.3f \n", it, time)
-        fill!(err.x, 0e0)
-        fill!(err.y, 0e0)
-        fill!(err.p, 0e0)
+        @printf("Step %04d\n", it)
+        err.x .= 0.
+        err.y .= 0.
+        err.p .= 0.
         
         # Swap old values 
         τ0.xx .= τ.xx
         τ0.yy .= τ.yy
         τ0.xy .= τ.xy
         Pt0   .= Pt
-
-        # Update pressure in the hole
-        @views Pt[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= radius^2] .= 1 + 5*time     
 
         for iter=1:niter
 
@@ -221,9 +180,9 @@ end
                 ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
             end
 
-            err.x[iter] = @views norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
-            err.y[iter] = @views norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-            err.p[iter] = @views norm(R.p[inx_c,iny_c])/sqrt(nPt)
+            err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
+            err.y[iter] = norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
+            err.p[iter] = norm(R.p[inx_c,iny_c])/sqrt(nPt)
             max(err.x[iter], err.y[iter]) < ϵ_nl ? break : nothing
 
             #--------------------------------------------#
@@ -243,16 +202,16 @@ end
             𝐊  .= [M.Vx.Vx M.Vx.Vy; M.Vy.Vx M.Vy.Vy]
             𝐐  .= [M.Vx.Pt; M.Vy.Pt]
             𝐐ᵀ .= [M.Pt.Vx M.Pt.Vy]
-            𝐏  .= M.Pt.Pt
+            𝐏  .= [M.Pt.Pt;]             
             
             #--------------------------------------------#
      
             # Direct-iterative solver
-            fu   = @views -r[1:size(𝐊,1)]
-            fp   = @views -r[size(𝐊,1)+1:end]
-            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu,  ηb=1e3, niter_l=10, ϵ_l=1e-11)
-            @views dx[1:size(𝐊,1)]     .= u
-            @views dx[size(𝐊,1)+1:end] .= p
+            fu   = -r[1:size(𝐊,1)]
+            fp   = -r[size(𝐊,1)+1:end]
+            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:chol,  ηb=1e3, niter_l=10, ϵ_l=1e-11)
+            dx[1:size(𝐊,1)]     .= u
+            dx[size(𝐊,1)+1:end] .= p
 
             #--------------------------------------------#
             # Line search & solution update
@@ -263,60 +222,61 @@ end
         end
 
         # Update pressure
-        Pt .+= ΔPt.c
+        Pt .+= ΔPt.c 
 
         #--------------------------------------------#
 
-        τxyc = av2D(τ.xy)
-        τII  = sqrt.( 0.5.*(τ.xx[inx_c,iny_c].^2 + τ.yy[inx_c,iny_c].^2 + (-τ.xx[inx_c,iny_c]-τ.yy[inx_c,iny_c]).^2) .+ τxyc[inx_c,iny_c].^2 )
-        ε̇xyc = av2D(ε̇.xy)
-        ε̇II  = sqrt.( 0.5.*(ε̇.xx[inx_c,iny_c].^2 + ε̇.yy[inx_c,iny_c].^2 + (-ε̇.xx[inx_c,iny_c]-ε̇.yy[inx_c,iny_c]).^2) .+ ε̇xyc[inx_c,iny_c].^2 )
-        
-        p_tr1 = LinRange(-100, 0, 100)
-        p_tr2 = LinRange(0, 200, 100)
-        p_tr3 = LinRange(50, 200, 100)
-
-        K      = 1 / materials.β[1]
-        η_ve   = materials.G[1] * Δ.t
-        pc1    = materials.P1[1]
-        pc2    = materials.P2[1]
-        τc1    = materials.τ1[1]
-        τc2    = materials.τ2[1]
-        φ      = materials.ϕ[1]
-        C      = materials.C[1]
-        ψ      = materials.ψ[1]
-        η_vp   = materials.ηvp[1]
-
-        l1    = line.(p_tr1, K, Δ.t, η_ve, 90., pc1, τc1)
-        l2    = line.(p_tr2, K, Δ.t, η_ve, 90., pc2, τc2)
-        l3    = line.(p_tr3, K, Δ.t, η_ve,   ψ, pc2, τc2)
-    
-        P_end =  600
-
-        p3 = plot(aspect_ratio=1, xlabel="P", ylabel="τII")
-        p3 = plot!([pc1, pc1, pc2, P_end],[0.0, τc1, τc2, P_end*sind(φ)+C*cosd(φ)], label=:none)
-        p3 = plot!(p_tr1,  l1, label=:none)
-        p3 = plot!(p_tr2,  l2, label=:none)
-        p3 = plot!(p_tr3,  l3, label=:none)
-        p3 = scatter!( Pt[inx_c,iny_c][:], τII[:], label=:none)
-
-        p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
-        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt", c=:coolwarm, clims=(0,600))
-        p4 = heatmap(xc, yc,  log10.(ε̇II)', aspect_ratio=1, xlim=extrema(xc), title="ε̇II", c=:coolwarm)
-        # p4 = heatmap(xc, yc,  τII', aspect_ratio=1, xlim=extrema(xc), title="τII", c=:turbo)
-        p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright)
-        p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
-        p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
-        p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
-        display(plot(p1, p2, p3, p4, layout=(2,2)))
-
+        #-----------  
+        fig = Figure(size=(600, 600))
+        #-----------
+        ax  = Axis(fig[1,1], aspect=DataAspect(), title="Vx", xlabel="x", ylabel="y")
+        heatmap!(ax, xv, yc, (V.x[inx_Vx,iny_Vx]))
+        ax  = Axis(fig[1,2], aspect=DataAspect(), title="Vy", xlabel="x", ylabel="y")
+        heatmap!(ax, xc, yv, V.y[inx_Vy,iny_Vy])
+        ax  = Axis(fig[2,1], aspect=DataAspect(), title="Exx", xlabel="x", ylabel="y")
+        # heatmap!(ax, xc, yc,  Pt[inx_c,iny_c])
+        heatmap!(ax, xc, yc,  ε̇.xx[inx_c,iny_c])
+        ExxW = ε̇.xx[2,Int64(floor(nc.y/2))]
+        ExxE = ε̇.xx[end-1,Int64(floor(nc.y/2))]
+        @show ExxW, ExxE
+        ax  = Axis(fig[2,2], aspect=DataAspect(), title="Convergence", xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error")
+        scatter!(ax, 1:niter, log10.(err.x[1:niter]), label="Vx")
+        scatter!(ax, 1:niter, log10.(err.y[1:niter]), label="Vy")
+        scatter!(ax, 1:niter, log10.(err.p[1:niter]), label="Pt")
+        #-----------
+        display(fig)
+        #-----------
     end
-    gif(anim, "./results/PressurizedHole.gif", fps = 15)
 
     display(to)
     
 end
 
+
 let
-    main((x = 100, y = 100))
+    # Boundary condition templates
+    BCs = [
+        # :all_Dirichlet,
+        # :free_slip,
+        # :NS_Neumann,
+        :EW_Neumann,
+        # :NS_periodic,
+        # :EW_periodic,
+    ]
+
+    # Boundary deformation gradient matrix
+    D_BCs = [
+        # @SMatrix( [1 0; 0 -1] ),
+        # @SMatrix( [1 0; 0 -1] ),
+        # @SMatrix( [1 0; 0 -1] ),
+        @SMatrix( [1 0; 0 -1] ),
+        # @SMatrix( [0 0; 1  0] ),
+        # @SMatrix( [0 1; 0  0] ),
+    ]
+
+    # Run them all
+    for iBC in eachindex(BCs)
+        @info "Running $(string(BCs[iBC])) and D = $(D_BCs[iBC])"
+        main(BCs[iBC], D_BCs[iBC])
+    end
 end
