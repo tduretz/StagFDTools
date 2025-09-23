@@ -63,7 +63,7 @@ function LocalRheology(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases
 
     # @show ε̇II   -  τII/2/ηvep
 
-    λ̇, Φ = 0., Φ0
+    λ̇, Φ, ΔPt, ΔPf = 0., Φ0, 0., 0.
 
     # To be removed?
     # τII = sqrt.( (τ0[1]^2 + τ0[2]^2 + (-τ0[1]-τ0[2])^2)/2 + τ0[3]^2 )
@@ -76,42 +76,46 @@ function LocalRheology(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases
     dΦdt      = (dPfdt - dPtdt)/KΦ + (Pf - Pt)/ηΦ
     Φ         = Φ0 + dΦdt*Δ.t
 
-    x = @MVector( [τII, 0., 0., λ̇, Φ] )
+    #############################
 
-    fi  = residual_two_phase( x, ε̇II, divVs, divqD, Pt, Pf, Pt0, Pf0, Φ0, G, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, η0, ηΦ, Δ.t)
-    f   = copy(fi) 
-    fn  = norm(fi)
-    fn0 = fn
-    tol = 1e-10
-    converged = false
+    # x = @MVector( [τII, 0., 0., λ̇, Φ] )
 
-    # @show  fi[2:3]
+    # fi  = residual_two_phase( x, ε̇II, divVs, divqD, Pt, Pf, Pt0, Pf0, Φ0, G, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, η0, ηΦ, Δ.t)
+    # f   = copy(fi) 
+    # fn  = norm(fi)
+    # fn0 = fn
+    # tol = 1e-10
+    # converged = false
 
-    for iter=1:10
-        J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase, x, ε̇II, divVs, divqD, Pt, Pf, Pt0, Pf0, Φ0, G, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, η0, ηΦ, Δ.t)
-        f = J.val
-        fn = norm(f)
-        # @show iter, f
-        println(J.derivs[1])
-        if fn<tol || fn/fn0<tol
-            converged = true
-            break
-        end
-        x .= x .- inv(J.derivs[1])*f
-    end
-    #  @show x
+    # # @show  fi[2:3]
 
-    if converged === false
-    # if abs(x[2])>1e-5
-        @show fi
-        @show f
-        @show x
-        error("Local convergence failed !")
-    end
+    # for iter=1:10
+    #     J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase, x, ε̇II, divVs, divqD, Pt, Pf, Pt0, Pf0, Φ0, G, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, η0, ηΦ, Δ.t)
+    #     f = J.val
+    #     fn = norm(f)
+    #     # @show iter, f
+    #     println(J.derivs[1])
+    #     if fn<tol || fn/fn0<tol
+    #         converged = true
+    #         break
+    #     end
+    #     x .= x .- inv(J.derivs[1])*f
+    # end
+    # #  @show x
+
+    # if converged === false
+    # # if abs(x[2])>1e-5
+    #     @show fi
+    #     @show f
+    #     @show x
+    #     error("Local convergence failed !")
+    # end
 
 
-    # τII =  x[1]
-    τII, ΔPt, ΔPf, λ̇, Φ = x[1], x[2], x[3], x[4], x[5]
+    # # τII =  x[1]
+    # τII, ΔPt, ΔPf, λ̇, Φ = x[1], x[2], x[3], x[4], x[5]
+
+    #############################
 
     # Effective viscosity
     ηvep = τII/(2*ε̇II)

@@ -10,7 +10,7 @@ using Enzyme  # AD backends you want to use
 
     nt     = 1
     Δt0    = 1e10/sc.t
-    niter  = 1
+    niter  = 2
     ϵ_nl   = 1e-10
 
     Φ0     = 0.05
@@ -26,15 +26,15 @@ using Enzyme  # AD backends you want to use
     materials = ( 
         oneway       = false,
         compressible = true,
-        plasticity   = :DruckerPrager,
+        plasticity   = :off,
         n     = [1.0    1.0  ],
-        ηs0   = [1e22   1e22 ]/sc.σ/sc.t, 
+        ηs0   = [1e22   1e19 ]/sc.σ/sc.t, 
         ηϕ    = [2e22   2e22 ]/sc.σ/sc.t,
-        G     = [3e10   1e10 ]./sc.σ, 
+        G     = [3e10   3e10 ]./sc.σ, 
         Kd    = [1e30   1e30 ]./sc.σ,  # not needed
         Ks    = [1e11   1e11 ]./sc.σ,
         Kϕ    = [1e9    1e9  ]./sc.σ,
-        Kf    = [1e10   1e-10]./sc.σ, 
+        Kf    = [1e10   1e10 ]./sc.σ, 
         k_ηf0 = [1e-15  1e-15]./(sc.L^2/sc.σ/sc.t),
         ψ     = [10.    10.  ],
         ϕ     = [35.    35.  ],
@@ -428,7 +428,7 @@ using Enzyme  # AD backends you want to use
         Vxfc = 0.5*(Vxf[:,1:end-1] .+ Vxf[:,2:end])
         Vf   = sqrt.( Vxfc.^2 .+ Vyfc.^2)
 
-        fig = Figure(fontsize = 20, size = (600, 400) )    
+        fig = Figure(fontsize = 20, size = (400, 1000) )    
         #-------------------------------------------# 
         # ax1 = Axis(fig[1,1], title="τII",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
         # hm=heatmap!(ax1, X.c.x, X.c.y, τII, colormap=(GLMakie.Reverse(:matter), 1))
@@ -464,11 +464,17 @@ using Enzyme  # AD backends you want to use
         hm=heatmap!(ax1, X.c.x, X.c.y, R.pf[inx_c,iny_c], colormap=(GLMakie.Reverse(:matter), 1))
         # Colorbar(fig[2, 1], hm, label = L"$RPf$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
        
+        ax2 = Axis(fig[3,2], title="Pf",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
+        hm=heatmap!(ax2, X.c.x, X.c.y, P.f[inx_c,iny_c], colormap=(GLMakie.Reverse(:matter), 1))
+        # Colorbar(fig[2, 2], hm, label = L"$Pf$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
+
         ax1 = Axis(fig[2,1], title="RPt",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
         hm=heatmap!(ax1, X.c.x, X.c.y, R.pt[inx_c,iny_c], colormap=(GLMakie.Reverse(:matter), 1))
         # Colorbar(fig[2, 1], hm, label = L"$RPf$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
 
-
+        ax2 = Axis(fig[3,1], title="Pt",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
+        hm=heatmap!(ax2, X.c.x, X.c.y, P.t[inx_c,iny_c], colormap=(GLMakie.Reverse(:matter), 1))
+        # Colorbar(fig[2, 2], hm, label = L"$Pt$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
        
         display(fig) 
 
