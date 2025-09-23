@@ -80,7 +80,7 @@ end
     L     = (x=width/sc.L, y=height/sc.L)
 
     # Time steps
-    nt    = 200
+    nt    = 85
 
     # Newton solver
     niter = 15
