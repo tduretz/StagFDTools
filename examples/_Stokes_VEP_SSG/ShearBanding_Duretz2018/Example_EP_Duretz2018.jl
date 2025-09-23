@@ -27,14 +27,16 @@ using TimerOutputs, CairoMakie
     materials = ( 
         compressible = true,
         plasticity   = :DruckerPrager,
+        # plasticity   = :DruckerPragerHyperbolic,
         #       rock   seed   
         n    = [1.0    1.0    ],            # Power law exponent
         η0   = [1e30   1e30   ]./sc.σ/sc.t, # Reference viscosity 
         G    = [1e10   0.25e10]./sc.σ,      # Shear modulus
         C    = [3e7    3e7    ]./sc.σ,      # Cohesion
+        σT   = [5e6    5.0e6  5.0e6]./sc.σ,  # Kiss2023 / Tensile / Hyperbolic
         ϕ    = [30.    30.    ],            # Friction angle
         ψ    = [10.    10.0   ],            # Dilation angle
-        ηvp  = [0.0    0.0    ]./sc.σ/sc.t, # Viscoplastic regularisation
+        ηvp  = [1e19   1e19   ].*0.0./sc.σ/sc.t, # Viscoplastic regularisation
         β    = [5e-11  5e-11  ].*sc.σ,      # Compressibility
         B    = [0.0    0.0    ],            # (calculated after) power-law creep pre-factor
         cosϕ = [0.0    0.0    ],            # (calculated after) frictional parameters
@@ -126,7 +128,8 @@ using TimerOutputs, CairoMakie
     λ       = (c  = zeros(size_c...), v  = zeros(size_v...) )
     ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
-    τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
+    τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
+
     Pt      = zeros(size_c...)
     Pti     = zeros(size_c...)
     Pt0     = zeros(size_c...)
@@ -219,9 +222,9 @@ using TimerOutputs, CairoMakie
             #--------------------------------------------#
             # Residual check        
             @timeit to "Residual" begin
-                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
-                @show extrema(λ̇.c)
-                @show extrema(λ̇.v)
+                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
+                @show extrema(λ̇.c[inx_c,iny_c])
+                @show extrema(λ̇.v[inx_v,iny_v])
                 ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
                 ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
                 ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
@@ -264,7 +267,7 @@ using TimerOutputs, CairoMakie
             # Line search & solution update
             @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
             UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
-            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
+            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
 
         end
 
@@ -290,7 +293,6 @@ using TimerOutputs, CairoMakie
             σ  = @SMatrix[-Pt[i,j]+τ.xx[i,j] τxyc[i,j] 0.; τxyc[i,j] -Pt[i,j]+τ.yy[i,j] 0.; 0. 0. -Pt[i,j]+(-τ.xx[i,j]-τ.yy[i,j])]
             v  = eigvecs(σ)
             σp = eigvals(σ)
-            σ1
             scale = sqrt(v[1,1]^2 + v[2,1]^2)
             σ1.x[i,j] = v[1,1]/scale
             σ1.y[i,j] = v[2,1]/scale

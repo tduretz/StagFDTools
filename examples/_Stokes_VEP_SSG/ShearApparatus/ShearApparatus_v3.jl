@@ -6,16 +6,18 @@ using TimerOutputs, CairoMakie
 
 @views function main(nc, θgouge)
     #--------------------------------------------#
-    width = 1.0
-    height = 1.5
-    thickness = 0.2
-    θgouge = (90-θgouge) /180*π
+
     # Scaling
-    # sc  = (σ=1,L=1,t=1)
-    sc  = (σ=1e9,L=1,t=1e6)
-    Δt0   = 0.01/sc.t*1e4
-    ε̇xx = 1e-6*sc.t
-    Pbg = 1e7/sc.σ
+    sc  = (σ=1e9, L=1, t=1e6)
+
+    # Parameters
+    width     = 1.0/sc.L
+    height    = 1.5/sc.L
+    thickness = 0.2/sc.L
+    θgouge    = (90-θgouge) /180*π
+    Δt0       = 1e2/sc.t
+    ε̇xx       = 1e-6*sc.t
+    Pbg       = 1e7/sc.σ
 
     # Boundary loading type
     config = :EW_Neumann
@@ -27,18 +29,21 @@ using TimerOutputs, CairoMakie
     materials = ( 
         compressible = true,
         plasticity   = :DruckerPrager,
+        # plasticity   = :DruckerPragerHyperbolic,
         #      rock   gouge  salt 
         n    = [1.0    1.0    1.0 ],      # Power law exponent
-        η0   = [1e18   1e18   1e6]./sc.σ./sc.t,      # Reference viscosity 
-        G    = [1e10   1e9   1e10 ]./sc.σ,      # Shear modulus
-        C    = [15e6   1e6   15e6 ]./sc.σ,      # Cohesion
+        η0   = [1e48   1e28   1e19]./sc.σ./sc.t,      # Reference viscosity 
+        G    = [1e10   1e9    1e60]./sc.σ,      # Shear modulus
+        C    = [2e8    1e6   15e60]./sc.σ,      # Cohesion
         ϕ    = [35.    30.    35. ],      # Friction angle
         ψ    = [0.0    5.0    0.0 ],      # Dilation angle
-        ηvp  = [1e15   1e15   1e15 ].*0.3./sc.σ./sc.t, # Viscoplastic regularisation
-        β    = [1e-11  1e-10 1e-11].*sc.σ,      # Compressibility
+        σT   = [5e6    5e6    5e6 ]./sc.σ, 
+        ηvp  = [1e14   1e14   1e14].*1e-6./sc.σ./sc.t, # Viscoplastic regularisation
+        β    = [1e-11  1e-10 1e-12].*sc.σ,      # Compressibility
         B    = [0.0    0.0    0.0 ],      # (calculated after) power-law creep pre-factor
         cosϕ = [0.0    0.0    0.0 ],      # (calculated after) frictional parameters
         sinϕ = [0.0    0.0    0.0 ],      # (calculated after) frictional parameters
+        cosψ = [0.0    0.0    0.0 ],      # (calculated after) frictional parameters
         sinψ = [0.0    0.0    0.0 ],      # (calculated after) frictional parameters
     )
     # For power law
@@ -46,6 +51,7 @@ using TimerOutputs, CairoMakie
 
     # For plasticity
     @. materials.cosϕ  = cosd(materials.ϕ)
+    @. materials.cosψ  = cosd(materials.ψ)
     @. materials.sinϕ  = sind(materials.ϕ)
     @. materials.sinψ  = sind(materials.ψ)
     
@@ -60,11 +66,11 @@ using TimerOutputs, CairoMakie
     )
 
     # Time steps
-    nt    = 50
+    nt    = 200
 
     # Newton solver
     niter = 15
-    ϵ_nl  = 1e-8
+    ϵ_nl  = 1e-9
     α     = LinRange(0.05, 1.0, 10)
 
     # Grid bounds
@@ -115,8 +121,7 @@ using TimerOutputs, CairoMakie
     r  = zeros(nVx + nVy + nPt)
 
     #--------------------------------------------#
-    # Intialise field
- 
+    # Discretisation
     Δ   = (x=L.x/nc.x, y=L.y/nc.y, t = Δt0)
 
     # Allocations
@@ -127,7 +132,8 @@ using TimerOutputs, CairoMakie
     λ̇       = (c  = zeros(size_c...), v  = zeros(size_v...) )
     ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
-    τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
+    τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
+
     Pt      = zeros(size_c...)
     Pti     = zeros(size_c...)
     Pt0     = zeros(size_c...)
@@ -165,6 +171,10 @@ using TimerOutputs, CairoMakie
         BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
     end
 
+    # # Set material geometry 
+    # phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
+    # phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= 0.1^2] .= 2
+
     # Set material geometry 
     for i in inx_c, j in iny_c   # loop on centroids
         𝐱 = @SVector([xc[i-1], yc[j-1]])
@@ -181,7 +191,7 @@ using TimerOutputs, CairoMakie
         end
     end
 
-    for i in inx_c, j in iny_c  # loop on vertices
+    for i in inx_v, j in iny_v  # loop on vertices
         𝐱 = @SVector([xv[i-1], yv[j-1]])
 
         for igeom in eachindex(gouge) # Gouge: phase 2
@@ -204,7 +214,7 @@ using TimerOutputs, CairoMakie
 
     rvec   = zeros(length(α))
     err    = (x = zeros(niter), y = zeros(niter), p = zeros(niter))
-    probes = (τII = zeros(nt), fric = zeros(nt), t = zeros(nt),εxx=zeros(nt),εyy=zeros(nt),σyy=zeros(nt),σxx=zeros(nt))
+    probes = (τII = zeros(nt), fric = zeros(nt), t = zeros(nt), εxx=zeros(nt), εyy=zeros(nt), σyyN=zeros(nt), σyyS=zeros(nt), σxxW=zeros(nt), σxxE=zeros(nt))
     to     = TimerOutput()
 
     #--------------------------------------------#
@@ -222,6 +232,7 @@ using TimerOutputs, CairoMakie
         τ0.xy .= τ.xy
         Pt0   .= Pt
 
+        # Time integration
         for iter=1:niter
 
             @printf("Iteration %04d\n", iter)
@@ -229,7 +240,7 @@ using TimerOutputs, CairoMakie
             #--------------------------------------------#
             # Residual check        
             @timeit to "Residual" begin
-                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
+                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
                 @show extrema(λ̇.c[inx_c,iny_c])
                 @show extrema(λ̇.v[inx_v,iny_v])
                 ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
@@ -274,7 +285,7 @@ using TimerOutputs, CairoMakie
             # Line search & solution update
             @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
             UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
-            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
+            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
 
         end
 
@@ -289,9 +300,15 @@ using TimerOutputs, CairoMakie
         ε̇xyc = av2D(ε̇.xy)
         ε̇II  = sqrt.( 0.5.*(ε̇.xx[inx_c,iny_c].^2 + ε̇.yy[inx_c,iny_c].^2 + (-ε̇.xx[inx_c,iny_c]-ε̇.yy[inx_c,iny_c]).^2) .+ ε̇xyc[inx_c,iny_c].^2 )
         
+        τII_rock  = τII[phases.c[inx_c,iny_c].==1]
+        P_rock    =   Pt[inx_c,iny_c][phases.c[inx_c,iny_c].==1]
+        λ̇_rock    =  λ̇.c[inx_c,iny_c][phases.c[inx_c,iny_c].==1]
+
+        # τII_gouge = τII[phases.c[inx_c,iny_c].==2]
+        # P_gouge   =  Pt[inx_c,iny_c][phases.c[inx_c,iny_c].==2]
+
         # Principal stress
         σ1 = (x = zeros(size(Pt)), y = zeros(size(Pt)), v = zeros(size(Pt)))
-        τxyc = 0.25*(τ.xy[1:end-1,1:end-1] .+ τ.xy[2:end-0,1:end-1] .+ τ.xy[1:end-1,2:end-0] .+ τ.xy[2:end-0,2:end-0])
 
         for i in inx_c, j in iny_c
             σ  = @SMatrix[-Pt[i,j]+τ.xx[i,j] τxyc[i,j] 0.; τxyc[i,j] -Pt[i,j]+τ.yy[i,j] 0.; 0. 0. -Pt[i,j]+(-τ.xx[i,j]-τ.yy[i,j])]
@@ -307,37 +324,56 @@ using TimerOutputs, CairoMakie
         # Store probes data
         probes.t[it]    = it*Δ.t
         probes.τII[it]  = mean(τII)
-        probes.σxx[it]  = τ.xx[2,     Int64(floor(nc.y/2))] - Pt[2,     Int64(floor(nc.y/2))] 
-        probes.σyy[it]  = τ.yy[Int64(floor(nc.x/2)), end-1] - Pt[Int64(floor(nc.x/2)), end-1] 
+        probes.σxxW[it] = τ.xx[2,     Int64(floor(nc.y/2))] - Pt[2,     Int64(floor(nc.y/2))] 
+        probes.σxxE[it] = τ.xx[end-1, Int64(floor(nc.y/2))] - Pt[end-1, Int64(floor(nc.y/2))] 
+        probes.σyyS[it] = τ.yy[Int64(floor(nc.x/2)),     2] - Pt[Int64(floor(nc.x/2)),     2] 
+        probes.σyyN[it] = τ.yy[Int64(floor(nc.x/2)), end-1] - Pt[Int64(floor(nc.x/2)), end-1] 
 
         i_midx = Int64(floor(nc.x))
         probes.fric[it] = mean(.-τxyc[i_midx, end-3]./(-Pt[i_midx, end-3] .+ τ.yy[i_midx, end-3])) 
 
-        # Visualise
-        fig = Figure(size=(1000,1000))
-        ax  = Axis(fig[1:2,1], aspect=DataAspect(), title="Plastic Strain rate", xlabel="x", ylabel="y")
-        eps   = 1e-1
-        field = log10.((λ̇.c[inx_c,iny_c] .+ eps)/sc.t )
-        @show extrema(field)
-        heatmap!(ax, xc.*sc.L, yc.*sc.L, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
-        contour!(ax, xc.*sc.L, yc.*sc.L,  phases.c[inx_c,iny_c], color=:white)
-        Vxc = (0.5*(V.x[1:end-1,2:end-1] + V.x[2:end,2:end-1]))[2:end-1,2:end-1].*sc.L/sc.t
-        Vyc = (0.5*(V.y[2:end-1,1:end-1] + V.y[2:end-1,2:end]))[2:end-1,2:end-1].*sc.L/sc.t
-        step = 10
-        # arrows2d!(ax, xc[1:step:end].*sc.L, yc[1:step:end].*sc.L, Vxc[1:step:end,1:step:end], Vyc[1:step:end,1:step:end], lengthscale=100000.4, color=:white)
-        # arrows2d!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], arrowsize = 0, lengthscale=0.04, linewidth=2, color=:white)
-        ax  = Axis(fig[1,2], xlabel="Displacement", ylabel="axial stress")
-        scatter!(ax, probes.t[1:nt]*ε̇xx*L.y*sc.L, probes.σyy[1:nt] )
-        #scatter!(ax, probes.t[1:nt]*ε̇xx*L.y*sc.L, probes.τII[1:nt] )
-        ax  = Axis(fig[2,2], xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error")
-        scatter!(ax, 1:niter, log10.(err.x[1:niter]) )
-        scatter!(ax, 1:niter, log10.(err.y[1:niter]) )
-        scatter!(ax, 1:niter, log10.(err.p[1:niter]) )
-        ylims!(ax, -10, 5)
-        display(fig)
-       
-        # @show (3/materials.β[1] - 2*materials.G[1])/(2*(3/materials.β[1] + 2*materials.G[1]))
+        @show minimum(Pt)*sc.σ,  maximum(Pt)*sc.σ
 
+        # Visualise
+        function figure()
+            ftsz = 25
+            fig = Figure(size=(1000, 1000)) 
+            empty!(fig)
+            ax  = Axis(fig[1:2,1], aspect=DataAspect(), title="Plastic Strain rate", xlabel="x", ylabel="y", xlabelsize=ftsz,  ylabelsize=ftsz, titlesize=ftsz)
+            eps   = 1e-1
+            # field = Pt[inx_c,iny_c] .* sc.σ
+            field = log10.((λ̇.c[inx_c,iny_c] .+ eps)/sc.t )
+            hm = heatmap!(ax, xc.*sc.L, yc.*sc.L, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
+            contour!(ax, xc.*sc.L, yc.*sc.L,  phases.c[inx_c,iny_c], color=:white)
+            Colorbar(fig[3, 1], hm, label = L"$\dot\lambda$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
+            Vxc = (0.5*(V.x[1:end-1,2:end-1] + V.x[2:end,2:end-1]))[2:end-1,2:end-1].*sc.L/sc.t
+            Vyc = (0.5*(V.y[2:end-1,1:end-1] + V.y[2:end-1,2:end]))[2:end-1,2:end-1].*sc.L/sc.t
+            step = 10
+            arrows2d!(ax, xc[1:step:end].*sc.L, yc[1:step:end].*sc.L, Vxc[1:step:end,1:step:end], Vyc[1:step:end,1:step:end], lengthscale=50000.4, color=:white)
+            # arrows2d!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], arrowsize = 0, lengthscale=0.04, linewidth=2, color=:white)
+            xlims!(ax, minimum(xv).*sc.L, maximum(xv).*sc.L)
+            ax  = Axis(fig[1,2], xlabel="Displacement", ylabel="Axial stress [MPa]", xlabelsize=ftsz, ylabelsize=ftsz, titlesize=ftsz)
+            # scatter!(ax, probes.t[1:nt]/sc.t, probes.τII[1:nt]*sc.σ./1e6 )
+            scatter!(ax, probes.t[1:nt]*ε̇xx*L.y*sc.L, probes.σxxW[1:nt]*sc.σ./1e6 )
+            scatter!(ax, probes.t[1:nt]*ε̇xx*L.y*sc.L, probes.σxxE[1:nt]*sc.σ./1e6, marker=:star5, markersize=20 )
+            scatter!(ax, probes.t[1:nt]*ε̇xx*L.y*sc.L, probes.σyyN[1:nt]*sc.σ./1e6 )
+            scatter!(ax, probes.t[1:nt]*ε̇xx*L.y*sc.L, probes.σyyS[1:nt]*sc.σ./1e6 )
+            # ax  = Axis(fig[2,2], xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", xlabelsize=ftsz, ylabelsize=ftsz, titlesize=ftsz)
+            # scatter!(ax, 1:niter, log10.(err.x[1:niter]./err.x[1]) )
+            # scatter!(ax, 1:niter, log10.(err.y[1:niter]./err.y[1]) )
+            # scatter!(ax, 1:niter, log10.(err.p[1:niter]./err.p[1]) )
+            # ylims!(ax, -15, 1)
+            ax  = Axis(fig[2,2], title=L"$$Stress space", xlabel=L"$P$", ylabel=L"$\tau_{II}$", xlabelsize=ftsz, ylabelsize=ftsz, titlesize=ftsz)
+            P_ax       = LinRange(minimum(P_rock), maximum(P_rock), 100)
+            τ_ax_rock = materials.C[1]*materials.cosϕ[1] .+ P_ax.*materials.sinϕ[1]
+            lines!(ax, P_ax*sc.σ/1e6, τ_ax_rock*sc.σ/1e6, color=:black)
+            scatter!(ax, P_rock*sc.σ/1e6, (τII_rock .- λ̇_rock.*materials.ηvp[1])*sc.σ/1e6, color=:black )
+            # τ_ax_gouge = materials.C[2]*materials.cosϕ[2] .+ P_ax.*materials.sinϕ[2]
+            # lines!(ax, P_ax*sc.σ/1e6, τ_ax_gouge*sc.σ/1e6, color=:red)
+            # scatter!(ax, P_gouge*sc.σ/1e6, τII_gouge*sc.σ/1e6, color=:red )
+            display(fig)
+        end
+        with_theme(figure, theme_latexfonts())
     end
 
     display(to)
@@ -345,5 +381,5 @@ using TimerOutputs, CairoMakie
 end
 
 let
-    main((x = 250, y = 200), 60)
+    main((x = 100, y = 50), 60)
 end

@@ -129,7 +129,7 @@ end
 
     # Time steps
     Δt0   = 0.5
-    nt    = 300
+    nt    = 100
     ALE   = false
     C     = 0.5
 
@@ -200,7 +200,8 @@ end
     λ̇       = (c  = zeros(size_c...), v  = zeros(size_v...) )
     ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
-    τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
+    τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
+
     Pt      = zeros(size_c...)
     Pti     = zeros(size_c...)
     Pt0     = zeros(size_c...)
@@ -293,7 +294,7 @@ record(fig, "results/SimpleShearGarnets.mp4", 1:nt; framerate=15) do it
             #--------------------------------------------#
             # Residual check        
             @timeit to "Residual" begin
-                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, G, β, V, Pt, ΔPt, type, BC, materials, phase_ratios, Δ)
+                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, G, β, V, Pt, Pt0, ΔPt, type, BC, materials, phase_ratios, Δ)
                 ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, β, materials, number, type, BC, nc, Δ) 
                 ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, G, materials, number, type, BC, nc, Δ)
                 ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, G, materials, number, type, BC, nc, Δ)
@@ -340,7 +341,7 @@ record(fig, "results/SimpleShearGarnets.mp4", 1:nt; framerate=15) do it
             # Line search & solution update
             @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, G, β, 𝐷, 𝐷_ctl, number, type, BC, materials, phase_ratios, nc, Δ)
             UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
-            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, G, β, V, Pt, ΔPt, type, BC, materials, phase_ratios, Δ)
+            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, G, β, V, Pt, Pt0, ΔPt, type, BC, materials, phase_ratios, Δ)
         end
 
         # Update pressure    
