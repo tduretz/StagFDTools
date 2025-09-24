@@ -20,7 +20,7 @@ using Enzyme  # AD backends you want to use
     Φ0     = 0.05
     Φi     = Φ0
     Pini     = 1e6/sc.σ
-    ε̇      = 2e-15.*sc.t
+    ε̇      = -2e-15.*sc.t
     rad    = 2e3/sc.L
 
     # Velocity gradient matrix
@@ -41,8 +41,8 @@ using Enzyme  # AD backends you want to use
         KΦ    = [1e9    1e9  ]./sc.σ,
         Kf    = [1e10   1e10 ]./sc.σ, 
         k_ηf0 = [1e-15  1e-15]./(sc.L^2/sc.σ/sc.t),
-        ϕ     = [35.    35.  ].*0,
-        ψ     = [10.    10.  ].*0,
+        ϕ     = [35.    35.  ].*1,
+        ψ     = [10.    10.  ].*1,
         C     = [1e7    1e7  ]./sc.σ,
         ηvp   = [0.0    0.0  ]./sc.σ/sc.t,
         cosϕ  = [0.0    0.0  ],
@@ -117,8 +117,7 @@ using Enzyme  # AD backends you want to use
 
     #--------------------------------------------#
     # Intialise field
-    # L   = (x=40e3/sc.L, y=20e3/sc.L)
-    L   = (x=20e3/sc.L, y=20e3/sc.L)
+    L   = (x=40e3/sc.L, y=20e3/sc.L)
     Δ   = (x=L.x/nc.x, y=L.y/nc.y, t=Δt0)
     R   = (x=zeros(size_x...), y=zeros(size_y...), pt=zeros(size_c...), pf=zeros(size_c...), Φ=zeros(size_c...))
     V   = (x=zeros(size_x...), y=zeros(size_y...))
@@ -410,8 +409,8 @@ using Enzyme  # AD backends you want to use
         #     Φ.c[i] = Φ0.c[i] + dΦdt*Δ.t
         # end
 
-        Vxsc = 0.5*(V.x[1:end-1,2:end-1] + V.x[2:end,2:end-1])
-        Vysc = 0.5*(V.y[2:end-1,1:end-1] + V.y[2:end-1,2:end])
+        Vxsc = 0.5*(V.x[1:end-1,2:end-1] + V.x[2:end,2:end-1])[2:end-1,2:end-1]
+        Vysc = 0.5*(V.y[2:end-1,1:end-1] + V.y[2:end-1,2:end])[2:end-1,2:end-1]
         Vs   = sqrt.( Vxsc.^2 .+ Vysc.^2)
         Vxf  = -materials.k_ηf0[1]*diff(P.f, dims=1)/Δ.x
         Vyf  = -materials.k_ηf0[1]*diff(P.f, dims=2)/Δ.y
@@ -432,15 +431,18 @@ using Enzyme  # AD backends you want to use
         #-------------------------------------------# 
 
          # Visualise
-        fig = Figure(fontsize = 20, size = (1000, 1000) )    
-        st  = 10
-        eps = 1e-10
-        ax  = Axis(fig[1,1], aspect=DataAspect(), title="Plastic strain rate", xlabel="x", ylabel="y")
+        fig  = Figure(fontsize = 20, size = (1000, 1000) )    
+        step = 10
+        eps  = 1e-10
+        ax   = Axis(fig[1,1], aspect=DataAspect(), title="Plastic strain rate", xlabel="x", ylabel="y")
         field = log10.((λ̇.c[inx_c,iny_c] .+ eps)/sc.t )
         hm = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
         contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
         Colorbar(fig[2, 1], hm, label = L"$\dot\lambda$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
         
+        arrows2d!(ax, X.c.x[1:step:end], X.c.y[1:step:end], Vxsc[1:step:end,1:step:end], Vysc[1:step:end,1:step:end], lengthscale=10000.4, color=:white)
+
+
         ax  = Axis(fig[3,1], aspect=DataAspect(), title="Porosity", xlabel="x", ylabel="y")
         field = Φ.c[inx_c,iny_c]
         hm = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
@@ -519,7 +521,7 @@ end
 
 function Run()
 
-    nc = (x=50, y=50)
+    nc = (x=150, y=150)
 
     # Mode 0   
     main(nc);
