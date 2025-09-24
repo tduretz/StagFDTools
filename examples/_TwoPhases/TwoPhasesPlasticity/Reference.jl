@@ -8,14 +8,18 @@ using Enzyme  # AD backends you want to use
 
     homo   = false
 
-    nt     = 10
+    # Time steps
+    nt     = 15
     Δt0    = 1e10/sc.t
-    niter  = 10
-    ϵ_nl   = 1e-10
+
+    # Newton solver
+    niter = 15
+    ϵ_nl  = 1e-8
+    α     = LinRange(0.05, 1.0, 10)
 
     Φ0     = 0.05
     Φi     = Φ0
-    Pi     = 1e6/sc.σ
+    Pini     = 1e6/sc.σ
     ε̇      = 2e-15.*sc.t
     rad    = 2e3/sc.L
 
@@ -27,7 +31,7 @@ using Enzyme  # AD backends you want to use
         oneway       = false,
         compressible = true,
         plasticity   = :off,
-        linearizeϕ   = true,              # !!!!!!!!!!!
+        linearizeϕ   = false,              # !!!!!!!!!!!
         n     = [1.0    1.0  ],
         ηs0   = [1e22   1e19 ]/sc.σ/sc.t, 
         ηΦ    = [2e22   2e22 ]/sc.σ/sc.t,
@@ -118,6 +122,7 @@ using Enzyme  # AD backends you want to use
     Δ   = (x=L.x/nc.x, y=L.y/nc.y, t=Δt0)
     R   = (x=zeros(size_x...), y=zeros(size_y...), pt=zeros(size_c...), pf=zeros(size_c...), Φ=zeros(size_c...))
     V   = (x=zeros(size_x...), y=zeros(size_y...))
+    Vi  = (x=zeros(size_x...), y=zeros(size_y...))
     η   = (c  =  ones(size_c...), v  =  ones(size_v...) )
     Φ   = (c=Φi.*ones(size_c...), v=Φi.*ones(size_v...) )
     Φ0  = (c=Φi.*ones(size_c...), v=Φi.*ones(size_v...) )
@@ -133,7 +138,8 @@ using Enzyme  # AD backends you want to use
     𝐷_ctl   = (c = D_ctl_c, v = D_ctl_v)
     λ̇       = (c  = zeros(size_c...), v  = zeros(size_v...) )
     phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...), x =ones(Int64, size_x...), y=ones(Int64, size_y...) )  # phase on velocity points
-    P       = (t=Pi .* ones(size_c...), f=Pi .* ones(size_c...))
+    P       = (t=Pini .* ones(size_c...), f=Pini .* ones(size_c...))
+    Pi      = (t=Pini .* ones(size_c...), f=Pini .* ones(size_c...))
     P0      = (t=zeros(size_c...), f=zeros(size_c...))
     ΔP      = (t=zeros(size_c...), f=zeros(size_c...))
 
@@ -190,6 +196,7 @@ using Enzyme  # AD backends you want to use
     
     #--------------------------------------------#
 
+    rvec   = zeros(length(α))
     probes = (
         Pe  = zeros(nt),
         Pt  = zeros(nt),
@@ -357,8 +364,8 @@ using Enzyme  # AD backends you want to use
             # dx[(nVx+nVy+nPt+1):end] .= dpf
 
             #--------------------------------------------#
-            UpdateSolution!(V, P, dx, number, type, nc)
-            # UpdatePorosity2D!(R, V, P, P0, Φ, Φ0, phases, materials, number, type, BC, nc, Δ) 
+            imin = LineSearch!(rvec, α, dx, R, V, P, ε̇, τ, Vi, Pi, ΔP, P0, Φ, Φ0, τ0, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+            UpdateSolution!(V, P, α[imin]*dx, number, type, nc)
         end
 
         #--------------------------------------------#

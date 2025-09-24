@@ -1075,3 +1075,33 @@ end
     end
     ############ End ############
 end
+
+function LineSearch!(rvec, α, dx, R, V, P, ε̇, τ, Vi, Pi, ΔP, P0, Φ, Φ0, τ0, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+    
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, inx_v, iny_v, size_x, size_y, size_c, size_v = Ranges(nc)
+
+    Vi.x .= V.x 
+    Vi.y .= V.y 
+    Pi.t .= P.t
+    Pi.f .= P.f
+
+    for i in eachindex(α)
+        V.x .= Vi.x 
+        V.y .= Vi.y
+        P.t .= Pi.t
+        P.f .= Pi.f
+        UpdateSolution!(V, P, α[i].*dx, number, type, nc)
+        TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
+        ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+        ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+        ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
+        ResidualFluidContinuity2D!(R, V, P, ΔP, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
+        rvec[i] = @views norm(R.x[inx_Vx,iny_Vx])/length(R.x[inx_Vx,iny_Vx]) + norm(R.y[inx_Vy,iny_Vy])/length(R.y[inx_Vy,iny_Vy]) + 0*norm(R.pt[inx_c,iny_c])/length(R.pt[inx_c,iny_c]) + 0*norm(R.pf[inx_c,iny_c])/length(R.pf[inx_c,iny_c])  
+    end
+    imin = argmin(rvec)
+    V.x .= Vi.x 
+    V.y .= Vi.y
+    P.t .= Pi.t
+    P.f .= Pi.f
+    return imin
+end
