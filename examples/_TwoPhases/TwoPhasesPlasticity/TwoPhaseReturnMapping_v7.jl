@@ -7,7 +7,7 @@ using GLMakie, Enzyme, LinearAlgebra, JLD2, StaticArrays
 invII(x) = sqrt(1/2*x[1]^2 + 1/2*x[2]^2 + 1/2*(-x[1]-x[2])^2 + x[3]^2) 
 
 function residual_two_phase_trial(x, ε̇II_eff, divVs, divqD, Pt_t, Pf_t, Pt0, Pf0, Φ0, p)
-    G, Kϕ, Ks, Kf, C, ϕ, ψ, ηvp, ηv, ηΦ, Δt = p.G, p.Kϕ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηs, p.ηΦ, p.Δt
+    G, KΦ, Ks, Kf, C, ϕ, ψ, ηvp, ηv, ηΦ, Δt = p.G, p.KΦ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηs, p.ηΦ, p.Δt
     eps   = -1e-13
     ηe    = G*Δt 
     τII, ΔPt, ΔPf, λ̇ = x[1], x[2], x[3], x[4]
@@ -16,7 +16,7 @@ function residual_two_phase_trial(x, ε̇II_eff, divVs, divqD, Pt_t, Pf_t, Pt0, 
     Pf      = Pf_t + ΔPf
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
-    dΦdt    = 1/Kϕ * (dPfdt - dPtdt) + 1/ηΦ * (Pf - Pt)
+    dΦdt    = 1/KΦ * (dPfdt - dPtdt) + 1/ηΦ * (Pf - Pt)
     Φ       = Φ0 + dΦdt*Δt
     dlnρfdt = dPfdt / Kf
     dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
@@ -44,33 +44,37 @@ function residual_two_phase_trial(x, ε̇II_eff, divVs, divqD, Pt_t, Pf_t, Pt0, 
 end
 
 function residual_two_phase(x, ε̇II_eff, Pt_trial, Pf_trial, Φ_trial, Pt0, Pf0, Φ0, p)
-    G, Kϕ, Ks, Kf, C, ϕ, ψ, ηvp, ηv, ηΦ, Δt = p.G, p.Kϕ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηs, p.ηΦ, p.Δt
+    G, KΦ, Ks, Kf, C, ϕ, ψ, ηvp, ηv, ηΦ, Δt = p.G, p.KΦ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηs, p.ηΦ, p.Δt
     eps   = -1e-13
     ηe    = G*Δt 
     τII, Pt, Pf, λ̇, Φ = x[1], x[2], x[3], x[4], x[5]
 
-    phi = Φ_trial
-    K_s = p.Ks
-    K_f = p.Kf
-    K_phi = p.Kϕ
-    eta_phi = p.ηΦ
-    dt = p.Δt
-    gamma = λ̇
-    sin_psi = sind(ψ)
-    ΔPt = K_phi .* dt .* eta_phi .* gamma .* phi .* sin_psi .* (-K_f + K_s) ./ (-K_f .* K_phi .* dt .* phi + K_f .* K_phi .* dt - K_f .* eta_phi .* phi + K_f .* eta_phi + K_phi .* K_s .* dt .* phi + K_phi .* eta_phi .* phi + K_s .* eta_phi .* phi)
-    ΔPf = K_f .* K_phi .* dt .* eta_phi .* gamma .* sin_psi ./ (K_f .* K_phi .* dt .* phi - K_f .* K_phi .* dt + K_f .* eta_phi .* phi - K_f .* eta_phi - K_phi .* K_s .* dt .* phi - K_phi .* eta_phi .* phi - K_s .* eta_phi .* phi)
-
+    # phi = Φ_trial
+    # K_s = p.Ks
+    # K_f = p.Kf
+    # K_phi = p.KΦ
+    # eta_phi = p.ηΦ
+    # dt = p.Δt
+    # gamma = λ̇
+    # sin_psi = sind(ψ)
+    # ΔPt = K_phi .* dt .* eta_phi .* gamma .* phi .* sin_psi .* (-K_f + K_s) ./ (-K_f .* K_phi .* dt .* phi + K_f .* K_phi .* dt - K_f .* eta_phi .* phi + K_f .* eta_phi + K_phi .* K_s .* dt .* phi + K_phi .* eta_phi .* phi + K_s .* eta_phi .* phi)
+    # ΔPt = K_phi .* dt .* eta_phi .* gamma .* phi .* sin_psi .* (-K_f + K_s) ./ (-K_f .* K_phi .* dt .* phi + K_f .* K_phi .* dt - K_f .* eta_phi .* phi + K_f .* eta_phi + K_phi .* K_s .* dt .* phi + K_phi .* eta_phi .* phi + K_s .* eta_phi .* phi)
+    
+    sinψ = sind(ψ)
+    
+    ΔPt = KΦ .* sinψ .* Δt .* Φ_trial .* ηΦ .* λ̇ .* (-Kf + Ks) ./ (-Kf .* KΦ .* Δt .* Φ_trial + Kf .* KΦ .* Δt - Kf .* Φ_trial .* ηΦ + Kf .* ηΦ + Ks .* KΦ .* Δt .* Φ_trial + Ks .* Φ_trial .* ηΦ + KΦ .* Φ_trial .* ηΦ)
+    ΔPf = Kf .* KΦ .* sinψ .* Δt .* ηΦ .* λ̇ ./ (Kf .* KΦ .* Δt .* Φ_trial - Kf .* KΦ .* Δt + Kf .* Φ_trial .* ηΦ - Kf .* ηΦ - Ks .* KΦ .* Δt .* Φ_trial - Ks .* Φ_trial .* ηΦ - KΦ .* Φ_trial .* ηΦ)
     # Check yield
     f       = τII - (1-Φ)*C*cosd(ϕ) - (Pt - Pf)*sind(ϕ)
 
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
-    dΦdt    = (dPfdt - dPtdt)/Kϕ + (Pf - Pt)/ηΦ + λ̇*sind(ψ)*(f>=eps)
+    dΦdt    = (dPfdt - dPtdt)/KΦ + (Pf - Pt)/ηΦ + λ̇*sind(ψ)*(f>=eps)
     # # Φ       = Φ0 + dΦdt*Δt
     # dlnρfdt = dPfdt / Kf
     # dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
 
-    # Kd = (1-Φ)*(1/Kϕ + 1/Ks)^-1
+    # Kd = (1-Φ)*(1/KΦ + 1/Ks)^-1
     # α  = 1 - Kd/Ks
     # B  = (1/Kd - 1/Ks) / (1/Kd - 1/Ks + Φ*(1/Kf - 1/Ks))
 
@@ -83,8 +87,8 @@ function residual_two_phase(x, ε̇II_eff, Pt_trial, Pf_trial, Φ_trial, Pt0, Pf
     # fpf2 = divqD     - α/Kd*(dPtdt - 1/B*dPfdt) + 1/(1-Φ)*λ̇*sind(ψ)*(f>=eps) - (Pt-Pf)/((1-Φ)*ηΦ)
 
     # # Equations self-rederived from Yarushina (2015) adding dilation
-    # fpt3 = divVs    + (1/Ks)/(1-Φ) * (dPtdt - Φ*dPfdt) + (1/Kϕ)/(1-Φ) * (dPtdt - dPfdt) + (Pt-Pf)/((1-Φ)*ηΦ) - 1/(1-Φ)*λ̇*sind(ψ)*(f>=eps)
-    # fpf3 = divqD    - (dPtdt - dPfdt)/Kϕ + Φ*dPfdt/Kf + Φ*divVs - (Pt-Pf)/ηΦ +   λ̇*sind(ψ)*(f>=eps)
+    # fpt3 = divVs    + (1/Ks)/(1-Φ) * (dPtdt - Φ*dPfdt) + (1/KΦ)/(1-Φ) * (dPtdt - dPfdt) + (Pt-Pf)/((1-Φ)*ηΦ) - 1/(1-Φ)*λ̇*sind(ψ)*(f>=eps)
+    # fpf3 = divqD    - (dPtdt - dPfdt)/KΦ + Φ*dPfdt/Kf + Φ*divVs - (Pt-Pf)/ηΦ +   λ̇*sind(ψ)*(f>=eps)
 
     ηve = inv(1/ηv + 1/ηe)
 
@@ -114,18 +118,22 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
 
 
     # Predict pressures from trial state (comes from global solver)
-    phi = Φ0
-    K_s = params.Ks
-    K_f = params.Kf
-    K_phi = params.Kϕ
+    K_s     = params.Ks
+    K_f     = params.Kf
+    K_phi   = params.KΦ
     eta_phi = params.ηΦ
     dt = params.Δt
-    Pt_trial = (-K_f .* K_phi .* K_s .* divVs .* dt .^ 2 - K_f .* K_phi .* K_s .* divqD .* dt .^ 2 - K_f .* K_phi .* Pf0 .* dt .* phi + K_f .* K_phi .* Pt0 .* dt - K_f .* K_phi .* divVs .* dt .* eta_phi .* phi .^ 2 - K_f .* K_phi .* divqD .* dt .* eta_phi .* phi - K_f .* K_s .* divVs .* dt .* eta_phi - K_f .* K_s .* divqD .* dt .* eta_phi - K_f .* Pt0 .* eta_phi .* phi + K_f .* Pt0 .* eta_phi + K_phi .* K_s .* Pf0 .* dt .* phi + K_phi .* K_s .* divVs .* dt .* eta_phi .* phi .^ 2 - K_phi .* K_s .* divVs .* dt .* eta_phi .* phi + K_phi .* Pt0 .* eta_phi .* phi + K_s .* Pt0 .* eta_phi .* phi) ./ (-K_f .* K_phi .* dt .* phi + K_f .* K_phi .* dt - K_f .* eta_phi .* phi + K_f .* eta_phi + K_phi .* K_s .* dt .* phi + K_phi .* eta_phi .* phi + K_s .* eta_phi .* phi)
-    Pf_trial = (-K_f .* K_phi .* K_s .* divVs .* dt .^ 2 - K_f .* K_phi .* K_s .* divqD .* dt .^ 2 - K_f .* K_phi .* Pf0 .* dt .* phi + K_f .* K_phi .* Pt0 .* dt - K_f .* K_phi .* divVs .* dt .* eta_phi .* phi - K_f .* K_phi .* divqD .* dt .* eta_phi - K_f .* K_s .* divVs .* dt .* eta_phi - K_f .* K_s .* divqD .* dt .* eta_phi - K_f .* Pf0 .* eta_phi .* phi + K_f .* Pf0 .* eta_phi + K_phi .* K_s .* Pf0 .* dt .* phi + K_phi .* Pf0 .* eta_phi .* phi + K_s .* Pf0 .* eta_phi .* phi) ./ (-K_f .* K_phi .* dt .* phi + K_f .* K_phi .* dt - K_f .* eta_phi .* phi + K_f .* eta_phi + K_phi .* K_s .* dt .* phi + K_phi .* eta_phi .* phi + K_s .* eta_phi .* phi)
-    Pf = Pf_trial
-    Pt = Pt_trial
-    phi_0 = Φ0
-    Φ_trial  = (K_phi .* dt .* (Pf - Pt) + K_phi .* eta_phi .* phi_0 + eta_phi .* (Pf - Pf0 - Pt + Pt0)) ./ (K_phi .* eta_phi)
+    phi_0   = Φ0
+    Pt_trial, Pf_trial, Φ_trial = Pt0, Pf0, Φ0
+
+    for it=1:10
+        Pf  = Pf_trial
+        Pt  = Pt_trial
+        phi =  Φ_trial
+        Pt_trial = (-K_f .* K_phi .* K_s .* divVs .* dt .^ 2 - K_f .* K_phi .* K_s .* divqD .* dt .^ 2 - K_f .* K_phi .* Pf0 .* dt .* phi + K_f .* K_phi .* Pt0 .* dt - K_f .* K_phi .* divVs .* dt .* eta_phi .* phi .^ 2 - K_f .* K_phi .* divqD .* dt .* eta_phi .* phi - K_f .* K_s .* divVs .* dt .* eta_phi - K_f .* K_s .* divqD .* dt .* eta_phi - K_f .* Pt0 .* eta_phi .* phi + K_f .* Pt0 .* eta_phi + K_phi .* K_s .* Pf0 .* dt .* phi + K_phi .* K_s .* divVs .* dt .* eta_phi .* phi .^ 2 - K_phi .* K_s .* divVs .* dt .* eta_phi .* phi + K_phi .* Pt0 .* eta_phi .* phi + K_s .* Pt0 .* eta_phi .* phi) ./ (-K_f .* K_phi .* dt .* phi + K_f .* K_phi .* dt - K_f .* eta_phi .* phi + K_f .* eta_phi + K_phi .* K_s .* dt .* phi + K_phi .* eta_phi .* phi + K_s .* eta_phi .* phi)
+        Pf_trial = (-K_f .* K_phi .* K_s .* divVs .* dt .^ 2 - K_f .* K_phi .* K_s .* divqD .* dt .^ 2 - K_f .* K_phi .* Pf0 .* dt .* phi + K_f .* K_phi .* Pt0 .* dt - K_f .* K_phi .* divVs .* dt .* eta_phi .* phi - K_f .* K_phi .* divqD .* dt .* eta_phi - K_f .* K_s .* divVs .* dt .* eta_phi - K_f .* K_s .* divqD .* dt .* eta_phi - K_f .* Pf0 .* eta_phi .* phi + K_f .* Pf0 .* eta_phi + K_phi .* K_s .* Pf0 .* dt .* phi + K_phi .* Pf0 .* eta_phi .* phi + K_s .* Pf0 .* eta_phi .* phi) ./ (-K_f .* K_phi .* dt .* phi + K_f .* K_phi .* dt - K_f .* eta_phi .* phi + K_f .* eta_phi + K_phi .* K_s .* dt .* phi + K_phi .* eta_phi .* phi + K_s .* eta_phi .* phi)
+        Φ_trial  = (K_phi .* dt .* (Pf - Pt) + K_phi .* eta_phi .* phi_0 + eta_phi .* (Pf - Pf0 - Pt + Pt0)) ./ (K_phi .* eta_phi)
+    end
 
     r = 0.0
 
@@ -141,11 +149,9 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
     if f>-1e-13 
         @info "plastic"
 
-
-
         # This is the proper return mapping with plasticity
         r0  = 1.0
-        tol = 1e-9
+        tol = 1e-15
 
         for iter=1:10
             J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase, x, Const(ε̇II_eff), Const(Pt_trial), Const(Pf_trial), Const(Φ_trial), Const(Pt0), Const(Pf0), Const(Φ0), Const(params))
@@ -164,49 +170,54 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
     end
 
     # Recompute components
-    τII, Pt, Pf, λ̇, Φ   = x[1], x[2], x[3], x[4], x[5]
+    τII, Pt, Pf, λ̇, Φ1   = x[1], x[2], x[3], x[4], x[5]
 
     τ = ε̇_eff .* τII./ε̇II_eff
 
+    @show Φ_trial, Φ1
 
-    Kϕ, ηΦ, ψ, Δt = params.Kϕ, params.ηΦ, params.ψ, params.Δt
+    KΦ, ηΦ, ψ, Δt = params.KΦ, params.ηΦ, params.ψ, params.Δt
     Kf, Ks = params.Kf, params.Ks 
 
-    # # Check residual using trial state pressures: it is also zero !!!
-    # dPtdt   = (Pt_t - Pt0) / Δt
-    # dPfdt   = (Pf_t - Pf0) / Δt
-    # dΦdt    = 1/Kϕ * (dPfdt - dPtdt) + 1/ηΦ * (Pf_t - Pt_t) 
-    # Φ       = Φ0 + dΦdt*Δt
-    # dlnρfdt = dPfdt / Kf
-    # dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
-    # f1=dlnρsdt   - dΦdt/(1-Φ) +   divVs
-    # f2=Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD
-    # @show f1, f2
+    #### Check residual with trial state pressures: it is also zero !!!
+    dPtdt   = (Pt_trial - Pt0) / Δt
+    dPfdt   = (Pf_trial - Pf0) / Δt
+    dΦdt    = 1/KΦ * (dPfdt - dPtdt) + 1/ηΦ * (Pf_trial - Pt_trial) 
+    dlnρfdt = dPfdt / Kf
+    dlnρsdt = 1/(1-Φ_trial) *(dPtdt - Φ_trial*dPfdt) / Ks
+    f1=dlnρsdt   - dΦdt/(1-Φ_trial) +   divVs
+    f2=Φ_trial*dlnρfdt + dΦdt       + Φ_trial*divVs + divqD
+    @show f1, f2
 
-    # Check residual should be zero
+    ### Check residuals with corrected pressures: should be zero !
+
+    # Looks like Φ_trial has to be the one here
+    Φ       = Φ_trial
+
+    # General form
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
-    dΦdt    = 1/Kϕ * (dPfdt - dPtdt) + 1/ηΦ * (Pf - Pt) + λ̇*sind(ψ) 
-    Φ       = Φ0 + dΦdt*Δt
+    dΦdt    = 1/KΦ * (dPfdt - dPtdt) + 1/ηΦ * (Pf - Pt) + λ̇*sind(ψ) 
     dlnρfdt = dPfdt / Kf
     dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
     f1=dlnρsdt   - dΦdt/(1-Φ) +   divVs
     f2=Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD
     @show f1, f2
 
-    Kd = (1-Φ)*(1/Kϕ + 1/Ks)^-1
+    # Specific form 
+    Kd = (1-Φ)*(1/KΦ + 1/Ks)^-1
     α  = 1 - Kd/Ks
     B  = (1/Kd - 1/Ks) / (1/Kd - 1/Ks + Φ*(1/Kf - 1/Ks))
     f1 = divVs     + 1/Kd*(dPtdt -   α*dPfdt) - 1/(1-Φ)*λ̇*sind(ψ) + (Pt-Pf)/((1-Φ)*ηΦ)
     f2 = divqD     - α/Kd*(dPtdt - 1/B*dPfdt) + 1/(1-Φ)*λ̇*sind(ψ) - (Pt-Pf)/((1-Φ)*ηΦ)
     @show f1, f2
 
-    f1 = divVs    + (1/Ks)/(1-Φ) * (dPtdt - Φ*dPfdt) + (1/Kϕ)/(1-Φ) * (dPtdt - dPfdt) + (Pt-Pf)/((1-Φ)*ηΦ) - 1/(1-Φ)*λ̇*sind(ψ)
-    f2 = divqD    - (dPtdt - dPfdt)/Kϕ + Φ*dPfdt/Kf + Φ*divVs - (Pt-Pf)/ηΦ + λ̇*sind(ψ)
+    # Specific form (rederived)
+    f1 = divVs    + (1/Ks)/(1-Φ) * (dPtdt - Φ*dPfdt) + (1/KΦ)/(1-Φ) * (dPtdt - dPfdt) + (Pt-Pf)/((1-Φ)*ηΦ) - 1/(1-Φ)*λ̇*sind(ψ)
+    f2 = divqD    - (dPtdt - dPfdt)/KΦ + Φ*dPfdt/Kf + Φ*divVs - (Pt-Pf)/ηΦ + λ̇*sind(ψ)
     @show f1, f2
 
-  
-    return [τ[1], τ[2], τ[3], Pt, Pf], λ̇, Φ, r 
+    return [τ[1], τ[2], τ[3], Pt, Pf], λ̇, Φ1, r 
 end
 
 
@@ -219,8 +230,8 @@ function two_phase_return_mapping()
 
     # Kinematics
     ε̇     = [2e-15,-2e-15, 0].*sc.t
-    divVs =  1*1e-14 .*sc.t
-    divqD = -1*1e-14 .*sc.t
+    divVs =  0*1e-14 .*sc.t
+    divqD = -0*1e-14 .*sc.t
 
     # Initial conditions
     Pt   = 1e6/sc.σ
@@ -233,7 +244,7 @@ function two_phase_return_mapping()
     
     params = (
         G       = 3e10/sc.σ,
-        Kϕ      = 1e9/sc.σ,
+        KΦ      = 1e9/sc.σ,
         Ks      = 1e11/sc.σ,
         Kf      = 1e10/sc.σ,
         C       = 1e7 /sc.σ,
@@ -273,6 +284,9 @@ function two_phase_return_mapping()
         ϵ̇          = [ε̇_eff[1], ε̇_eff[2], ε̇_eff[3], divVs, divqD]
         σ, λ̇, Φ, r = StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
         τ, Pt, Pf  = σ[1:3], σ[4], σ[5]
+
+        @show τ, Pt, Pf, Φ
+
 
         # # Consistent tangent
         # J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector1, ϵ̇, Const(τ0), Const(P0), Const(params))
@@ -314,6 +328,7 @@ function two_phase_return_mapping()
         ax3 = Axis(fig[3,1], title="Plastic multiplier",  xlabel=L"$t$ [yr]",  ylabel=L"$\dot{\lambda}$ [1/s]", xlabelsize=20, ylabelsize=20)    
         lines!(ax3, probes.t*sc.t, probes.λ̇/sc.t)
         scatter!(ax3, data["probes"].t, data["probes"].λ̇)
+        scatter!(ax3, probes_v6.t*sc.t, probes_v6.λ̇/sc.t)
 
         ax4 = Axis(fig[4,1], title="Porosity",  xlabel=L"$t$ [yr]",  ylabel=L"$\phi$", xlabelsize=20, ylabelsize=20)    
         lines!(ax4, probes.t*sc.t, probes.Φ)

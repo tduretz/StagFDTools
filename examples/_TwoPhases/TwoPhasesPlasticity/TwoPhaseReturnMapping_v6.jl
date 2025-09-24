@@ -200,6 +200,9 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
     return [τ[1], τ[2], τ[3], Pt, Pf], λ̇, Φ, r 
 end
 
+########################################################################################
+########################################################################################
+########################################################################################
 
 function two_phase_return_mapping()
 
@@ -262,6 +265,8 @@ function two_phase_return_mapping()
         σ, λ̇, Φ, r = StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
         τ, Pt, Pf  = σ[1:3], σ[4], σ[5]
 
+        @show τ, Pt, Pf, Φ
+
         # # Consistent tangent
         # J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector1, ϵ̇, Const(τ0), Const(P0), Const(params))
         # display(J.derivs[1])
@@ -276,6 +281,8 @@ function two_phase_return_mapping()
         probes.Φ[it]  = Φ
         probes.r[it]  = r
     end
+
+    @save "v6.jld2" probes
 
     function figure()
 
