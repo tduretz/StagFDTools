@@ -5,7 +5,7 @@ using GLMakie, Enzyme, LinearAlgebra, JLD2
 invII(x) = sqrt(1/2*x[1]^2 + 1/2*x[2]^2 + 1/2*(-x[1]-x[2])^2 + x[3]^2) 
 
 function residual_two_phase_trial(x, ε̇II_eff, divVs, divqD, Pt_t, Pf_t, Pt0, Pf0, Φ0, p)
-    G, Kϕ, Ks, Kf, C, ϕ, ψ, ηvp, ηv, ηΦ, Δt = p.G, p.Kϕ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηs, p.ηΦ, p.Δt
+    G, KΦ, Ks, Kf, C, ϕ, ψ, ηvp, ηv, ηΦ, Δt = p.G, p.KΦ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηs, p.ηΦ, p.Δt
     eps   = -1e-13
     ηe    = G*Δt 
     τII, ΔPt, ΔPf, λ̇ = x[1], x[2], x[3], x[4]
@@ -14,7 +14,7 @@ function residual_two_phase_trial(x, ε̇II_eff, divVs, divqD, Pt_t, Pf_t, Pt0, 
     Pf      = Pf_t + ΔPf
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
-    dΦdt    = 1/Kϕ * (dPfdt - dPtdt) + 1/ηΦ * (Pf - Pt)
+    dΦdt    = 1/KΦ * (dPfdt - dPtdt) + 1/ηΦ * (Pf - Pt)
     Φ       = Φ0 + dΦdt*Δt
     dlnρfdt = dPfdt / Kf
     dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
@@ -30,7 +30,7 @@ function residual_two_phase_trial(x, ε̇II_eff, divVs, divqD, Pt_t, Pf_t, Pt0, 
 end
 
 function residual_two_phase(x, ε̇II_eff, divVs, divqD, Pt_t, Pf_t, Pt0, Pf0, Φ0, p)
-    G, Kϕ, Ks, Kf, C, ϕ, ψ, ηvp, ηv, ηΦ, Δt = p.G, p.Kϕ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηs, p.ηΦ, p.Δt
+    G, KΦ, Ks, Kf, C, ϕ, ψ, ηvp, ηv, ηΦ, Δt = p.G, p.KΦ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηs, p.ηΦ, p.Δt
     eps   = -1e-13
     ηe    = G*Δt 
     τII, ΔPt, ΔPf, λ̇, Φ = x[1], x[2], x[3], x[4], x[5]
@@ -40,12 +40,12 @@ function residual_two_phase(x, ε̇II_eff, divVs, divqD, Pt_t, Pf_t, Pt0, Pf0, �
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
     @show λ̇*sind(ψ)
-    dΦdt    = (dPfdt - dPtdt)/Kϕ + (Pf - Pt)/ηΦ + λ̇*sind(ψ)*(f>=eps)
+    dΦdt    = (dPfdt - dPtdt)/KΦ + (Pf - Pt)/ηΦ + λ̇*sind(ψ)*(f>=eps)
     # Φ       = Φ0 + dΦdt*Δt
     dlnρfdt = dPfdt / Kf
     dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
 
-    # Kd = (1-Φ)*(1/Kϕ + 1/Ks)^-1
+    # Kd = (1-Φ)*(1/KΦ + 1/Ks)^-1
     # α  = 1 - Kd/Ks
     # B  = (1/Kd - 1/Ks) / (1/Kd - 1/Ks + Φ*(1/Kf - 1/Ks))
 
@@ -58,8 +58,8 @@ function residual_two_phase(x, ε̇II_eff, divVs, divqD, Pt_t, Pf_t, Pt0, Pf0, �
     # fpf2 = divqD     - α/Kd*(dPtdt - 1/B*dPfdt) + 1/(1-Φ)*λ̇*sind(ψ)*(f>=eps) - (Pt-Pf)/((1-Φ)*ηΦ)
 
     # # Equations self-rederived from Yarushina (2015) adding dilation
-    # fpt3 = divVs    + (1/Ks)/(1-Φ) * (dPtdt - Φ*dPfdt) + (1/Kϕ)/(1-Φ) * (dPtdt - dPfdt) + (Pt-Pf)/((1-Φ)*ηΦ) - 1/(1-Φ)*λ̇*sind(ψ)*(f>=eps)
-    # fpf3 = divqD    - (dPtdt - dPfdt)/Kϕ + Φ*dPfdt/Kf + Φ*divVs - (Pt-Pf)/ηΦ +   λ̇*sind(ψ)*(f>=eps)
+    # fpt3 = divVs    + (1/Ks)/(1-Φ) * (dPtdt - Φ*dPfdt) + (1/KΦ)/(1-Φ) * (dPtdt - dPfdt) + (Pt-Pf)/((1-Φ)*ηΦ) - 1/(1-Φ)*λ̇*sind(ψ)*(f>=eps)
+    # fpf3 = divqD    - (dPtdt - dPfdt)/KΦ + Φ*dPfdt/Kf + Φ*divVs - (Pt-Pf)/ηΦ +   λ̇*sind(ψ)*(f>=eps)
 
     ηve = inv(1/ηv + 1/ηe)
 
@@ -148,13 +148,13 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
     # Pt_t, Pf_t = x[2], x[3]
 
     τ = ε̇_eff .* τII./ε̇II_eff
-    Kϕ, ηΦ, ψ, Δt = params.Kϕ, params.ηΦ, params.ψ, params.Δt
+    KΦ, ηΦ, ψ, Δt = params.KΦ, params.ηΦ, params.ψ, params.Δt
     Kf, Ks = params.Kf, params.Ks 
 
     # # Check residual using trial state pressures: it is also zero !!!
     # dPtdt   = (Pt_t - Pt0) / Δt
     # dPfdt   = (Pf_t - Pf0) / Δt
-    # dΦdt    = 1/Kϕ * (dPfdt - dPtdt) + 1/ηΦ * (Pf_t - Pt_t) 
+    # dΦdt    = 1/KΦ * (dPfdt - dPtdt) + 1/ηΦ * (Pf_t - Pt_t) 
     # Φ       = Φ0 + dΦdt*Δt
     # dlnρfdt = dPfdt / Kf
     # dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
@@ -165,7 +165,7 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
     # Check residual should be zero
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
-    dΦdt    = 1/Kϕ * (dPfdt - dPtdt) + 1/ηΦ * (Pf - Pt) + λ̇*sind(ψ) 
+    dΦdt    = 1/KΦ * (dPfdt - dPtdt) + 1/ηΦ * (Pf - Pt) + λ̇*sind(ψ) 
     Φ       = Φ0 + dΦdt*Δt
     dlnρfdt = dPfdt / Kf
     dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
@@ -173,15 +173,15 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
     f2=Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD
     @show f1, f2
 
-    Kd = (1-Φ)*(1/Kϕ + 1/Ks)^-1
+    Kd = (1-Φ)*(1/KΦ + 1/Ks)^-1
     α  = 1 - Kd/Ks
     B  = (1/Kd - 1/Ks) / (1/Kd - 1/Ks + Φ*(1/Kf - 1/Ks))
     f1 = divVs     + 1/Kd*(dPtdt -   α*dPfdt) - 1/(1-Φ)*λ̇*sind(ψ) + (Pt-Pf)/((1-Φ)*ηΦ)
     f2 = divqD     - α/Kd*(dPtdt - 1/B*dPfdt) + 1/(1-Φ)*λ̇*sind(ψ) - (Pt-Pf)/((1-Φ)*ηΦ)
     @show f1, f2
 
-    f1 = divVs    + (1/Ks)/(1-Φ) * (dPtdt - Φ*dPfdt) + (1/Kϕ)/(1-Φ) * (dPtdt - dPfdt) + (Pt-Pf)/((1-Φ)*ηΦ) - 1/(1-Φ)*λ̇*sind(ψ)
-    f2 = divqD    - (dPtdt - dPfdt)/Kϕ + Φ*dPfdt/Kf + Φ*divVs - (Pt-Pf)/ηΦ + λ̇*sind(ψ)
+    f1 = divVs    + (1/Ks)/(1-Φ) * (dPtdt - Φ*dPfdt) + (1/KΦ)/(1-Φ) * (dPtdt - dPfdt) + (Pt-Pf)/((1-Φ)*ηΦ) - 1/(1-Φ)*λ̇*sind(ψ)
+    f2 = divqD    - (dPtdt - dPfdt)/KΦ + Φ*dPfdt/Kf + Φ*divVs - (Pt-Pf)/ηΦ + λ̇*sind(ψ)
     @show f1, f2
 
     Φ = x[5]
@@ -209,7 +209,7 @@ function two_phase_return_mapping()
     
     params = (
         G       = 3e10/sc.σ,
-        Kϕ      = 1e9/sc.σ,
+        KΦ      = 1e9/sc.σ,
         Ks      = 1e11/sc.σ,
         Kf      = 1e10/sc.σ,
         C       = 1e7 /sc.σ,

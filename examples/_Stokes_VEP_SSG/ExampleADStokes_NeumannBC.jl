@@ -1,4 +1,4 @@
-using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf
+using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, GLMakie, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
@@ -8,7 +8,7 @@ using TimerOutputs
     #--------------------------------------------#
 
     # Resolution
-    nc = (x = 150, y = 150)
+    nc = (x = 20, y = 40)
 
     # Boundary loading type
     config = BC_template
@@ -16,11 +16,11 @@ using TimerOutputs
 
     # Material parameters
     materials = ( 
-        compressible = false,
+        compressible = true,
         plasticity   = :none,
         n    = [1.0    1.0  ],
-        η0   = [1e0    1e5  ], 
-        G    = [1e6    1e6  ],
+        η0   = [1e2    1e-1 ], 
+        G    = [1e1    1e1  ],
         C    = [150    150  ],
         ϕ    = [30.    30.  ],
         ηvp  = [0.5    0.5  ],
@@ -38,7 +38,7 @@ using TimerOutputs
     nt    = 1
 
     # Newton solver
-    niter = 2
+    niter = 3
     ϵ_nl  = 1e-8
     α     = LinRange(0.05, 1.0, 10)
 
@@ -103,6 +103,7 @@ using TimerOutputs
     ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
     τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
+
     Pt      = zeros(size_c...)
     Pti     = zeros(size_c...)
     Pt0     = zeros(size_c...)
@@ -171,7 +172,9 @@ using TimerOutputs
             #--------------------------------------------#
             # Residual check        
             @timeit to "Residual" begin
-                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
+                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
+                @show extrema(λ̇.c)
+                @show extrema(λ̇.v)
                 ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
                 ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
                 ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
@@ -214,7 +217,8 @@ using TimerOutputs
             # Line search & solution update
             @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
             UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
-            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
+            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
+
         end
 
         # Update pressure
@@ -222,15 +226,26 @@ using TimerOutputs
 
         #--------------------------------------------#
 
-        p3 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Vx", color=:vik)
-        p4 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy", color=:vik)
-        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]'.-mean( Pt[inx_c,iny_c]), aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik)
-        p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright, title=BC_template)
-        p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
-        p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
-        p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
-        display(plot(p1, p2, p3, p4, layout=(2,2)))
-
+        #-----------  
+        fig = Figure(size=(600, 600))
+        #-----------
+        ax  = Axis(fig[1,1], aspect=DataAspect(), title="Vx", xlabel="x", ylabel="y")
+        heatmap!(ax, xv, yc, (V.x[inx_Vx,iny_Vx]))
+        ax  = Axis(fig[1,2], aspect=DataAspect(), title="Vy", xlabel="x", ylabel="y")
+        heatmap!(ax, xc, yv, V.y[inx_Vy,iny_Vy])
+        ax  = Axis(fig[2,1], aspect=DataAspect(), title="Exx", xlabel="x", ylabel="y")
+        # heatmap!(ax, xc, yc,  Pt[inx_c,iny_c])
+        heatmap!(ax, xc, yc,  ε̇.xx[inx_c,iny_c])
+        ExxW = ε̇.xx[2,Int64(floor(nc.y/2))]
+        ExxE = ε̇.xx[end-1,Int64(floor(nc.y/2))]
+        @show ExxW, ExxE
+        ax  = Axis(fig[2,2], aspect=DataAspect(), title="Convergence", xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error")
+        scatter!(ax, 1:niter, log10.(err.x[1:niter]), label="Vx")
+        scatter!(ax, 1:niter, log10.(err.y[1:niter]), label="Vy")
+        scatter!(ax, 1:niter, log10.(err.p[1:niter]), label="Pt")
+        #-----------
+        display(fig)
+        #-----------
     end
 
     display(to)
@@ -239,25 +254,24 @@ end
 
 
 let
-    # # Boundary condition templates
+    # Boundary condition templates
     BCs = [
-        :free_slip,
+        # :all_Dirichlet,
+        # :free_slip,
+        # :NS_Neumann,
+        :EW_Neumann,
+        # :NS_periodic,
+        # :EW_periodic,
     ]
-
-    # # Boundary deformation gradient matrix
-    # D_BCs = [
-    #     @SMatrix( [1 0; 0 -1] ),
-    # ]
-
-    # BCs = [
-    #     # :EW_periodic,
-    #     :all_Dirichlet,
-    # ]
 
     # Boundary deformation gradient matrix
     D_BCs = [
-        #  @SMatrix( [0 1; 0  0] ),
+        # @SMatrix( [1 0; 0 -1] ),
+        # @SMatrix( [1 0; 0 -1] ),
+        # @SMatrix( [1 0; 0 -1] ),
         @SMatrix( [1 0; 0 -1] ),
+        # @SMatrix( [0 0; 1  0] ),
+        # @SMatrix( [0 1; 0  0] ),
     ]
 
     # Run them all

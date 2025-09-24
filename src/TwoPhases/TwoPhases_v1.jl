@@ -452,15 +452,15 @@ function Momentum_y(Vx, Vy, Pt, Pf, η, type, bcv, Δ)
     return fy
 end
 
-function Continuity(Vx, Vy, Pt, Pf, ηϕ, ϕ, type_loc, bcv_loc, Δ)
+function Continuity(Vx, Vy, Pt, Pf, ηΦ, ϕ, type_loc, bcv_loc, Δ)
     invΔx    = 1 / Δ.x
     invΔy    = 1 / Δ.y
-    fp = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy + (Pt[1] - Pf[2,2])/((1-ϕ)*ηϕ))
+    fp = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy + (Pt[1] - Pf[2,2])/((1-ϕ)*ηΦ))
     # fp *= η/(Δ.x+Δ.y)
     return fp
 end
 
-function FluidContinuity(Vx, Vy, Pt, Pf, ηϕ, ϕ, kμ, type_loc, bcv_loc, Δ)
+function FluidContinuity(Vx, Vy, Pt, Pf, ηΦ, ϕ, kμ, type_loc, bcv_loc, Δ)
     
     PfC       = Pf[2,2]
 
@@ -509,7 +509,7 @@ function FluidContinuity(Vx, Vy, Pt, Pf, ηϕ, ϕ, kμ, type_loc, bcv_loc, Δ)
         qxE = -kμ.xx[2]*(PfE - PfC)/Δ.x
         qyS = -kμ.yy[1]*(PfC - PfS)/Δ.y
         qyN = -kμ.yy[2]*(PfN - PfC)/Δ.y
-        F   = (qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y - (Pt[1]-Pf[2,2])/((1-ϕ)*ηϕ)
+        F   = (qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y - (Pt[1]-Pf[2,2])/((1-ϕ)*ηΦ)
     # else
     #     F = 0
     # end
@@ -697,7 +697,7 @@ function ResidualContinuity2D!(R, V, P, rheo, number, type, BC, nc, Δ)
         typey_loc  = SMatrix{2,3}(  type.Vy[ii,jj] for ii in i:i+1, jj in j:j+2)
         bcv_loc    = (x=bcx_loc, y=bcy_loc)
         type_loc   = (x=typex_loc, y=typey_loc)
-        R.pt[i,j]  = Continuity(Vx_loc, Vy_loc, P.t[i,j], Pf_loc, rheo.ηϕ[i,j], rheo.ϕ[i,j], type_loc, bcv_loc, Δ)
+        R.pt[i,j]  = Continuity(Vx_loc, Vy_loc, P.t[i,j], Pf_loc, rheo.ηΦ[i,j], rheo.ϕ[i,j], type_loc, bcv_loc, Δ)
     end
     return nothing
 end
@@ -726,7 +726,7 @@ function AssembleContinuity2D!(K, V, P, rheo, num, pattern, type, BC, nc, Δ)
         ∂R∂Vy .= 0.
         ∂R∂Pt .= 0.
         ∂R∂Pf .= 0.
-        autodiff(Enzyme.Reverse, Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(Pt_loc, ∂R∂Pt), Duplicated(Pf_loc, ∂R∂Pf), Const(rheo.ηϕ[i,j]), Const(rheo.ϕ[i,j]), Const(type_loc), Const(bcv_loc), Const(Δ))
+        autodiff(Enzyme.Reverse, Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(Pt_loc, ∂R∂Pt), Duplicated(Pf_loc, ∂R∂Pf), Const(rheo.ηΦ[i,j]), Const(rheo.ϕ[i,j]), Const(type_loc), Const(bcv_loc), Const(Δ))
 
         # Pt --- Vx
         Local = num.Vx[i:i+1,j:j+2] .* pattern[3][1]
@@ -774,7 +774,7 @@ function ResidualFluidContinuity2D!(R, V, P, rheo, number, type, BC, nc, Δ)
             k_loc_yy   = @SVector [rheo.kμf.y[i+1,j], rheo.kμf.y[i+1,j+1]]
             k_loc      = (xx = k_loc_xx,    xy = 0.,
                           yx = 0.,          yy = k_loc_yy)
-            R.pf[i,j]  = FluidContinuity(Vx_loc, Vy_loc, P.t[i,j], Pf_loc, rheo.ηϕ[i,j], rheo.ϕ[i,j], k_loc, type_loc, bcv_loc, Δ)
+            R.pf[i,j]  = FluidContinuity(Vx_loc, Vy_loc, P.t[i,j], Pf_loc, rheo.ηΦ[i,j], rheo.ϕ[i,j], k_loc, type_loc, bcv_loc, Δ)
         end
     end
     return nothing
@@ -804,7 +804,7 @@ function AssembleFluidContinuity2D!(K, V, P, rheo, num, pattern, type, BC, nc, �
         ∂R∂Vy .= 0.
         ∂R∂Pt .= 0.
         ∂R∂Pf .= 0.
-        autodiff(Enzyme.Reverse, FluidContinuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(Pt_loc, ∂R∂Pt), Duplicated(Pf_loc, ∂R∂Pf), Const(rheo.ηϕ[i,j]), Const(rheo.ϕ[i,j]), Const(k_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
+        autodiff(Enzyme.Reverse, FluidContinuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(Pt_loc, ∂R∂Pt), Duplicated(Pf_loc, ∂R∂Pf), Const(rheo.ηΦ[i,j]), Const(rheo.ϕ[i,j]), Const(k_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
              
         # Pf --- Vx
         Local = num.Vx[i:i+1,j:j+2] .* pattern[4][1]

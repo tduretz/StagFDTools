@@ -43,6 +43,7 @@ function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, Pf, ΔP, τ0, 𝐷, phases, mat
     ε̇̄xx  = av(ε̇xx)
     ε̇̄yy  = av(ε̇yy)
     P̄t   = av(Pt)
+    P̄f   = av(Pf)
     τ̄0xx = av(τ0.xx)
     τ̄0yy = av(τ0.yy)
     τ̄0xy = av(τ0.xy)
@@ -67,7 +68,7 @@ function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, Pf, ΔP, τ0, 𝐷, phases, mat
     τxx = @MVector zeros(2)
     τxy = @MVector zeros(2)
     for i=1:2
-        τxx[i] = (𝐷.c[i][1,1] - 𝐷.c[i][4,1]) * ϵ̇xx[i] + (𝐷.c[i][1,2] - 𝐷.c[i][4,2]) * ϵ̇yy[i] + (𝐷.c[i][1,3] - 𝐷.c[i][4,3]) * ϵ̇̄xy[i] + (𝐷.c[i][1,4] - (𝐷.c[i][4,4] - 1)) * Pt[i,2]
+        τxx[i] = (𝐷.c[i][1,1] - 𝐷.c[i][4,1]) * ϵ̇xx[i] + (𝐷.c[i][1,2] - 𝐷.c[i][4,2]) * ϵ̇yy[i] + (𝐷.c[i][1,3] - 𝐷.c[i][4,3]) * ϵ̇̄xy[i] + (𝐷.c[i][1,4] + (1 - 𝐷.c[i][4,4])) * Pt[i,2] #+ (1 - 𝐷.c[i][5,5]) * Pf[i,2]
         τxy[i] = 𝐷.v[i][3,1]                 * ϵ̇̄xx[i] + 𝐷.v[i][3,2]                 * ϵ̇̄yy[i] + 𝐷.v[i][3,3]                  * ϵ̇xy[i] + 𝐷.v[i][3,4]                       * P̄t[i]
     end
 
@@ -106,6 +107,7 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, Pf, ΔP, τ0, 𝐷, phases, mat
     ε̇̄xx  = av(ε̇xx)
     ε̇̄yy  = av(ε̇yy)
     P̄t   = av( Pt)
+    P̄f   = av( Pf)
     τ̄0xx = av(τ0.xx)
     τ̄0yy = av(τ0.yy)
     τ̄0xy = av(τ0.xy)
@@ -130,8 +132,8 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, Pf, ΔP, τ0, 𝐷, phases, mat
     τyy = @MVector zeros(2)
     τxy = @MVector zeros(2)
     for i=1:2
-        τyy[i] = (𝐷.c[i][2,1] - 𝐷.c[i][4,1]) * ϵ̇xx[i] + (𝐷.c[i][2,2] - 𝐷.c[i][4,2]) * ϵ̇yy[i] + (𝐷.c[i][2,3] - 𝐷.c[i][4,3]) * ϵ̇̄xy[i] + (𝐷.c[i][2,4] - (𝐷.c[i][4,4] - 1.)) * Pt[2,i]
-        τxy[i] = 𝐷.v[i][3,1]                 * ϵ̇̄xx[i] + 𝐷.v[i][3,2]                 * ϵ̇̄yy[i] + 𝐷.v[i][3,3]                  * ϵ̇xy[i] + 𝐷.v[i][3,4]                        * P̄t[i]
+        τyy[i] = (𝐷.c[i][2,1] - 𝐷.c[i][4,1]) * ϵ̇xx[i] + (𝐷.c[i][2,2] - 𝐷.c[i][4,2]) * ϵ̇yy[i] + (𝐷.c[i][2,3] - 𝐷.c[i][4,3]) * ϵ̇̄xy[i] + (𝐷.c[i][2,4] + (1 - 𝐷.c[i][4,4])) * Pt[2,i]
+        τxy[i] = 𝐷.v[i][3,1]                 * ϵ̇̄xx[i] + 𝐷.v[i][3,2]                 * ϵ̇̄yy[i] + 𝐷.v[i][3,3]                  * ϵ̇xy[i] + 𝐷.v[i][3,4]                       * P̄t[i]
     end
 
     # Residual
@@ -147,14 +149,18 @@ function Continuity(Vx, Vy, Pt, Pt0, Pf, Pf0, Φ0, phase, materials, type_loc, b
     invΔx   = 1 / Δ.x
     invΔy   = 1 / Δ.y
     Δt      = Δ.t
-    ηΦ      = materials.ηϕ[phase]
-    KΦ      = materials.Kϕ[phase]
+    ηΦ      = materials.ηΦ[phase]
+    KΦ      = materials.KΦ[phase]
     Ks      = materials.Ks[phase]
 
     dPtdt   = (Pt[1]   - Pt0[1]) / Δt
     dPfdt   = (Pf[2,2] - Pf0[1]) / Δt
     dΦdt    = (dPfdt - dPtdt)/KΦ + (Pf[2,2] - Pt[1])/ηΦ
-    Φ       = Φ0 + dΦdt*Δt
+    if materials.linearizeϕ
+        Φ       = Φ0 
+    else
+        Φ       = Φ0 + dΦdt*Δt
+    end
     dlnρsdt = (1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks)
 
     divVs   = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy 
@@ -172,8 +178,8 @@ function FluidContinuity(Vx, Vy, Pt, Pt0, Pf_loc, ΔPf_loc, Pf0, Φ0, phase, mat
     invΔx   = 1 / Δ.x
     invΔy   = 1 / Δ.y
     Δt      = Δ.t
-    ηΦ      = materials.ηϕ[phase]
-    KΦ      = materials.Kϕ[phase] 
+    ηΦ      = materials.ηΦ[phase]
+    KΦ      = materials.KΦ[phase] 
     Kf      = materials.Kf[phase]
 
     Pf = SetBCPf1(Pf_loc, type_loc, bcv_loc, Δ)
@@ -181,15 +187,19 @@ function FluidContinuity(Vx, Vy, Pt, Pt0, Pf_loc, ΔPf_loc, Pf0, Φ0, phase, mat
     dPtdt   = (Pt[1,1] - Pt0) / Δt
     dPfdt   = (Pf[2,2] - Pf0) / Δt
     dΦdt    = (dPfdt - dPtdt)/KΦ + (Pf[2,2] - Pt[1,1])/ηΦ
-    Φ       = Φ0 + dΦdt*Δt
+    if materials.linearizeϕ
+        Φ       = Φ0 
+    else
+        Φ       = Φ0 + dΦdt*Δt
+    end
     dlnρfdt = dPfdt / Kf
 
-    Pf1 = SetBCPf1(Pf_loc.+ΔPf_loc, type_loc, bcv_loc, Δ)
+    # Pf1 = SetBCPf1(Pf_loc.+ΔPf_loc, type_loc, bcv_loc, Δ)
 
-    qxW = -kμ.xx[1]*(Pf1[2,2] - Pf1[1,2]) * invΔx
-    qxE = -kμ.xx[2]*(Pf1[3,2] - Pf1[2,2]) * invΔx
-    qyS = -kμ.yy[1]*(Pf1[2,2] - Pf1[2,1]) * invΔy
-    qyN = -kμ.yy[2]*(Pf1[2,3] - Pf1[2,2]) * invΔy
+    qxW = -kμ.xx[1]*(Pf[2,2] - Pf[1,2]) * invΔx
+    qxE = -kμ.xx[2]*(Pf[3,2] - Pf[2,2]) * invΔx
+    qyS = -kμ.yy[1]*(Pf[2,2] - Pf[2,1]) * invΔy
+    qyN = -kμ.yy[2]*(Pf[2,3] - Pf[2,2]) * invΔy
 
     divqD = (    qxE -     qxW) * invΔx + (    qyN -     qyS) * invΔy
     divVs = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy 
@@ -602,8 +612,8 @@ function UpdatePorosity2D!(R, V, P, P0, Φ, Φ0, phases, materials, number, type
     shift    = (x=1, y=1)
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
         if type.Pf[i,j] !== :constant 
-            KΦ        = materials.Kϕ[phases.c[i,j]]
-            ηΦ        = materials.ηϕ[phases.c[i,j]]
+            KΦ        = materials.KΦ[phases.c[i,j]]
+            ηΦ        = materials.ηΦ[phases.c[i,j]]
             dPtdt     = (P.t[i,j] - P0.t[i,j]) / Δ.t
             dPfdt     = (P.f[i,j] - P0.f[i,j]) / Δ.t
             dΦdt      = (dPfdt - dPtdt)/KΦ + (P.f[i,j] - P.t[i,j])/ηΦ
@@ -618,8 +628,8 @@ function ResidualPorosity2D!(R, V, P, P0, Φ, Φ0, phases, materials, number, ty
     shift    = (x=1, y=1)
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
         if type.Pf[i,j] !== :constant 
-            KΦ        = materials.Kϕ[phases.c[i,j]]
-            ηΦ        = materials.ηϕ[phases.c[i,j]]
+            KΦ        = materials.KΦ[phases.c[i,j]]
+            ηΦ        = materials.ηΦ[phases.c[i,j]]
             dPtdt     = (P.t[i,j] - P0.t[i,j]) / Δ.t
             dPfdt     = (P.f[i,j] - P0.f[i,j]) / Δ.t
             dΦdt      = (dPfdt - dPtdt)/KΦ + (P.f[i,j] - P.t[i,j])/ηΦ

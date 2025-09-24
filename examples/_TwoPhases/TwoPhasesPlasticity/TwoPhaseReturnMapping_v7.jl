@@ -6,91 +6,27 @@ using GLMakie, Enzyme, LinearAlgebra, JLD2, StaticArrays
 
 invII(x) = sqrt(1/2*x[1]^2 + 1/2*x[2]^2 + 1/2*(-x[1]-x[2])^2 + x[3]^2) 
 
-function residual_two_phase_trial(x, ε̇II_eff, divVs, divqD, Pt_t, Pf_t, Pt0, Pf0, Φ0, p)
-    G, KΦ, Ks, Kf, C, ϕ, ψ, ηvp, ηv, ηΦ, Δt = p.G, p.KΦ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηs, p.ηΦ, p.Δt
-    eps   = -1e-13
-    ηe    = G*Δt 
-    τII, ΔPt, ΔPf, λ̇ = x[1], x[2], x[3], x[4]
-    f       = -1e100
-    Pt      = Pt_t + ΔPt
-    Pf      = Pf_t + ΔPf
-    dPtdt   = (Pt - Pt0) / Δt
-    dPfdt   = (Pf - Pf0) / Δt
-    dΦdt    = 1/KΦ * (dPfdt - dPtdt) + 1/ηΦ * (Pf - Pt)
-    Φ       = Φ0 + dΦdt*Δt
-    dlnρfdt = dPfdt / Kf
-    dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
-
-    # ηve = inv(1/ηv + 1/ηe)
-
-    # return [ 
-    #     ε̇II_eff   -  τII/2/ηve,
-    #     dlnρsdt   - dΦdt/(1-Φ) +   divVs,
-    #     (Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD)/ηΦ,
-    #     (f - ηvp*λ̇)*(f>=eps) +  λ̇*1*(f<eps)
-    # ]
-
-    f_sol = dlnρsdt   - dΦdt/(1-Φ) +   divVs
-    f_liq = (Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD)/ηΦ
-    f_por = Φ  - (Φ0 + dΦdt*Δt)
-
-    return @SVector([ 
-        ε̇II_eff   -  τII/2/ηve - λ̇/2*(f>=eps),
-        f_sol*(f>=eps) +  1*(f<eps),
-        f_liq*(f>=eps) +  1*(f<eps),
-        (f - ηvp*λ̇)*(f>=eps) +  λ̇*1*(f<eps),
-        f_por*(f>=eps) +  1*(f<eps),
-    ])
-end
-
 function residual_two_phase(x, ε̇II_eff, Pt_trial, Pf_trial, Φ_trial, Pt0, Pf0, Φ0, p)
+    
     G, KΦ, Ks, Kf, C, ϕ, ψ, ηvp, ηv, ηΦ, Δt = p.G, p.KΦ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηs, p.ηΦ, p.Δt
     eps   = -1e-13
     ηe    = G*Δt 
     τII, Pt, Pf, λ̇, Φ = x[1], x[2], x[3], x[4], x[5]
-
-    # phi = Φ_trial
-    # K_s = p.Ks
-    # K_f = p.Kf
-    # K_phi = p.KΦ
-    # eta_phi = p.ηΦ
-    # dt = p.Δt
-    # gamma = λ̇
-    # sin_psi = sind(ψ)
-    # ΔPt = K_phi .* dt .* eta_phi .* gamma .* phi .* sin_psi .* (-K_f + K_s) ./ (-K_f .* K_phi .* dt .* phi + K_f .* K_phi .* dt - K_f .* eta_phi .* phi + K_f .* eta_phi + K_phi .* K_s .* dt .* phi + K_phi .* eta_phi .* phi + K_s .* eta_phi .* phi)
-    # ΔPt = K_phi .* dt .* eta_phi .* gamma .* phi .* sin_psi .* (-K_f + K_s) ./ (-K_f .* K_phi .* dt .* phi + K_f .* K_phi .* dt - K_f .* eta_phi .* phi + K_f .* eta_phi + K_phi .* K_s .* dt .* phi + K_phi .* eta_phi .* phi + K_s .* eta_phi .* phi)
-    
+    ηve  = inv(1/ηv + 1/ηe)
     sinψ = sind(ψ)
     
+    # Pressure corrections
     ΔPt = KΦ .* sinψ .* Δt .* Φ_trial .* ηΦ .* λ̇ .* (-Kf + Ks) ./ (-Kf .* KΦ .* Δt .* Φ_trial + Kf .* KΦ .* Δt - Kf .* Φ_trial .* ηΦ + Kf .* ηΦ + Ks .* KΦ .* Δt .* Φ_trial + Ks .* Φ_trial .* ηΦ + KΦ .* Φ_trial .* ηΦ)
     ΔPf = Kf .* KΦ .* sinψ .* Δt .* ηΦ .* λ̇ ./ (Kf .* KΦ .* Δt .* Φ_trial - Kf .* KΦ .* Δt + Kf .* Φ_trial .* ηΦ - Kf .* ηΦ - Ks .* KΦ .* Δt .* Φ_trial - Ks .* Φ_trial .* ηΦ - KΦ .* Φ_trial .* ηΦ)
+    
     # Check yield
     f       = τII - (1-Φ)*C*cosd(ϕ) - (Pt - Pf)*sind(ϕ)
 
+    # Porosity rate
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
     dΦdt    = (dPfdt - dPtdt)/KΦ + (Pf - Pt)/ηΦ + λ̇*sind(ψ)*(f>=eps)
-    # # Φ       = Φ0 + dΦdt*Δt
-    # dlnρfdt = dPfdt / Kf
-    # dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
 
-    # Kd = (1-Φ)*(1/KΦ + 1/Ks)^-1
-    # α  = 1 - Kd/Ks
-    # B  = (1/Kd - 1/Ks) / (1/Kd - 1/Ks + Φ*(1/Kf - 1/Ks))
-
-    # Most pristine form 
-    # fpt1 = dlnρsdt   - dΦdt/(1-Φ) +   divVs
-    # fpf1 = Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD
-
-    # # Equation from Yarushina (2015) adding dilation bu educated guess :D
-    # fpt2 = divVs     + 1/Kd*(dPtdt -   α*dPfdt) - 1/(1-Φ)*λ̇*sind(ψ)*(f>=eps) + (Pt-Pf)/((1-Φ)*ηΦ)
-    # fpf2 = divqD     - α/Kd*(dPtdt - 1/B*dPfdt) + 1/(1-Φ)*λ̇*sind(ψ)*(f>=eps) - (Pt-Pf)/((1-Φ)*ηΦ)
-
-    # # Equations self-rederived from Yarushina (2015) adding dilation
-    # fpt3 = divVs    + (1/Ks)/(1-Φ) * (dPtdt - Φ*dPfdt) + (1/KΦ)/(1-Φ) * (dPtdt - dPfdt) + (Pt-Pf)/((1-Φ)*ηΦ) - 1/(1-Φ)*λ̇*sind(ψ)*(f>=eps)
-    # fpf3 = divqD    - (dPtdt - dPfdt)/KΦ + Φ*dPfdt/Kf + Φ*divVs - (Pt-Pf)/ηΦ +   λ̇*sind(ψ)*(f>=eps)
-
-    ηve = inv(1/ηv + 1/ηe)
 
     return [ 
         ε̇II_eff   -  τII/2/ηve - λ̇/2*(f>=eps),
@@ -115,7 +51,6 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
     # Rheology update
     ηve = inv(1/ηv + 1/ηe) 
     τII_trial = 2 * ηve*ε̇II_eff
-
 
     # Predict pressures from trial state (comes from global solver)
     K_s     = params.Ks
@@ -173,8 +108,6 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
     τII, Pt, Pf, λ̇, Φ1   = x[1], x[2], x[3], x[4], x[5]
 
     τ = ε̇_eff .* τII./ε̇II_eff
-
-    @show Φ_trial, Φ1
 
     KΦ, ηΦ, ψ, Δt = params.KΦ, params.ηΦ, params.ψ, params.Δt
     Kf, Ks = params.Kf, params.Ks 
@@ -311,34 +244,35 @@ function two_phase_return_mapping()
 
         fig = Figure(fontsize = 20, size = (600, 800) )     
         ax1 = Axis(fig[1,1], title="Deviatoric stress",  xlabel=L"$t$ [yr]",  ylabel=L"$\tau_{II}$ [MPa]", xlabelsize=20, ylabelsize=20)
-        lines!(ax1, probes.t*sc.t, probes.τ*sc.σ)
-        scatter!(ax1, data["probes"].t, data["probes"].τ)
-        scatter!(ax1, probes_v6.t*sc.t, probes_v6.τ*sc.σ)
+        lines!(ax1, probes.t[1:nt]*sc.t, probes.τ[1:nt]*sc.σ)
+        scatter!(ax1, data["probes"].t[1:nt], data["probes"].τ[1:nt], marker=:xcross)
+        # scatter!(ax1, data["probes"].t[1:nt], data["probes"].τII[1:nt], marker=:xcross)
 
+        # scatter!(ax1, probes_v6.t[1:nt]*sc.t, probes_v6.τ[1:nt]*sc.σ)
 
         ax2 = Axis(fig[2,1], title="Pressure",  xlabel=L"$t$ [yr]",  ylabel=L"$P$ [MPa]", xlabelsize=20, ylabelsize=20)
-        lines!(ax2, probes.t*sc.t, probes.Pt*sc.σ)
-        lines!(ax2, probes.t*sc.t, probes.Pf*sc.σ)
-        scatter!(ax2, data["probes"].t, data["probes"].Pt)
-        scatter!(ax2, data["probes"].t, data["probes"].Pf)
-        scatter!(ax2, probes_v6.t*sc.t, probes_v6.Pt*sc.σ)
-        scatter!(ax2, probes_v6.t*sc.t, probes_v6.Pf*sc.σ)
+        lines!(ax2, probes.t[1:nt]*sc.t, probes.Pt[1:nt]*sc.σ)
+        lines!(ax2, probes.t[1:nt]*sc.t, probes.Pf[1:nt]*sc.σ)
+        scatter!(ax2, data["probes"].t[1:nt], data["probes"].Pt[1:nt], marker=:xcross)
+        scatter!(ax2, data["probes"].t[1:nt], data["probes"].Pf[1:nt], marker=:xcross)
+        scatter!(ax2, probes_v6.t[1:nt]*sc.t, probes_v6.Pt[1:nt]*sc.σ)
+        scatter!(ax2, probes_v6.t[1:nt]*sc.t, probes_v6.Pf[1:nt]*sc.σ)
         # ylims!(ax2, 1e5, 2e6)
         
         ax3 = Axis(fig[3,1], title="Plastic multiplier",  xlabel=L"$t$ [yr]",  ylabel=L"$\dot{\lambda}$ [1/s]", xlabelsize=20, ylabelsize=20)    
-        lines!(ax3, probes.t*sc.t, probes.λ̇/sc.t)
-        scatter!(ax3, data["probes"].t, data["probes"].λ̇)
-        scatter!(ax3, probes_v6.t*sc.t, probes_v6.λ̇/sc.t)
+        lines!(ax3, probes.t[1:nt]*sc.t, probes.λ̇[1:nt]/sc.t)
+        scatter!(ax3, data["probes"].t[1:nt], data["probes"].λ̇[1:nt], marker=:xcross)
+        scatter!(ax3, probes_v6.t[1:nt]*sc.t, probes_v6.λ̇[1:nt]/sc.t)
 
         ax4 = Axis(fig[4,1], title="Porosity",  xlabel=L"$t$ [yr]",  ylabel=L"$\phi$", xlabelsize=20, ylabelsize=20)    
-        lines!(ax4, probes.t*sc.t, probes.Φ)
-        scatter!(ax4, data["probes"].t, data["probes"].Φ)
-        scatter!(ax4, probes_v6.t*sc.t, probes_v6.Φ)
+        lines!(ax4, probes.t[1:nt]*sc.t, probes.Φ[1:nt])
+        scatter!(ax4, data["probes"].t[1:nt], data["probes"].Φ[1:nt], marker=:xcross)
+        scatter!(ax4, probes_v6.t[1:nt]*sc.t, probes_v6.Φ[1:nt])
 
         # ylims!(ax4, 0, 0.1)
 
         ax5 = Axis(fig[5,1], title="Residual",  xlabel=L"$t$ [yr]",  ylabel=L"$r$", xlabelsize=20, ylabelsize=20)    
-        scatter!(ax5, probes.t*sc.t, log10.(probes.r))
+        scatter!(ax5, probes.t[1:nt]*sc.t, log10.(probes.r[1:nt]))
         display(fig)
     end
     with_theme(figure, theme_latexfonts())
