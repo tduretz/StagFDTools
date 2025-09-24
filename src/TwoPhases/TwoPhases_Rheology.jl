@@ -17,7 +17,7 @@ function residual_two_phase(x, ηve, Δt, ε̇II_eff, Pt_trial, Pf_trial, Φ_tri
     ΔPf = Kf .* KΦ .* sinψ .* Δt .* ηΦ .* λ̇ ./ (Kf .* KΦ .* Δt .* Φ_trial - Kf .* KΦ .* Δt + Kf .* Φ_trial .* ηΦ - Kf .* ηΦ - Ks .* KΦ .* Δt .* Φ_trial - Ks .* Φ_trial .* ηΦ - KΦ .* Φ_trial .* ηΦ)
     
     # Check yield
-    f       = τII - C*cosϕ - (Pt - Pf)*sinϕ   # (1-Φ)*
+    f       = τII - (1-Φ)*C*cosϕ - (Pt - Pf)*sinϕ  
 
     # Porosity rate
     dPtdt   = (Pt - Pt0) / Δt
