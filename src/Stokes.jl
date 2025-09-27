@@ -566,11 +566,9 @@ function SetBCVx1(Vx, typex, bcx, Δ)
     for jj in axes(typex, 2)
         if typex[1,jj] == :Neumann_normal
             MVx[1,jj] = fma(2, Δ.x*bcx[1,jj], Vx[2,jj])
-            # @show MVx[1,jj]
         end
         if typex[end,jj] == :Neumann_normal
             MVx[end,jj] = fma(2,-Δ.x*bcx[end,jj], Vx[end-1,jj])
-            # @show MVx[end,jj]
         end
     end
     return SMatrix(MVx)
@@ -1056,6 +1054,11 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, 
             𝐷.c[i,j] .= diagm(2*jac.val[2] * _ones)
             𝐷.c[i,j][4,4] = 1
 
+            # K = 1 / materials.β[phases.c[i,j]]
+            # C = @SMatrix[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 -K*Δ.t]
+            # @views 𝐷_ctl.c[i,j] .= 𝐷_ctl.c[i,j] * C 
+            # 𝐷.c[i,j][4,4] = -K*Δ.t
+
             # Update stress
             τ.xx[i,j]  = jac.val[1][1]
             τ.yy[i,j]  = jac.val[1][2]
@@ -1120,6 +1123,11 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, 
         # Tangent operator used for Picard Linearisation
         𝐷.v[i,j] .= diagm(2*jac.val[2] * _ones)
         𝐷.v[i,j][4,4] = 1
+
+        # K = 1 / materials.β[phases.c[i,j]]
+        # C = @SMatrix[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 -K*Δ.t]
+        # @views 𝐷_ctl.v[i,j] .= 𝐷_ctl.v[i,j] * C 
+        # 𝐷.v[i,j][4,4] = -K*Δ.t
 
         # Update stress
         τ.xy[i,j] = jac.val[1][3]
