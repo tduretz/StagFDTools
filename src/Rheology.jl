@@ -290,6 +290,71 @@ function LocalRheology(ε̇, Dkk, P0, materials, phases, Δ)
     return ηvep, λ̇, P, τII
 end
 
+function LocalRheology_div(ε̇, Dkk, P0, materials, phases, Δ)
+
+    eps0 = 0.0*1e-17
+
+    # Effective strain rate & pressure
+    ε̇II  = sqrt.( (ε̇[1]^2 + ε̇[2]^2 + (-ε̇[1]-ε̇[2])^2)/2 + ε̇[3]^2 ) + eps0
+    Dkk    = ε̇[4]
+
+    # Parameters
+    ϵ    = 1e-10 # tolerance
+    n    = materials.n[phases]
+    η0   = materials.η0[phases]
+    B    = materials.B[phases]
+    G    = materials.G[phases]
+    C    = materials.C[phases]
+
+    ϕ    = materials.ϕ[phases]
+    ψ    = materials.ψ[phases]
+
+    ηvp  = materials.ηvp[phases]
+    cosψ = materials.sinψ[phases]    
+    sinψ = materials.sinψ[phases]    
+    sinϕ = materials.sinϕ[phases] 
+    cosϕ = materials.cosϕ[phases]    
+
+    β    = materials.β[phases]
+    comp = materials.compressible
+
+    # Initial guess
+    η    = (η0 .* ε̇II.^(1 ./ n .- 1.0 ))[1]
+    ηvep = inv(1/η + 1/(G*Δ.t))
+    τII  = 2*ηvep*ε̇II
+    P    = P0 - comp*Δ.t/β*Dkk
+
+    # Visco-elastic powerlaw
+    for it=1:20
+        r      = ε̇II - StrainRateTrial(τII, G, Δ.t, B, n)
+        # @show abs(r)
+        (abs(r)<ϵ) && break
+        ∂ε̇II∂τII = Enzyme.jacobian(Enzyme.Forward, StrainRateTrial, τII, G, Δ.t, B, n)
+        ∂τII∂ε̇II = inv(∂ε̇II∂τII[1])
+        τII     += ∂τII∂ε̇II*r
+    end
+    isnan(τII) && error()
+ 
+    # Viscoplastic return mapping
+    λ̇ = 0.
+    if materials.plasticity === :DruckerPrager
+        τII, P, λ̇ = DruckerPrager(τII, P, ηvep, comp, β, Δ.t, C, cosϕ, sinϕ, sinψ, ηvp)
+    elseif materials.plasticity === :tensile
+        τII, P, λ̇ = Tensile(τII, P, ηvep, comp, β, Δ.t, materials.σT[phases], ηvp)
+    elseif materials.plasticity === :Kiss2023
+        σT   = materials.σT[phases]
+        τII, P, λ̇ = Kiss2023(τII, P, ηvep, comp, β, Δ.t, C, ϕ, ψ, ηvp, materials.σT[phases], materials.δσT[phases], materials.P1[phases], materials.τ1[phases], materials.P2[phases], materials.τ2[phases])
+    elseif materials.plasticity === :DruckerPragerHyperbolic
+        σT   = materials.σT[phases]
+        # τII, P, λ̇ = DruckerPragerHyperbolic(τII, P, ηvep, comp, β, Δ.t, C, cosϕ, sinϕ, cosψ, sinψ, σT, ηvp)
+        τII, P, λ̇ = DruckerPragerHyperbolic_v1(τII, P, ε̇II, Dkk, P0, ηvep, β, Δ.t, C, cosϕ, sinϕ, cosψ, sinψ, σT, ηvp)
+    end
+    # Effective viscosity
+    ηvep = τII/(2*ε̇II)
+
+    return ηvep, λ̇, P, τII
+end
+
 function LocalRheology_phase_ratios(ε̇, Dkk, P0, materials, phase_ratios, Δ)
 
     nphases = length(materials.n)
@@ -364,6 +429,15 @@ end
 
 function StressVector!(ε̇, Dkk, P0, materials, phases, Δ) 
     η, λ̇, P, τII = LocalRheology(ε̇, Dkk, P0, materials, phases, Δ)
+    τ       = @SVector([2 * η * ε̇[1],
+                        2 * η * ε̇[2],
+                        2 * η * ε̇[3],
+                                  P])
+    return τ, η, λ̇, τII
+end
+
+function StressVector_div!(ε̇, Dkk, P0, materials, phases, Δ) 
+    η, λ̇, P, τII = LocalRheology_div(ε̇, Dkk, P0, materials, phases, Δ)
     τ       = @SVector([2 * η * ε̇[1],
                         2 * η * ε̇[2],
                         2 * η * ε̇[3],

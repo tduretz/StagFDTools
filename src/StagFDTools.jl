@@ -14,6 +14,7 @@ module Rheology
     using StaticArrays, Enzyme, StagFDTools, LinearAlgebra
     include("Rheology.jl")
     export LocalRheology, StressVector!
+    export LocalRheology_div, StressVector_div!
     export LocalRheology_phase_ratios, StressVector_phase_ratios! 
     export Kiss2023
 end

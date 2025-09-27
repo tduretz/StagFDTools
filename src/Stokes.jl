@@ -991,7 +991,7 @@ function LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, 
         ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
         ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
         ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-        rvec[i] = @views norm(R.x[inx_Vx,iny_Vx])/length(R.x[inx_Vx,iny_Vx]) + norm(R.y[inx_Vy,iny_Vy])/length(R.y[inx_Vy,iny_Vy]) + 0*norm(R.p[inx_c,iny_c])/length(R.p[inx_c,iny_c])  
+        rvec[i] = @views norm(R.x[inx_Vx,iny_Vx])/length(R.x[inx_Vx,iny_Vx]) + norm(R.y[inx_Vy,iny_Vy])/length(R.y[inx_Vy,iny_Vy]) + norm(R.p[inx_c,iny_c])/length(R.p[inx_c,iny_c])  
     end
     imin = argmin(rvec)
     V.x .= Vi.x 
@@ -1005,6 +1005,8 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, 
     _ones = @SVector ones(4)
 
     # @show "centroids"
+
+    D_test = @MMatrix ones(4,4)
 
     # Loop over centroids
     for j=2:size(ε̇.xx,2)-1, i=2:size(ε̇.xx,1)-1
@@ -1054,10 +1056,21 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, 
             𝐷.c[i,j] .= diagm(2*jac.val[2] * _ones)
             𝐷.c[i,j][4,4] = 1
 
+            # ############### TEST
+            # ε̇vec   = @SVector([ε̇xx[1]+τ0.xx[i,j]/(2*G[1]*Δ.t), ε̇yy[1]+τ0.yy[i,j]/(2*G[1]*Δ.t), ε̇̄xy[1]+τ̄xy0[1]/(2*G[1]*Δ.t), Dkk[1]])
+            # jac2   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_div!, ε̇vec, Const(Dkk[1]), Const(Pt0[i,j]), Const(materials), Const(phases.c[i,j]), Const(Δ))
+
+            # @views D_test[:,1] .= jac2.derivs[1][1][1]
+            # @views D_test[:,2] .= jac2.derivs[1][2][1]
+            # @views D_test[:,3] .= jac2.derivs[1][3][1]
+            # @views D_test[:,4] .= jac2.derivs[1][4][1]
+
             # K = 1 / materials.β[phases.c[i,j]]
-            # C = @SMatrix[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 -K*Δ.t]
-            # @views 𝐷_ctl.c[i,j] .= 𝐷_ctl.c[i,j] * C 
-            # 𝐷.c[i,j][4,4] = -K*Δ.t
+            # C = @SMatrix[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 -1/(K*Δ.t)]
+            # # 𝐷.c[i,j][4,4] = -K*Δ.t
+
+            # 𝐷_ctl.c[i,j] .= D_test*C
+            # ############### TEST
 
             # Update stress
             τ.xx[i,j]  = jac.val[1][1]
@@ -1124,10 +1137,20 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, 
         𝐷.v[i,j] .= diagm(2*jac.val[2] * _ones)
         𝐷.v[i,j][4,4] = 1
 
+        # ############### TEST
+        # ε̇vec  = @SVector([ε̇̄xx[1]+τ̄xx0[1]/(2*G[1]*Δ.t), ε̇̄yy[1]+τ̄yy0[1]/(2*G[1]*Δ.t), ε̇xy[1]+τ0.xy[i,j]/(2*G[1]*Δ.t), D̄kk[1]])
+        # jac2   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_div!, ε̇vec, Const(D̄kk[1]), Const(P̄0[1]), Const(materials), Const(phases.v[i,j]), Const(Δ))
+
+        # @views D_test[:,1] .= jac2.derivs[1][1][1]
+        # @views D_test[:,2] .= jac2.derivs[1][2][1]
+        # @views D_test[:,3] .= jac2.derivs[1][3][1]
+        # @views D_test[:,4] .= jac2.derivs[1][4][1]
+
         # K = 1 / materials.β[phases.c[i,j]]
-        # C = @SMatrix[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 -K*Δ.t]
-        # @views 𝐷_ctl.v[i,j] .= 𝐷_ctl.v[i,j] * C 
-        # 𝐷.v[i,j][4,4] = -K*Δ.t
+        # C = @SMatrix[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 -1/(K*Δ.t)]
+
+        # 𝐷_ctl.v[i,j] .= D_test*C
+        # ############### TEST
 
         # Update stress
         τ.xy[i,j] = jac.val[1][3]
