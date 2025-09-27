@@ -132,6 +132,8 @@ using TimerOutputs, CairoMakie
     Pt0     = zeros(size_c...)
     ΔPt     = (c=zeros(size_c...), Vx = zeros(size_x...), Vy = zeros(size_y...))
 
+    bifurc  = (detA = zeros(size_c...), θ = zeros(size_c...))
+
     Dc      =  [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)]
     Dv      =  [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)]
     𝐷       = (c = Dc, v = Dv)
@@ -305,6 +307,32 @@ using TimerOutputs, CairoMakie
         i_midx = Int64(floor(nc.x))
         probes.fric[it] = mean(.-τxyc[i_midx, end-3]./(-Pt[i_midx, end-3] .+ τ.yy[i_midx, end-3])) 
 
+        # Bifurcation analysis
+        Te = @SMatrix([2/3 -1/3 0; -1/3 2/3 0; 0 0 1; 1 1 0 ])
+        Ts = @SMatrix([ 1 0 0 -1; 0 1 0 -1; 0 0 1 0])
+        θ     = LinRange(0, 90, 180)
+        detA  = zeros(size(θ))
+        for i in inx_c, j in iny_c
+            
+            D         = SMatrix{1,1}(      𝐷_ctl.c[ii,jj] for ii in i:i,   jj in j:j)
+            𝐃ep = Ts * D[1] * Te
+
+            for i in eachindex(θ)
+                n = @SVector([cosd(θ[i]), sind(θ[i])])
+                𝐧 = @SVector([n[1], n[2], 2*n[1]*n[2]])
+                display( D[1] )
+                error()
+                detA[i] = det(𝐧'*𝐃ep*𝐧)
+            end
+            bifurc.detA[i,j] = detA[argmin(detA)]
+            bifurc.θ[i,j]    = abs(θ[argmin(detA)])
+        end
+
+        if minimum(bifurc.detA[inx_c,iny_c]) < 0
+            @show extrema(bifurc.detA[inx_c,iny_c])
+            error()
+        end
+
         # Visualise
         function figure()
             fig = Figure()
@@ -312,6 +340,8 @@ using TimerOutputs, CairoMakie
             # heatmap!(ax, xc, yc,  log10.(λ̇.c[inx_c,iny_c]), colormap=:bluesreds)
             # contour!(ax, xc, yc,  phases.c[inx_c,iny_c], color=:black)
             heatmap!(ax, xc, yc, Pt[inx_c,iny_c]*sc.σ, colormap=:jet, colorrange=(-6e6, 4e6))
+            # heatmap!(ax, xc, yc, bifurc.detA[inx_c,iny_c], colormap=:jet)
+
             st = 10
             # arrows!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], arrowsize = 0, lengthscale=0.04, linewidth=2, color=:white)
             

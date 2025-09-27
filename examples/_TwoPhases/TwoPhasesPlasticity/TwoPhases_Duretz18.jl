@@ -1,10 +1,15 @@
-using StagFDTools, StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, GLMakie, LinearAlgebra, SparseArrays, Printf, JLD2
+using StagFDTools, StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, GLMakie, LinearAlgebra, SparseArrays, Printf, JLD2, MAT
 import Statistics:mean
 using Enzyme  # AD backends you want to use
 
 @views function main(nc)
 
-    sc = (σ=1e7, t=1e10, L=1e3)
+    sc = (σ = 3e10, L = 1e3, t = 1e10)
+
+    # Load data
+    filepath = joinpath(@__DIR__, "DataM2Di_EP_test01.mat")
+    data = matread(filepath)
+    @show keys(data)
 
     homo   = false
 
@@ -13,40 +18,41 @@ using Enzyme  # AD backends you want to use
     Δt0    = 1e10/sc.t 
 
     # Newton solver
-    niter = 25
+    niter = 20
     ϵ_nl  = 1e-8
     α     = LinRange(0.05, 1.0, 10)
 
-    rad     = 2e3/sc.L 
-    Pt_ini  = 1e8/sc.σ
-    Pf_ini  = 1e6/sc.σ
-    ε̇       = 2e-15.*sc.t
+    rad     = 1e2/sc.L 
+    Pt_ini  = 0*1e8/sc.σ
+    Pf_ini  = 0*1e6/sc.σ
+    ε̇bg     = -5e-15.*sc.t
     τ_ini   = 0*(sind(35)*(Pt_ini-Pf_ini) + 0*1e7/sc.σ*cosd(35))  
 
     # Velocity gradient matrix
-    D_BC = @SMatrix( [ε̇ 0; 0 -ε̇] )
+    D_BC = @SMatrix( [ε̇bg 0; 0 -ε̇bg] )
 
-    τxx_ini = τ_ini*D_BC[1,1]/ε̇
-    τyy_ini = τ_ini*D_BC[2,2]/ε̇
+    τxx_ini = τ_ini*D_BC[1,1]/abs(ε̇bg)
+    τyy_ini = τ_ini*D_BC[2,2]/abs(ε̇bg)
 
     # Material parameters
     materials = ( 
         oneway       = false,
         compressible = true,
         plasticity   = :off,
-        linearizeϕ   = false,              # !!!!!!!!!!!
+        linearizeϕ   = false,        
+        single_phase = false,
         n     = [1.0    1.0  ],
-        ηs0   = [1e22   1e19 ]/sc.σ/sc.t, 
-        ηΦ    = [2e22   2e22 ]/sc.σ/sc.t,
-        G     = [3e10   3e10 ]./sc.σ, 
+        ηs0   = [1e20   1e20 ]/sc.σ/sc.t .* 1e6,  # achtung turn of viscous shear
+        ηΦ    = [2e22   2e22 ]/sc.σ/sc.t .* 1e6,  # achtung turn of viscous volumetric
+        G     = [1e10   0.25e10]./sc.σ, 
         Kd    = [1e30   1e30 ]./sc.σ,  # not needed
-        Ks    = [1e11   1e11 ]./sc.σ,
-        KΦ    = [1e9    1e9  ]./sc.σ,
-        Kf    = [1e10   1e10 ]./sc.σ, 
-        k_ηf0 = [1e-15  1e-15]./(sc.L^2/sc.σ/sc.t),
-        ϕ     = [35.    35.  ].*1,
+        Ks    = [2e10   2e10 ]./sc.σ,
+        KΦ    = [5e9    5e9  ]./sc.σ,
+        Kf    = [2e9    2e9 ]./sc.σ, 
+        k_ηf0 = [1e-25  1e-25]./(sc.L^2/sc.σ/sc.t),
+        ϕ     = [30.    30.  ].*1,
         ψ     = [10.    10.  ].*1,
-        C     = [1e7    1e7  ]./sc.σ,
+        C     = [3e7    3e7  ]./sc.σ,
         ηvp   = [0.0    0.0  ]./sc.σ/sc.t,
         cosϕ  = [0.0    0.0  ],
         sinϕ  = [0.0    0.0  ],
@@ -58,8 +64,8 @@ using Enzyme  # AD backends you want to use
     @. materials.sinϕ  = sind(materials.ϕ)
     @. materials.sinψ  = sind(materials.ψ)
 
-    # Φ0      = 0.05
-    Φ0 = (materials.KΦ[1] .* Δt0 .* (Pf_ini - Pt_ini)) ./ (materials.KΦ[1] .* materials.ηΦ[1])
+    Φ0      = 1e-3
+    # Φ0 = (materials.KΦ[1] .* Δt0 .* (Pf_ini - Pt_ini)) ./ (materials.KΦ[1] .* materials.ηΦ[1])
     @show Φ0
     # error()
     Φ_ini   = Φ0
@@ -126,7 +132,7 @@ using Enzyme  # AD backends you want to use
 
     #--------------------------------------------#
     # Intialise field
-    L   = (x=40e3/sc.L, y=20e3/sc.L)
+    L   = (x=4e3/sc.L, y=2e3/sc.L)
     Δ   = (x=L.x/nc.x, y=L.y/nc.y, t=Δt0)
     R   = (x=zeros(size_x...), y=zeros(size_y...), pt=zeros(size_c...), pf=zeros(size_c...), Φ=zeros(size_c...))
     V   = (x=zeros(size_x...), y=zeros(size_y...))
@@ -135,9 +141,11 @@ using Enzyme  # AD backends you want to use
     Φ   = (c=Φ_ini.*ones(size_c...), v=Φ_ini.*ones(size_v...) )
     Φ0  = (c=Φ_ini.*ones(size_c...), v=Φ_ini.*ones(size_v...) )
 
+    εp  = zeros(size_c...)
+
     ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     τ0      = (xx = τxx_ini.*ones(size_c...), yy = τyy_ini.*ones(size_c...), xy = zeros(size_v...) )
-    τ       = (xx = τxx_ini.*ones(size_c...), yy = τyy_ini.*ones(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
+    τ       = (xx = τxx_ini.*ones(size_c...), yy = τyy_ini.*ones(size_c...), xy = zeros(size_v...), II = zeros(size_c...), f = zeros(size_c...),)
     Dc      =  [@MMatrix(zeros(5,5)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)]
     Dv      =  [@MMatrix(zeros(5,5)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)]
     𝐷       = (c = Dc, v = Dv)
@@ -213,7 +221,7 @@ using Enzyme  # AD backends you want to use
         Φ   = zeros(nt),
         λ̇   = zeros(nt),
         t   = zeros(nt),
-        τII = zeros(nt),
+        str = zeros(nt),
     )
 
     err  = (x = zeros(niter), y = zeros(niter), pt = zeros(niter), pf = zeros(niter))
@@ -376,20 +384,10 @@ using Enzyme  # AD backends you want to use
             UpdateSolution!(V, P, α[imin]*dx, number, type, nc)
         end
 
-        #--------------------------------------------#
 
-        # Residual check
         TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
-        ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-        ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-        ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
-        ResidualFluidContinuity2D!(R, V, P, ΔP, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
 
-        @info "Residuals - posteriori"
-        @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
-        @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-        @show norm(R.pt[inx_c,iny_c])/sqrt(nPt)
-        @show norm(R.pf[inx_c,iny_c])/sqrt(nPf)
+        #--------------------------------------------#
 
         # if norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx) > ϵ_nl || norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy) > ϵ_nl
         #     error("Global convergence failed !")
@@ -398,8 +396,9 @@ using Enzyme  # AD backends you want to use
         #--------------------------------------------#
 
         # Include plasticity corrections
-        P.t .= P.t .+ ΔP.t
-        P.f .= P.f .+ ΔP.f
+        P.t .+= ΔP.t
+        P.f .+= ΔP.f
+        εp  .+= ε̇.II*Δ.t
         
         τxyc = av2D(τ.xy)
         ε̇xyc = av2D(ε̇.xy)
@@ -432,6 +431,7 @@ using Enzyme  # AD backends you want to use
         probes.Φ[it]    = mean(Φ.c[inx_c,iny_c])
         probes.λ̇[it]    = mean(λ̇.c[inx_c,iny_c])/sc.t
         probes.t[it]    = it*Δ.t*sc.t
+        probes.str[it]  = abs(ε̇bg)*it*Δ.t
 
         #-------------------------------------------# 
 
@@ -445,12 +445,13 @@ using Enzyme  # AD backends you want to use
             ftsz = 15
             eps  = 1e-10
 
-            ax   = Axis(fig[1,1], aspect=DataAspect(), title=L"$$Plastic strain rate", xlabel=L"x", ylabel=L"y")
-            field = log10.((λ̇.c[inx_c,iny_c] .+ eps)/sc.t )
-            hm = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
+            ax   = Axis(fig[1,1], aspect=DataAspect(), title=L"$$Strain", xlabel=L"x", ylabel=L"y")
+            # field = log10.((λ̇.c[inx_c,iny_c] .+ eps)/sc.t )
+            field = log10.(εp[inx_c,iny_c])
+            hm = heatmap!(ax, X.c.x, X.c.y, field, colormap=:jet, colorrange=(-3, -2.3))
             contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
             hidexdecorations!(ax)
-            Colorbar(fig[2, 1], hm, label = L"$\dot\lambda$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+            Colorbar(fig[2, 1], hm, label = L"$\lambda$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
             
             # arrows2d!(ax, X.c.x[1:step:end], X.c.y[1:step:end], Vxsc[1:step:end,1:step:end], Vysc[1:step:end,1:step:end], lengthscale=10000.4, color=:white)
 
@@ -461,45 +462,58 @@ using Enzyme  # AD backends you want to use
             hidexdecorations!(ax)
             Colorbar(fig[4, 1], hm, label = L"$\dot\lambda$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
             
-            ax    = Axis(fig[1,2], aspect=DataAspect(), title=L"$P^t - P^f$ [MPa]", xlabel=L"x", ylabel=L"y")
-            field = (P.t .- P.f)[inx_c,iny_c].*sc.σ./1e6
-            hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
+            ax    = Axis(fig[1,2], aspect=DataAspect(), title=L"$P^t$ [MPa]", xlabel=L"x", ylabel=L"y")
+            field = (P.t)[inx_c,iny_c].*sc.σ./1e6 
+            hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=:jet, colorrange=(-6, 4))
             contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
             hidexdecorations!(ax)
-            Colorbar(fig[2, 2], hm, label = L"$P^t - P^f$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+            Colorbar(fig[2, 2], hm, label = L"$P^t$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
             
             # arrows2d!(ax, X.c.x[1:step:end], X.c.y[1:step:end], Vxsc[1:step:end,1:step:end], Vysc[1:step:end,1:step:end], lengthscale=10000.4, color=:white)
 
-            τxyc0 = av2D(τ0.xy)
-            τII0  = sqrt.( 0.5.*(τ0.xx[inx_c,iny_c].^2 + τ0.yy[inx_c,iny_c].^2 + (-τ0.xx[inx_c,iny_c]-τ0.yy[inx_c,iny_c]).^2) .+ τxyc0[inx_c,iny_c].^2 )
-
             ax    = Axis(fig[3,2], aspect=DataAspect(), title=L"$P^e - \tau$", xlabel=L"P^e", ylabel=L"\tau")
-            Pe    = (P.t .- P.f)[inx_c,iny_c].*sc.σ
-            τII   = (τ.II)[inx_c,iny_c].*sc.σ
-            # P_ax       = LinRange(minimum(Pe), maximum(Pe), 100)
-            P_ax       = LinRange(0, 2*mean(Pe), 100)
+                  
+            (materials.single_phase) ? α1 = 0.0 : α1 = 1.0 
+            Pe    = (P.t .- α1*P.f)[inx_c,iny_c].*sc.σ
+
+            τII       = (τ.II)[inx_c,iny_c].*sc.σ
+            P_ax      = LinRange(-5e6, 5e6, 100)
             τ_ax_rock = materials.C[1]*sc.σ*materials.cosϕ[1] .+ P_ax.*materials.sinϕ[1]
             lines!(ax, P_ax/1e6, τ_ax_rock/1e6, color=:black)
             scatter!(ax, Pe[:]/1e6, τII[:]/1e6, color=:black )
+            F_post = @. τ.II - materials.C[1]*materials.cosϕ[1] - (P.t .- α1*P.f)*materials.sinϕ[1]
+            maxF   =  maximum( F_post[inx_c,iny_c] )
+            @info maxF, maxF .*sc.σ /1e6
+            @show maximum(τ.f[inx_c,iny_c]),  maximum(τ.f[inx_c,iny_c]) .*sc.σ /1e6
 
-            Pe    = (P0.t .- P0.f)[inx_c,iny_c].*sc.σ
-            τII   = τII0.*sc.σ
-            scatter!(ax, Pe[:]/1e6, τII[:]/1e6, color=:gray )
+            # # Previous stress states
+            # τxyc0 = av2D(τ0.xy)
+            # τII0  = sqrt.( 0.5.*(τ0.xx[inx_c,iny_c].^2 + τ0.yy[inx_c,iny_c].^2 + (-τ0.xx[inx_c,iny_c]-τ0.yy[inx_c,iny_c]).^2) .+ τxyc0[inx_c,iny_c].^2 )
+            # Pe    = (P0.t .- α1*P0.f)[inx_c,iny_c].*sc.σ
+            # τII   = τII0.*sc.σ
+            # scatter!(ax, Pe[:]/1e6, τII[:]/1e6, color=:gray )
 
-
-            ax    = Axis(fig[1,3], aspect=DataAspect(), title=L"$\tau_\text{II}$ [MPa]", xlabel=L"x", ylabel=L"y")
-            field = (τ.II)[inx_c,iny_c].*sc.σ./1e6
-            hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
-            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
-            hidexdecorations!(ax)
-            Colorbar(fig[2, 3], hm, label = L"$\tau_\text{II}$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+            # ax    = Axis(fig[1,3], aspect=DataAspect(), title=L"$\tau_\text{II}$ [MPa]", xlabel=L"x", ylabel=L"y")
+            # field = (τ.II)[inx_c,iny_c].*sc.σ./1e6
+            # hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
+            # contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
+            # hidexdecorations!(ax)
+            # Colorbar(fig[2, 3], hm, label = L"$\tau_\text{II}$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
             
-            ax  = Axis(fig[3,3], xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error")
-            scatter!(ax, 1:niter, log10.(err.x[1:niter]./err.x[1]) )
-            scatter!(ax, 1:niter, log10.(err.y[1:niter]./err.x[1]) )
-            scatter!(ax, 1:niter, log10.(err.pt[1:niter]./err.pt[1]) )
-            scatter!(ax, 1:niter, log10.(err.pf[1:niter]./err.pf[1]) )
-            ylims!(ax, -10, 1.1)
+            # ax  = Axis(fig[3,3], xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error")
+            # scatter!(ax, 1:niter, log10.(err.x[1:niter]./err.x[1]) )
+            # scatter!(ax, 1:niter, log10.(err.y[1:niter]./err.x[1]) )
+            # scatter!(ax, 1:niter, log10.(err.pt[1:niter]./err.pt[1]) )
+            # scatter!(ax, 1:niter, log10.(err.pf[1:niter]./err.pf[1]) )
+            # ylims!(ax, -10, 1.1)
+
+            ax  = Axis(fig[1,3], xlabel="Strain", ylabel="Mean pressure")
+            lines!(  ax, data["strvec"][1:end], data["Pvec"][1:end] )
+            scatter!(ax, probes.str[1:2:nt], probes.Pt[1:2:nt] )
+
+            ax  = Axis(fig[3,3], xlabel="Strain", ylabel="Mean stress invariant")
+            lines!(  ax, data["strvec"][1:end], data["Tiivec"][1:end] )
+            scatter!(ax, probes.str[1:2:nt], probes.τ[1:2:nt] )
 
             # field = P.f.*sc.σ
             # hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
@@ -512,7 +526,6 @@ using Enzyme  # AD backends you want to use
         with_theme(figure, theme_latexfonts())
 
         #-------------------------------------------# 
-
     end
 
     #--------------------------------------------#

@@ -161,14 +161,30 @@ function Continuity(Vx, Vy, Pt, Pt0, Pf, Pf0, Φ0, phase, materials, type_loc, b
     else
         Φ       = Φ0 + dΦdt*Δt
     end
+
+    if materials.single_phase
+        Φ    = 0.0
+        dΦdt = 0.0
+    end
+
     dlnρsdt = (1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks)
 
+    # # Single phase
+    # if materials.single_phase
+    #     dΦdt    = 0.0
+    #     dlnρsdt = dPtdt / Ks
+    # end
+
     divVs   = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy 
+    
+    
     fp      = dlnρsdt - dΦdt/(1-Φ) +   divVs
+
+    
 
     # fp     *= ηΦ*(Δ.x+Δ.y)
 
-    # fp = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy + (Pt[1] - Pf[2,2])/((1-Φ)*ηΦ))
+    # fp = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy + dPtdt/(KΦ))
 
     return fp
 end
@@ -1096,7 +1112,7 @@ function LineSearch!(rvec, α, dx, R, V, P, ε̇, τ, Vi, Pi, ΔP, P0, Φ, Φ0, 
         ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
         ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
         ResidualFluidContinuity2D!(R, V, P, ΔP, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
-        rvec[i] = @views norm(R.x[inx_Vx,iny_Vx])/length(R.x[inx_Vx,iny_Vx]) + norm(R.y[inx_Vy,iny_Vy])/length(R.y[inx_Vy,iny_Vy]) + 0*norm(R.pt[inx_c,iny_c])/length(R.pt[inx_c,iny_c]) + 0*norm(R.pf[inx_c,iny_c])/length(R.pf[inx_c,iny_c])  
+        rvec[i] = @views norm(R.x[inx_Vx,iny_Vx])/length(R.x[inx_Vx,iny_Vx]) + norm(R.y[inx_Vy,iny_Vy])/length(R.y[inx_Vy,iny_Vy]) + norm(R.pt[inx_c,iny_c])/length(R.pt[inx_c,iny_c]) + norm(R.pf[inx_c,iny_c])/length(R.pf[inx_c,iny_c])  
     end
     imin = argmin(rvec)
     V.x .= Vi.x 
