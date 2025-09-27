@@ -314,19 +314,26 @@ using TimerOutputs, CairoMakie
         detA  = zeros(size(θ))
         for i in inx_c, j in iny_c
             
-            D         = SMatrix{1,1}(      𝐷_ctl.c[ii,jj] for ii in i:i,   jj in j:j)
-            𝐃ep = Ts * D[1] * Te
+            D     = SMatrix{1,1}(      𝐷_ctl.c[ii,jj] for ii in i:i,   jj in j:j)
+            phase = phases.c[i,j]
+            χe    = 1/materials.β[phase]*Δ.t
+            C     =  @SMatrix([ 1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 -χe])
+            𝐃ep   = Ts * (D[1]*C) * Te
 
             for i in eachindex(θ)
                 n = @SVector([cosd(θ[i]), sind(θ[i])])
                 𝐧 = @SVector([n[1], n[2], 2*n[1]*n[2]])
-                display( D[1] )
-                error()
+                # display( 𝐃ep )
+                # error()
                 detA[i] = det(𝐧'*𝐃ep*𝐧)
             end
             bifurc.detA[i,j] = detA[argmin(detA)]
             bifurc.θ[i,j]    = abs(θ[argmin(detA)])
         end
+
+        @info minimum(bifurc.detA[inx_c,iny_c])
+        @info extrema(bifurc.θ[inx_c,iny_c])
+        sleep(0.5)
 
         if minimum(bifurc.detA[inx_c,iny_c]) < 0
             @show extrema(bifurc.detA[inx_c,iny_c])
