@@ -17,7 +17,6 @@ function residual_single_phase(x, ε̇II_eff, P_trial, divV, P0, p)
     ])
 end
 
-
 function residual_single_phase_trial(x, ε̇II_eff, P_trial, divV, P0, p)
     G, K, C, ϕ, ψ, ηvp, Δt = p.G, p.K, p.C, p.ϕ, p.ψ, p.ηvp, p.Δt
      τII, P, λ̇ = x[1], x[2], x[3]

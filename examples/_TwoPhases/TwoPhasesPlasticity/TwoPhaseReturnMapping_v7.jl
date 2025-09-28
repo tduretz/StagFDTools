@@ -20,7 +20,8 @@ function residual_two_phase(x, ε̇II_eff, Pt_trial, Pf_trial, Φ_trial, Pt0, Pf
     ΔPf = Kf .* KΦ .* sinψ .* Δt .* ηΦ .* λ̇ ./ (Kf .* KΦ .* Δt .* Φ_trial - Kf .* KΦ .* Δt + Kf .* Φ_trial .* ηΦ - Kf .* ηΦ - Ks .* KΦ .* Δt .* Φ_trial - Ks .* Φ_trial .* ηΦ - KΦ .* Φ_trial .* ηΦ)
     
     # Check yield
-    f       = τII - (1-Φ)*C*cosd(ϕ) - (Pt - Pf)*sind(ϕ)
+    # f       = τII - (1-Φ)*C*cosd(ϕ) - (Pt - Pf)*sind(ϕ)
+    f       = τII - C*cosd(ϕ) - (Pt - Pf)*sind(ϕ)
 
     # Porosity rate
     dPtdt   = (Pt - Pt0) / Δt
@@ -156,8 +157,8 @@ end
 
 function two_phase_return_mapping()
 
-    @load "v6.jld2" probes
-    probes_v6  = probes
+    # @load "v6.jld2" probes
+    # probes_v6  = probes
 
     sc = (σ=1e7, t=1e10, L=1e3)
 
@@ -177,9 +178,9 @@ function two_phase_return_mapping()
     
     params = (
         G       = 3e10/sc.σ,
-        KΦ      = 1e9/sc.σ,
+        KΦ      = 1e10/sc.σ,
         Ks      = 1e11/sc.σ,
-        Kf      = 1e10/sc.σ,
+        Kf      = 1e9/sc.σ,
         C       = 1e7 /sc.σ,
         ϕ       = 35.0,
         ψ       = 10.0,
@@ -246,8 +247,7 @@ function two_phase_return_mapping()
         ax1 = Axis(fig[1,1], title="Deviatoric stress",  xlabel=L"$t$ [yr]",  ylabel=L"$\tau_{II}$ [MPa]", xlabelsize=20, ylabelsize=20)
         lines!(ax1, probes.t[1:nt]*sc.t, probes.τ[1:nt]*sc.σ)
         scatter!(ax1, data["probes"].t[1:nt], data["probes"].τ[1:nt], marker=:xcross)
-        # scatter!(ax1, data["probes"].t[1:nt], data["probes"].τII[1:nt], marker=:xcross)
-
+        scatter!(ax1, data["probes"].t[1:nt], data["probes"].τII[1:nt], marker=:xcross)
         # scatter!(ax1, probes_v6.t[1:nt]*sc.t, probes_v6.τ[1:nt]*sc.σ)
 
         ax2 = Axis(fig[2,1], title="Pressure",  xlabel=L"$t$ [yr]",  ylabel=L"$P$ [MPa]", xlabelsize=20, ylabelsize=20)
@@ -255,19 +255,19 @@ function two_phase_return_mapping()
         lines!(ax2, probes.t[1:nt]*sc.t, probes.Pf[1:nt]*sc.σ)
         scatter!(ax2, data["probes"].t[1:nt], data["probes"].Pt[1:nt], marker=:xcross)
         scatter!(ax2, data["probes"].t[1:nt], data["probes"].Pf[1:nt], marker=:xcross)
-        scatter!(ax2, probes_v6.t[1:nt]*sc.t, probes_v6.Pt[1:nt]*sc.σ)
-        scatter!(ax2, probes_v6.t[1:nt]*sc.t, probes_v6.Pf[1:nt]*sc.σ)
+        # scatter!(ax2, probes_v6.t[1:nt]*sc.t, probes_v6.Pt[1:nt]*sc.σ)
+        # scatter!(ax2, probes_v6.t[1:nt]*sc.t, probes_v6.Pf[1:nt]*sc.σ)
         # ylims!(ax2, 1e5, 2e6)
         
         ax3 = Axis(fig[3,1], title="Plastic multiplier",  xlabel=L"$t$ [yr]",  ylabel=L"$\dot{\lambda}$ [1/s]", xlabelsize=20, ylabelsize=20)    
         lines!(ax3, probes.t[1:nt]*sc.t, probes.λ̇[1:nt]/sc.t)
         scatter!(ax3, data["probes"].t[1:nt], data["probes"].λ̇[1:nt], marker=:xcross)
-        scatter!(ax3, probes_v6.t[1:nt]*sc.t, probes_v6.λ̇[1:nt]/sc.t)
+        # scatter!(ax3, probes_v6.t[1:nt]*sc.t, probes_v6.λ̇[1:nt]/sc.t)
 
         ax4 = Axis(fig[4,1], title="Porosity",  xlabel=L"$t$ [yr]",  ylabel=L"$\phi$", xlabelsize=20, ylabelsize=20)    
         lines!(ax4, probes.t[1:nt]*sc.t, probes.Φ[1:nt])
         scatter!(ax4, data["probes"].t[1:nt], data["probes"].Φ[1:nt], marker=:xcross)
-        scatter!(ax4, probes_v6.t[1:nt]*sc.t, probes_v6.Φ[1:nt])
+        # scatter!(ax4, probes_v6.t[1:nt]*sc.t, probes_v6.Φ[1:nt])
 
         # ylims!(ax4, 0, 0.1)
 

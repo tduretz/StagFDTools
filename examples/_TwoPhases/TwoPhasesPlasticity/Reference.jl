@@ -6,10 +6,10 @@ using Enzyme  # AD backends you want to use
 
     sc = (σ=1e7, t=1e10, L=1e3)
 
-    homo   = false
+    homo   = true
 
     # Time steps
-    nt     = 1
+    nt     = 30
     Δt0    = 1e10/sc.t 
 
     # Newton solver
@@ -18,7 +18,7 @@ using Enzyme  # AD backends you want to use
     α     = LinRange(0.05, 1.0, 10)
 
     rad     = 2e3/sc.L 
-    Pt_ini  = 1e8/sc.σ
+    Pt_ini  = 1e6/sc.σ
     Pf_ini  = 1e6/sc.σ
     ε̇       = 2e-15.*sc.t
     τ_ini   = 0*(sind(35)*(Pt_ini-Pf_ini) + 0*1e7/sc.σ*cosd(35))  
@@ -35,14 +35,15 @@ using Enzyme  # AD backends you want to use
         compressible = true,
         plasticity   = :off,
         linearizeϕ   = false,              # !!!!!!!!!!!
+        single_phase = false,
         n     = [1.0    1.0  ],
         ηs0   = [1e22   1e19 ]/sc.σ/sc.t, 
         ηΦ    = [2e22   2e22 ]/sc.σ/sc.t,
         G     = [3e10   3e10 ]./sc.σ, 
         Kd    = [1e30   1e30 ]./sc.σ,  # not needed
         Ks    = [1e11   1e11 ]./sc.σ,
-        KΦ    = [1e9    1e9  ]./sc.σ,
-        Kf    = [1e10   1e10 ]./sc.σ, 
+        KΦ    = [1e10   1e10  ]./sc.σ,
+        Kf    = [1e9    1e9 ]./sc.σ, 
         k_ηf0 = [1e-15  1e-15]./(sc.L^2/sc.σ/sc.t),
         ϕ     = [35.    35.  ].*1,
         ψ     = [10.    10.  ].*1,
@@ -58,8 +59,8 @@ using Enzyme  # AD backends you want to use
     @. materials.sinϕ  = sind(materials.ϕ)
     @. materials.sinψ  = sind(materials.ψ)
 
-    # Φ0      = 0.05
-    Φ0 = (materials.KΦ[1] .* Δt0 .* (Pf_ini - Pt_ini)) ./ (materials.KΦ[1] .* materials.ηΦ[1])
+    Φ0      = 0.05
+    # Φ0 = (materials.KΦ[1] .* Δt0 .* (Pf_ini - Pt_ini)) ./ (materials.KΦ[1] .* materials.ηΦ[1])
     @show Φ0
     # error()
     Φ_ini   = Φ0
@@ -137,7 +138,7 @@ using Enzyme  # AD backends you want to use
 
     ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     τ0      = (xx = τxx_ini.*ones(size_c...), yy = τyy_ini.*ones(size_c...), xy = zeros(size_v...) )
-    τ       = (xx = τxx_ini.*ones(size_c...), yy = τyy_ini.*ones(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
+    τ       = (xx = τxx_ini.*ones(size_c...), yy = τyy_ini.*ones(size_c...), xy = zeros(size_v...), II = zeros(size_c...), f = zeros(size_c...) )
     Dc      =  [@MMatrix(zeros(5,5)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)]
     Dv      =  [@MMatrix(zeros(5,5)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)]
     𝐷       = (c = Dc, v = Dv)
@@ -524,7 +525,7 @@ end
 
 function Run()
 
-    nc = (x=100, y=100)
+    nc = (x=10, y=10)
 
     # Mode 0   
     main(nc);

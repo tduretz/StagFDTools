@@ -7,6 +7,28 @@ end
 
 F(τ, Pt, Pf, Φ, C, cosϕ, sinϕ, λ̇, ηvp, α) = τ - (1-Φ)*C*cosϕ - (Pt - α*Pf)*sinϕ  - λ̇*ηvp 
 
+function residual_two_phase_trial(x, divVs, divqD, Δt, Pt0, Pf0, Φ0, ηΦ, KΦ, Ks, Kf)
+     
+    Pt, Pf, Φ = x[1], x[2], x[3]
+
+    # Porosity rate
+    dPtdt   = (Pt - Pt0) / Δt
+    dPfdt   = (Pf - Pf0) / Δt
+    dΦdt    = (dPfdt - dPtdt)/KΦ + (Pf - Pt)/ηΦ
+
+    dlnρfdt = dPfdt / Kf
+    dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
+
+    f_sol = dlnρsdt   - dΦdt/(1-Φ) +   divVs
+    f_liq = (Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD)/ηΦ
+
+    return @SVector [ 
+        f_sol,
+        f_liq,
+        Φ    - (Φ0 + dΦdt*Δt),
+    ]
+end
+
 function residual_two_phase(x, ηve, Δt, ε̇II_eff, Pt_trial, Pf_trial, Φ_trial, Pt0, Pf0, Φ0, ηΦ, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, single_phase )
      
     # eps   = -1e-20
@@ -136,12 +158,111 @@ function LocalRheology(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases
 
     f       = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, α1)
 
-    # if f_trial>-1e-13 
-    # @show f
-    # @show (τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, 0.0)
-    # error()
-    # end
+    return ηvep, λ̇, Pt, Pf, τII, Φ, f
+end
 
+function LocalRheology_div(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases, Δ)
+
+    # Effective strain rate & pressure
+    ε̇II_eff  = invII(ε̇)
+    divVs    = ε̇[4]
+    divqD    = ε̇[5]
+
+    # Parameters
+    ϵ    = 1e-10 # tolerance
+    n    = materials.n[phases]
+    η0   = materials.ηs0[phases]
+    # B    = materials.B[phases]
+    G    = materials.G[phases]
+    C    = materials.C[phases]
+    ηΦ   = materials.ηΦ[phases]
+    KΦ   = materials.KΦ[phases]
+    Ks   = materials.Ks[phases]
+    Kf   = materials.Kf[phases]
+
+    ηvp  = materials.ηvp[phases]
+    sinψ = materials.sinψ[phases]    
+    sinϕ = materials.sinϕ[phases] 
+    cosϕ = materials.cosϕ[phases]  
+    
+    (materials.single_phase) ? α1 = 0.0 : α1 = 1.0 
+
+    # Initial guess
+    η    = (η0 .* ε̇II_eff.^(1 ./ n .- 1.0 ))[1]
+    ηve  = inv(1/η + 1/(G*Δ.t))
+    τII  = 2*ηve*ε̇II_eff
+
+    x = @MVector ([Pt0, Pf0, Φ0])
+
+    r0  = 1.0
+    tol = 1e-10
+
+    for iter=1:10
+
+        J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase_trial, x, Const(divVs), Const(divqD), Const(Δ.t), Const(Pt0), Const(Pf0), Const(Φ0), Const(ηΦ), Const(KΦ), Const(Ks), Const(Kf) )
+        # display(J.derivs[1])
+        x .-= J.derivs[1]\J.val
+        if iter==1 
+            r0 = norm(J.val)
+        end
+        r = norm(J.val)/r0
+        if r<tol
+            break
+        end
+    end
+    
+    Pt, Pf, Φ = x[1], x[2], x[3]
+
+    #############################
+    λ̇ = 0.0
+
+    f_trial  = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, α1)
+
+    x = @MVector ([τII, Pt, Pf, 0.0, Φ])
+
+    # Return mapping
+    if f_trial>-1e-13 
+
+        # This is the proper return mapping with plasticity
+        r0  = 1.0
+        tol = 1e-10
+
+        for iter=1:10
+            J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase, x, Const(ηve), Const(Δ.t), Const(ε̇II_eff), Const(Pt), Const(Pf), Const(Φ), Const(Pt0), Const(Pf0), Const(Φ0), Const(ηΦ), Const(KΦ), Const(Ks), Const(Kf), Const(C), Const(cosϕ), Const(sinϕ), Const(sinψ), Const(ηvp), Const(materials.single_phase) )
+            # display(J.derivs[1])
+            x .-= J.derivs[1]\J.val
+            if iter==1 
+                r0 = norm(J.val)
+            end
+            r = norm(J.val)/r0
+
+            R = residual_two_phase( x, (ηve), (Δ.t), (ε̇II_eff), (Pt), (Pf), (Φ), (Pt0), (Pf0), (Φ0), (ηΦ), (KΦ), (Ks), (Kf), (C), (cosϕ), (sinϕ), (sinψ), (ηvp), (materials.single_phase))
+
+            # @show iter, J.val
+            # @show R
+            # @show (x[1], x[2], x[3], 0.0, C, cosϕ, sinϕ, x[4], ηvp, 0.0)
+            # @show F(x[1], x[2], x[3], 0.0, C, cosϕ, sinϕ, x[4], ηvp, 0.0)
+   
+            if r<tol
+                break
+            end
+        end
+
+    end
+
+    τII, Pt, Pf, λ̇, Φ = x[1], x[2], x[3], x[4], x[5]
+
+    #############################
+
+    # Effective viscosity
+    ηvep = τII/(2*ε̇II_eff)
+
+    if materials.single_phase
+        Φ = 0.0
+    end
+
+    f       = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, α1)
+    
     return ηvep, λ̇, Pt, Pf, τII, Φ, f
 end
 
@@ -152,13 +273,24 @@ function StressVector!(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases
                    2 * η * ε̇[3],
                              Pt,
                              Pf,])
-    # @show τII, invII(τ)
+    return τ, η, λ̇, τII, Φ, f
+end
+
+function StressVector_div!(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases, Δ) 
+    η, λ̇, Pt, Pf, τII, Φ, f = LocalRheology_div(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases, Δ)
+    τ  = @SVector([2 * η * ε̇[1],
+                   2 * η * ε̇[2],
+                   2 * η * ε̇[3],
+                             Pt,
+                             Pf,])
     return τ, η, λ̇, τII, Φ, f
 end
 
 function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
 
     _ones = @SVector ones(5)
+
+    D_test = @MMatrix zeros(5,5)
 
     # Loop over centroids
     # @show "CENTROIDS"
@@ -216,6 +348,20 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
         𝐷.c[i,j] .= diagm(2*jac.val[2] * _ones)
         𝐷.c[i,j][4,4] = 1
         𝐷.c[i,j][5,5] = 1
+
+        ε̇vec   = @SVector([ε̇xx[1]+τ0.xx[i,j]/(2*G[1]*Δ.t), ε̇yy[1]+τ0.yy[i,j]/(2*G[1]*Δ.t), ε̇̄xy[1]+τ̄xy0[1]/(2*G[1]*Δ.t), Dkk[1], divqD])
+        jac2   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_div!, ε̇vec, Const(Dkk[1]), Const(divqD), Const(P0.t[i,j]), Const(P0.f[i,j]), Const(Φ0.c[i,j]), Const(τ0_loc), Const(materials), Const(phases.c[i,j]), Const(Δ))
+
+        @views D_test[:,1] .= jac2.derivs[1][1][1]
+        @views D_test[:,2] .= jac2.derivs[1][2][1]
+        @views D_test[:,3] .= jac2.derivs[1][3][1]
+        @views D_test[:,4] .= jac2.derivs[1][4][1]
+        @views D_test[:,5] .= jac2.derivs[1][5][1]
+
+        display(𝐷_ctl.c[i,j])
+        display(D_test)
+        error()
+
 
         # Update stress
         τ.xx[i,j] = jac.val[1][1]
