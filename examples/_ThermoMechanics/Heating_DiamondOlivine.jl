@@ -1,16 +1,12 @@
 using StagFDTools, StagFDTools.ThermoMechanics, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf, JLD2
 import Statistics:mean
-using Enzyme, GLMakie 
+using Enzyme, GLMakie, GridGeometryUtils 
 
 hours = 3600
 
 # This example shows how thermal loading (heating) leads to pressurisation
 # The pressure is predicted numerically and exactly using the adiabatic relation:
 # ΔP = α/K*ΔT 
-
-# NEXT
-# 1. open boundary
-# 2. add olivne 
 
 @views function main(nc)
 
@@ -19,30 +15,44 @@ hours = 3600
     J  = m * sc.L^2.0 / sc.t^2.0
     W  = J/sc.t
 
-    nt           = 120
-    niter        = 5
-    ϵ_nl         = 1e-8
     ηi           = 1e18 / (sc.σ*sc.t)
     ηinc         = 1e18 / (sc.σ*sc.t)
-    Gi           = 478e9/ sc.σ  
+    Gi           = 535e9/ sc.σ  
     Ginc         = 80e9/ sc.σ
     Ki           = 444e9 / sc.σ 
-    Kinc         = 130e9 / sc.σ
+    Kinc         = 126e9 / sc.σ
     αi           = 1e-6 / (1/sc.T)
-    αinc         = 3e-5 / (1/sc.T)
-    Δt0          = ηi/Gi/4.0/1000
-    ki           = 3.0    / (W/sc.L/sc.T)
-    ρi           = 3000.0 / (m/sc.L^3)
-    ρinc         = 1000.0 / (m/sc.L^3)
-    cpi          = 1000.0 / (J/m/sc.T)
+    αinc         = 3.2e-5 / (1/sc.T)
+    ki           = 2e3    / (W/sc.L/sc.T)
+    kinc         = 4.0    / (W/sc.L/sc.T)
+    ρi           = 3500.0 / (m/sc.L^3)
+    ρinc         = 3300.0 / (m/sc.L^3)
+    cpi          = 509.0 / (J/m/sc.T)
+    cpinc        = 800.0 / (J/m/sc.T)
+    Pinc         = 1e9 / sc.σ
+
+    nt           = 10
+    niter        = 5
+    ϵ_nl         = 1e-8
+    Δt0          = ηi/Gi/4.0/100
     ε̇            = 0*1e-6   / (1/sc.t)
     L            = 2e-3     / sc.L
-    r            = 0.4/1000    / sc.L
     T_ini        = 300.0  / sc.T
     T_fin        = 1100.0 / sc.T
-    dTdt         = (T_fin - T_ini) / (100*Δt0)
+    dTdt         = (T_fin - T_ini) / (nt*Δt0)
     P_ini        = 1e6    / sc.σ
     t            = 0.0
+    r            = 0.3/1000    / sc.L
+
+    # Material geometries
+    inclusion = Ellipse((0.0, 0.0), r, r; θ = 1 * π / 4)
+
+    # inclusion = Ellipse((0.0, 0.0), r/3, 2r; θ = 1 * π / 4)
+
+    # inclusion = Rectangle((0.0, -0.0), r*sqrt(π), r*sqrt(π); θ = -0*π / 4)
+
+    # inclusion = Hexagon((0.0, -0.0), r; θ = -1*π / 4)
+
 
     # Velocity gradient matrix
     D_BC = @SMatrix( [ε̇ 0; 0 -ε̇] )
@@ -57,8 +67,8 @@ hours = 3600
         G            = [Gi  Ginc], 
         K            = [Ki  Kinc],
         α            = [αi  αinc],
-        k            = [ki  ki  ],
-        cp           = [cpi cpi ],
+        k            = [ki  kinc],
+        cp           = [cpi cpinc],
         ρr           = [ρi  ρinc],
     )
  
@@ -175,19 +185,19 @@ hours = 3600
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
     V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
 
-    Xc = xc .+ 0*yc'
-    Yc = 0*xc .+ yc'
-    Xv = xv .+ 0*yv'
-    Yv = 0*xv .+ yv'
-    α  = 30.
-    ax = 1
-    ay = 1
-    X_tilt = cosd(α).*Xc .- sind(α).*Yc
-    Y_tilt = sind(α).*Xc .+ cosd(α).*Yc
-    phases.c[inx_c, iny_c][(X_tilt.^2 ./ax.^2 .+ (Y_tilt).^2 ./ay^2) .< r^2 ] .= 2
-    X_tilt = cosd(α).*Xv .- sind(α).*Yv
-    Y_tilt = sind(α).*Xv .+ cosd(α).*Yv
-    phases.v[inx_v, iny_v][(X_tilt.^2 ./ax.^2 .+ (Y_tilt).^2 ./ay^2) .< r^2 ] .= 2
+    for i in inx_c, j in iny_c   # loop on centroids
+        𝐱 = @SVector([xc[i-1], yc[j-1]])
+        if inside(𝐱, inclusion)
+            phases.c[i, j] = 2
+            P.t[i, j] = Pinc
+        end
+    end
+       for i in inx_v, j in iny_v  # loop on vertices
+        𝐱 = @SVector([xv[i-1], yv[j-1]])
+        if inside(𝐱, inclusion)
+            phases.v[i, j] = 2
+        end
+    end
 
     # Boundary condition values
     BC = ( Vx = zeros(size_x...), Vy = zeros(size_y...), Pt = zeros(size_c...), T = zeros(size_c...))
@@ -304,9 +314,9 @@ hours = 3600
         τxyc = av2D(τ.xy)
 
         probes.T[it]   = mean(T.c[phases.c .== 2])
-        probes.Pt[it]  = mean(P.t[phases.c .== 2])
+        probes.Pt[it]  = maximum(P.t[phases.c .== 2])
         probes.t[it]   = t
-        probes.τII[it] = mean(τ.II[phases.c .== 1])
+        probes.τII[it] = maximum(τ.II[phases.c .== 1])
         @show mean(T.c[inx_c,iny_c])*sc.T
 
         # Post process 
