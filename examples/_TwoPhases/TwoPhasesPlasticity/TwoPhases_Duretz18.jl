@@ -14,12 +14,12 @@ using Enzyme  # AD backends you want to use
     homo   = false
 
     # Time steps
-    nt     = 1
+    nt     = 30
     Δt0    = 1e10/sc.t 
 
     # Newton solver
     niter = 20
-    ϵ_nl  = 1e-8
+    ϵ_nl  = 1e-10
     α     = LinRange(0.05, 1.0, 10)
 
     rad     = 1e2/sc.L 
@@ -471,20 +471,22 @@ using Enzyme  # AD backends you want to use
             
             # arrows2d!(ax, X.c.x[1:step:end], X.c.y[1:step:end], Vxsc[1:step:end,1:step:end], Vysc[1:step:end,1:step:end], lengthscale=10000.4, color=:white)
 
-            ax    = Axis(fig[3,2], aspect=DataAspect(), title=L"$P^e - \tau$", xlabel=L"P^e", ylabel=L"\tau")
-                  
-            (materials.single_phase) ? α1 = 0.0 : α1 = 1.0 
-            Pe    = (P.t .- α1*P.f)[inx_c,iny_c].*sc.σ
+            #######################
+            # ax    = Axis(fig[3,2], aspect=DataAspect(), title=L"$P^e - \tau$", xlabel=L"P^e", ylabel=L"\tau")
+                 
+            # (materials.single_phase) ? α1 = 0.0 : α1 = 1.0 
+            # Pe    = (P.t .- α1*P.f)[inx_c,iny_c].*sc.σ
 
-            τII       = (τ.II)[inx_c,iny_c].*sc.σ
-            P_ax      = LinRange(-5e6, 5e6, 100)
-            τ_ax_rock = materials.C[1]*sc.σ*materials.cosϕ[1] .+ P_ax.*materials.sinϕ[1]
-            lines!(ax, P_ax/1e6, τ_ax_rock/1e6, color=:black)
-            scatter!(ax, Pe[:]/1e6, τII[:]/1e6, color=:black )
-            F_post = @. τ.II - materials.C[1]*materials.cosϕ[1] - (P.t .- α1*P.f)*materials.sinϕ[1]
-            maxF   =  maximum( F_post[inx_c,iny_c] )
-            @info maxF, maxF .*sc.σ /1e6
-            @show maximum(τ.f[inx_c,iny_c]),  maximum(τ.f[inx_c,iny_c]) .*sc.σ /1e6
+            # τII       = (τ.II)[inx_c,iny_c].*sc.σ
+            # P_ax      = LinRange(-5e6, 5e6, 100)
+            # τ_ax_rock = materials.C[1]*sc.σ*materials.cosϕ[1] .+ P_ax.*materials.sinϕ[1]
+            # lines!(ax, P_ax/1e6, τ_ax_rock/1e6, color=:black)
+            # scatter!(ax, Pe[:]/1e6, τII[:]/1e6, color=:black )
+            # F_post = @. τ.II - materials.C[1]*materials.cosϕ[1] - (P.t .- α1*P.f)*materials.sinϕ[1]
+            # maxF   =  maximum( F_post[inx_c,iny_c] )
+            # @info maxF, maxF .*sc.σ /1e6
+            # @show maximum(τ.f[inx_c,iny_c]),  maximum(τ.f[inx_c,iny_c]) .*sc.σ /1e6
+            #######################
 
             # # Previous stress states
             # τxyc0 = av2D(τ0.xy)
@@ -500,12 +502,12 @@ using Enzyme  # AD backends you want to use
             # hidexdecorations!(ax)
             # Colorbar(fig[2, 3], hm, label = L"$\tau_\text{II}$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
             
-            # ax  = Axis(fig[3,3], xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error")
-            # scatter!(ax, 1:niter, log10.(err.x[1:niter]./err.x[1]) )
-            # scatter!(ax, 1:niter, log10.(err.y[1:niter]./err.x[1]) )
-            # scatter!(ax, 1:niter, log10.(err.pt[1:niter]./err.pt[1]) )
-            # scatter!(ax, 1:niter, log10.(err.pf[1:niter]./err.pf[1]) )
-            # ylims!(ax, -10, 1.1)
+            ax  = Axis(fig[3,2], xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error")
+            scatter!(ax, 1:niter, log10.(err.x[1:niter]./err.x[1]) )
+            scatter!(ax, 1:niter, log10.(err.y[1:niter]./err.x[1]) )
+            scatter!(ax, 1:niter, log10.(err.pt[1:niter]./err.pt[1]) )
+            scatter!(ax, 1:niter, log10.(err.pf[1:niter]./err.pf[1]) )
+            ylims!(ax, -10, 1.1)
 
             ax  = Axis(fig[1,3], xlabel="Strain", ylabel="Mean pressure")
             lines!(  ax, data["strvec"][1:end], data["Pvec"][1:end] )
