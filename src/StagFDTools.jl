@@ -87,8 +87,10 @@ module TwoPhases
     # include("TwoPhases_VE.jl")
     # export AssembleFluidContinuity2D_VE!, ResidualFluidContinuity2D_VE!, FluidContinuity_VE
     # export AssembleContinuity2D_VE!, ResidualContinuity2D_VE!, Continuity_VE
-    include("TwoPhases/TwoPhases_Rheology.jl")
-    export LocalRheology, StressVector!, TangentOperator!
+    include("TwoPhases/TwoPhases_Rheology_Trial_P.jl")
+    export TangentOperator!
+    include("TwoPhases/TwoPhases_Rheology_Common.jl")
+    export invII, StrainRateTrial, F
 end
 
 module TwoPhases_v1
