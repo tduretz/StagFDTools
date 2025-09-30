@@ -49,7 +49,7 @@ using Enzyme  # AD backends you want to use
         Ks    = [2e10   2e10 ]./sc.σ,
         KΦ    = [5e9    5e9  ]./sc.σ,
         Kf    = [2e9    2e9 ]./sc.σ, 
-        k_ηf0 = [1e-25  1e-25]./(sc.L^2/sc.σ/sc.t),
+        k_ηf0 = [1e-15  1e-15]./(sc.L^2/sc.σ/sc.t),
         ϕ     = [30.    30.  ].*1,
         ψ     = [10.    10.  ].*1,
         C     = [3e7    3e7  ]./sc.σ,
@@ -384,7 +384,6 @@ using Enzyme  # AD backends you want to use
             UpdateSolution!(V, P, α[imin]*dx, number, type, nc)
         end
 
-
         TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
 
         #--------------------------------------------#
@@ -542,7 +541,7 @@ function Run()
     nc = (x=100, y=100)
 
     # Mode 0   
-    main(nc);
+    @time main(nc);
     
 end
 
