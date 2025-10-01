@@ -83,7 +83,7 @@ function residual_two_phase_div(x, ηve, Δt, ε̇II_eff, divVs, divqD, Φ_trial
 
     if single_phase
         f     = τII - C*cosϕ - Pt*sinϕ  
-        f_sol = (Pt - Pt0)/Ks/Δt - λ̇*sinψ + divVs
+        f_sol = (Pt - Pt0)/(Ks*Δt) - λ̇*sinψ + divVs
     end
 
     return @SVector [ 
