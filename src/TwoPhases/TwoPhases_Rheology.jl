@@ -64,7 +64,7 @@ end
 function residual_two_phase_div(x, ηve, Δt, ε̇II_eff, divVs, divqD, Φ_trial, Pt0, Pf0, Φ0, ηΦ, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, single_phase )
      
     τII, Pt, Pf, λ̇, Φ = x[1], x[2], x[3], x[4], x[5]
-    single_phase ? α1 = 0.0 : α1 = 1.0 
+     α1 = single_phase ? 0.0 : 1.0 
 
     # Check yield
     f       = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, α1)
