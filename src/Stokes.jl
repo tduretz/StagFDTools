@@ -1087,7 +1087,7 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, 
     # @show "vertices"
 
     # Loop over vertices
-    for j=3:size(ε̇.xy,2)-2, i=3:size(ε̇.xy,1)-2
+    for j=2:size(ε̇.xy,2)-1, i=2:size(ε̇.xy,1)-1
         Vx     = SMatrix{3,2}(      V.x[ii,jj] for ii in i-1:i+1, jj in j:j+1  )
         Vy     = SMatrix{2,3}(      V.y[ii,jj] for ii in i:i+1  , jj in j-1:j+1)
         bcx    = SMatrix{3,2}(    BC.Vx[ii,jj] for ii in i-1:i+1, jj in j:j+1  )

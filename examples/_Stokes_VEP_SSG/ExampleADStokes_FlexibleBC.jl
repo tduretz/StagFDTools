@@ -209,7 +209,7 @@ using TimerOutputs
             # Direct-iterative solver
             fu   = -r[1:size(𝐊,1)]
             fp   = -r[size(𝐊,1)+1:end]
-            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:chol,  ηb=1e3, niter_l=10, ϵ_l=1e-11)
+            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu,  ηb=1e3, niter_l=10, ϵ_l=1e-11)
             dx[1:size(𝐊,1)]     .= u
             dx[size(𝐊,1)+1:end] .= p
 
@@ -230,11 +230,11 @@ using TimerOutputs
         fig = Figure(size=(600, 600))
         #-----------
         ax  = Axis(fig[1,1], aspect=DataAspect(), title="Vx", xlabel="x", ylabel="y")
-        heatmap!(ax, xv, yc, (V.x[inx_Vx,iny_Vx])')
+        heatmap!(ax, xv, yc, (V.x[inx_Vx,iny_Vx]))
         ax  = Axis(fig[1,2], aspect=DataAspect(), title="Vy", xlabel="x", ylabel="y")
-        heatmap!(ax, xc, yv, V.y[inx_Vy,iny_Vy]')
+        heatmap!(ax, xc, yv, V.y[inx_Vy,iny_Vy])
         ax  = Axis(fig[2,1], aspect=DataAspect(), title="Vy", xlabel="x", ylabel="y")
-        heatmap!(ax, xc, yc,  Pt[inx_c,iny_c]')
+        heatmap!(ax, xc, yc,  Pt[inx_c,iny_c])
         ax  = Axis(fig[2,2], aspect=DataAspect(), title="Convergence", xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error")
         scatter!(ax, 1:niter, log10.(err.x[1:niter]), label="Vx")
         scatter!(ax, 1:niter, log10.(err.y[1:niter]), label="Vy")
