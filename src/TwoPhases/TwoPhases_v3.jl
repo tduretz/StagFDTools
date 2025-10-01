@@ -141,6 +141,8 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, Pf, ΔP, τ0, 𝐷, phases, mat
     fy += ( τxy[2]  -  τxy[1] ) * invΔx
     fy -= ( Ptc[2]  -  Ptc[1])  * invΔy
     fy *= -1 * Δ.x * Δ.y
+
+    # fy = Vy_loc[2,2]
     
     return fy
 end
@@ -167,7 +169,10 @@ function Continuity(Vx, Vy, Pt, Pt0, Pf, Pf0, Φ0, phase, materials, type_loc, b
         dΦdt = 0.0
     end
 
-    dlnρsdt = (1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks)
+    dPsdt = dΦdt*(Pt[1] - Pf[2,2]*Φ)/(1-Φ)^2 + (dPtdt - Φ*dPfdt - Pf[2,2]*dΦdt) / (1 - Φ)
+    dlnρsdt = 1/Ks * ( dPsdt ) 
+
+    # dlnρsdt = (1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks)
 
     # # Single phase
     # if materials.single_phase
@@ -1112,7 +1117,7 @@ function LineSearch!(rvec, α, dx, R, V, P, ε̇, τ, Vi, Pi, ΔP, P0, Φ, Φ0, 
         ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
         ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
         ResidualFluidContinuity2D!(R, V, P, ΔP, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
-        rvec[i] = @views norm(R.x[inx_Vx,iny_Vx])/length(R.x[inx_Vx,iny_Vx]) + norm(R.y[inx_Vy,iny_Vy])/length(R.y[inx_Vy,iny_Vy]) + 0*norm(R.pt[inx_c,iny_c])/length(R.pt[inx_c,iny_c]) + 0*norm(R.pf[inx_c,iny_c])/length(R.pf[inx_c,iny_c])  
+        rvec[i] = @views norm(R.x[inx_Vx,iny_Vx])/length(R.x[inx_Vx,iny_Vx]) + norm(R.y[inx_Vy,iny_Vy])/length(R.y[inx_Vy,iny_Vy]) + norm(R.pt[inx_c,iny_c])/length(R.pt[inx_c,iny_c]) + norm(R.pf[inx_c,iny_c])/length(R.pf[inx_c,iny_c])  
     end
     imin = argmin(rvec)
     V.x .= Vi.x 
@@ -1121,3 +1126,75 @@ function LineSearch!(rvec, α, dx, R, V, P, ε̇, τ, Vi, Pi, ΔP, P0, Φ, Φ0, 
     P.f .= Pi.f
     return imin
 end
+
+function GlobalResidual!(α, dx, R, V, P, ε̇, τ, ΔP, P0, Φ, Φ0, τ0, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+    UpdateSolution!(V, P, α.*dx, number, type, nc)
+    TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
+    ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+    ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+    ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
+    ResidualFluidContinuity2D!(R, V, P, ΔP, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
+end
+
+@inline fnorm(R, inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c) = @views (norm(R.x[inx_Vx,iny_Vx])/sqrt(length(R.x[inx_Vx,iny_Vx]))) + (norm(R.y[inx_Vy,iny_Vy])/sqrt(length(R.y[inx_Vy,iny_Vy]))) + 1*(norm(R.pt[inx_c,iny_c])/length(R.pt[inx_c,iny_c])) + 1*(norm(R.pf[inx_c,iny_c])/length(R.pf[inx_c,iny_c]))
+
+function BackTrackingLineSearch!(rvec, α, dx, R0, R, V, P, ε̇, τ, Vi, Pi, ΔP, P0, Φ, Φ0, τ0, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ; α_init=1.0, β=0.9, c=1e-4)
+    
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, inx_v, iny_v, size_x, size_y, size_c, size_v = Ranges(nc)
+
+    α = α_init
+    GlobalResidual!(0.0, dx, R0, V, P, ε̇, τ, ΔP, P0, Φ, Φ0, τ0, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+    
+    f0_norm_sq = fnorm(R, inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c) 
+
+    k = 0
+    max_iters = 5
+
+    for iter in 1:max_iters
+    # # while f_norm_sq >= (1 - c * α * slope) * f0_norm_sq
+
+        k    += 1
+        Vi.x .= V.x 
+        Vi.y .= V.y 
+        Pi.t .= P.t
+        Pi.f .= P.f
+
+        GlobalResidual!(  α, dx, R, V, P, ε̇, τ, ΔP, P0, Φ, Φ0, τ0, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+        
+        f_norm_sq = fnorm(R, inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c) 
+
+        slope = -2 * ( sum(R0.x[inx_Vx,iny_Vx].*R.x[inx_Vx,iny_Vx]) + sum(R0.y[inx_Vy,iny_Vy].*R.y[inx_Vy,iny_Vy]) + 1*sum(R0.pt[inx_c,iny_c].*R.pt[inx_c,iny_c]) + 1*sum(R0.pf[inx_c,iny_c].*R.pf[inx_c,iny_c]) )
+    
+         if f_norm_sq <= (1 - c * α * slope) * f0_norm_sq
+            break        
+        end
+
+        # @show α, f_norm_sq, f0_norm_sq, (1 - c * α * slope) * f0_norm_sq
+
+        α *= β
+
+    end
+
+    V.x .= Vi.x 
+    V.y .= Vi.y
+    P.t .= Pi.t
+    P.f .= Pi.f
+
+    @info k, α
+
+    return α
+end
+
+    
+# function backtracking_line_search(f, x, δx; α_init=1.0, β=0.5, c=1e-4)
+#     α = α_init
+#     fx = f(x)
+#     f_norm_sq = norm(fx)^2
+#     slope = -2 * real(dot(fx, f(x + α * δx)))  # approximation to directional derivative
+
+    # while norm(f(x + α * δx))^2 > f_norm_sq - c * α * slope
+    #     α *= β
+    # end
+
+#     return α
+# end

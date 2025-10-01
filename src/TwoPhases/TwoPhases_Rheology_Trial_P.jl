@@ -1,8 +1,10 @@
+@inline mynorm(x) = sum(xi^2 for xi in x)
+
 function PorosityRate(Pt, Pf, Pt0, Pf0, KΦ, ηΦ, λ̇, sinψ, Δt)    
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
     dΦdt    = (dPfdt - dPtdt)/KΦ + (Pf - Pt)/ηΦ + λ̇*sinψ
-    return  dΦdt
+    return dΦdt
 end
 
 function ΔP_Trial(x, Pt_trial, Pf_trial, Φ, divVs, divqD, λ̇, Pt0, Pf0, Φ0, ηΦ, KΦ, Ks, Kf, sinψ, Δt )
@@ -14,7 +16,19 @@ function ΔP_Trial(x, Pt_trial, Pf_trial, Φ, divVs, divqD, λ̇, Pt0, Pf0, Φ0,
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
     dlnρfdt = dPfdt / Kf
-    dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
+    # dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
+
+    Φ     = Φ0  + dΦdt * Δt
+    dPsdt = ((Pt - Φ*Pf)/(1-Φ) - (Pt0 - Φ0*Pf0)/(1-Φ0))/Δt
+    # dPsdt = dΦdt*(Pt - Pf*Φ)/(1-Φ)^2 + (dPtdt - Φ*dPfdt - Pf*dΦdt) / (1 - Φ)
+    dlnρsdt = 1/Ks * ( dPsdt ) 
+
+
+    # Ps     = (Pt - phi*Pf)/(1-phi) 
+    # dPsdt = (dPtdt - phi*dPfdt) /(1-phi)
+    # # dPsdt = ((Pt - phi*Pf)/(1-phi) - (Pt0 - phi0*Pf0)/(1-phi0))/dt
+    # # dPsdt = dphidt*(Pt - Pf*phi)/(1-phi)**2 + (dPtdt - phi*dPfdt - 0*Pf*dphidt) / (1 - phi)
+    # dlnrhosdt = elastic * 1/K_s * ( dPsdt ) 
 
     return @SVector [ 
         dlnρsdt   - dΦdt/(1-Φ),
@@ -24,17 +38,18 @@ end
 
 function ΔP(Pt_trial, Pf_trial, Φ_trial, divVs, divqD, λ̇, Pt0, Pf0, Φ0, ηΦ,  KΦ, Ks, Kf, sinψ, Δt)
 
-    x   = @MVector[0.0, 0.0]
+    x   = @SVector[0.0, 0.0]
     r0  = 1.0
     tol = 1e-13
 
     for iter=1:10
-        J = Enzyme.jacobian(Enzyme.ForwardWithPrimal,  ΔP_Trial, x, Const(Pt_trial), Const(Pf_trial), Const(Φ_trial), Const(0*divVs), Const(0*divqD), Const(λ̇), Const(0*Pt0), Const(0*Pf0), Const(Φ0), Const(ηΦ),  Const(KΦ), Const(Ks), Const(Kf), Const(sinψ), Const(Δt))
-        x .-= J.derivs[1]\J.val
-        if iter==1 && norm(J.val)>1e-17
-            r0 = norm(J.val)
+        J  = Enzyme.jacobian(Enzyme.ForwardWithPrimal,  ΔP_Trial, x, Const(Pt_trial), Const(Pf_trial), Const(Φ_trial), Const(0*divVs), Const(0*divqD), Const(λ̇), Const(0*Pt0), Const(0*Pf0), Const(Φ0), Const(ηΦ),  Const(KΦ), Const(Ks), Const(Kf), Const(sinψ), Const(Δt))
+        x  = x .- J.derivs[1]\J.val
+        nr = mynorm(J.val)
+        if iter==1 && nr>1e-17
+            r0 = nr
         end
-        r = norm(J.val)/r0
+        r = nr/r0
         if r<tol
             break
         end
@@ -46,7 +61,7 @@ end
 function residual_two_phase_P(x, ηve, Δt, ε̇II_eff, Pt_trial, Pf_trial, divVs, divqD, Φ_trial, Pt0, Pf0, Φ0, ηΦ, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, single_phase )
      
     τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
-    single_phase ? α1 = 0.0 : α1 = 1.0 
+    α1 = single_phase ? 0.0 : 1.0 
 
     # Pressure corrections
     # ΔPt = KΦ .* sinψ .* Δt .* Φ_trial .* ηΦ .* λ̇ .* (-Kf + Ks) ./ (-Kf .* KΦ .* Δt .* Φ_trial + Kf .* KΦ .* Δt - Kf .* Φ_trial .* ηΦ + Kf .* ηΦ + Ks .* KΦ .* Δt .* Φ_trial + Ks .* Φ_trial .* ηΦ + KΦ .* Φ_trial .* ηΦ)
@@ -68,7 +83,7 @@ function residual_two_phase_P(x, ηve, Δt, ε̇II_eff, Pt_trial, Pf_trial, divV
     end
 
     return @SVector [ 
-        ε̇II_eff   -  τII/2/ηve - λ̇/2,
+        ε̇II_eff   -  τII/(2*ηve) - λ̇/2,
         Pt - (Pt_trial + ΔPt),
         Pf - (Pf_trial + ΔPf),
         f, 
@@ -99,7 +114,7 @@ function LocalRheology_P(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phas
     sinϕ = materials.sinϕ[phases] 
     cosϕ = materials.cosϕ[phases]  
     
-    (materials.single_phase) ? α1 = 0.0 : α1 = 1.0 
+    α1 = materials.single_phase ? 0.0 : 1.0 
 
     # Initial guess
     η    = (η0 .* ε̇II_eff.^(1 ./ n .- 1.0 ))[1]
@@ -127,7 +142,7 @@ function LocalRheology_P(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phas
 
     f_trial  = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, α1)
 
-    x = @MVector ([τII, Pt, Pf, 0.0])
+    x = @SVector ([τII, Pt, Pf, 0.0])
 
     # Return mapping
     if f_trial>-1e-13 
@@ -139,11 +154,12 @@ function LocalRheology_P(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phas
         for iter=1:10
             J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase_P, x, Const(ηve), Const(Δ.t), Const(ε̇II_eff), Const(Pt), Const(Pf), Const(divVs), Const(divqD), Const(Φ), Const(Pt0), Const(Pf0), Const(Φ0), Const(ηΦ), Const(KΦ), Const(Ks), Const(Kf), Const(C), Const(cosϕ), Const(sinϕ), Const(sinψ), Const(ηvp), Const(materials.single_phase) )
             # display(J.derivs[1])
-            x .-= J.derivs[1]\J.val
+            x = x .- J.derivs[1]\J.val
+            nr = mynorm(J.val)
             if iter==1 
-                r0 = norm(J.val)
+                r0 = nr
             end
-            r = norm(J.val)/r0
+            r = nr/r0
 
             if r<tol
                 break

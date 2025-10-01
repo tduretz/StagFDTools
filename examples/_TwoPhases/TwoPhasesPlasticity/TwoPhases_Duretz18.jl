@@ -20,7 +20,7 @@ using Enzyme  # AD backends you want to use
     # Newton solver
     niter = 20
     ϵ_nl  = 1e-10
-    α     = LinRange(0.05, 1.0, 10)
+    α     = LinRange(0.05, 1.0, 5)
 
     rad     = 1e2/sc.L 
     Pt_ini  = 0*1e8/sc.σ
@@ -133,16 +133,16 @@ using Enzyme  # AD backends you want to use
     #--------------------------------------------#
     # Intialise field
     L   = (x=4e3/sc.L, y=2e3/sc.L)
+
     Δ   = (x=L.x/nc.x, y=L.y/nc.y, t=Δt0)
     R   = (x=zeros(size_x...), y=zeros(size_y...), pt=zeros(size_c...), pf=zeros(size_c...), Φ=zeros(size_c...))
+    R0  = (x=zeros(size_x...), y=zeros(size_y...), pt=zeros(size_c...), pf=zeros(size_c...), Φ=zeros(size_c...))
     V   = (x=zeros(size_x...), y=zeros(size_y...))
     Vi  = (x=zeros(size_x...), y=zeros(size_y...))
     η   = (c  =  ones(size_c...), v  =  ones(size_v...) )
     Φ   = (c=Φ_ini.*ones(size_c...), v=Φ_ini.*ones(size_v...) )
     Φ0  = (c=Φ_ini.*ones(size_c...), v=Φ_ini.*ones(size_v...) )
-
     εp  = zeros(size_c...)
-
     ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     τ0      = (xx = τxx_ini.*ones(size_c...), yy = τyy_ini.*ones(size_c...), xy = zeros(size_v...) )
     τ       = (xx = τxx_ini.*ones(size_c...), yy = τyy_ini.*ones(size_c...), xy = zeros(size_v...), II = zeros(size_c...), f = zeros(size_c...),)
@@ -169,35 +169,10 @@ using Enzyme  # AD backends you want to use
     V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*X.c.x .+ D_BC[2,2]*X.v.y'
 
     if !homo
-        # for I in CartesianIndices(Φ.c)
-        #     i, j = I[1], I[2]
-        #     if i>1 && i<size(Φ.c,1) && j>1 && j<size(Φ.c,2)
-        #         if (X.c.x[i-1]^2 + X.c.y[j-1]^2) < rad^2
-        #             Φ.c[i,j] = 1.1*Φ_ini
-        #         end
-        #     end 
-        # end
-
         # Set material geometry 
         @views phases.c[inx_c, iny_c][(X.c.x.^2 .+ (X.c.y').^2) .<= rad^2] .= 2
         @views phases.v[inx_v, iny_v][(X.v.x.^2 .+ (X.v.y').^2) .<= rad^2] .= 2
     end
-
-    # Xc = xc .+ 0*yc'
-    # Yc = 0*xc .+ yc'
-    # Xv = xv .+ 0*yv'
-    # Yv = 0*xv .+ yv'
-    # α  = 30.
-    # # ax = 2
-    # # ay = 1/2
-    # ax = 1
-    # ay = 1
-    # X_tilt = cosd(α).*Xc .- sind(α).*Yc
-    # Y_tilt = sind(α).*Xc .+ cosd(α).*Yc
-    # phases.c[inx_c, iny_c][(X_tilt.^2 ./ax.^2 .+ (Y_tilt).^2 ./ay^2) .< r^2 ] .= 2
-    # X_tilt = cosd(α).*Xv .- sind(α).*Yv
-    # Y_tilt = sind(α).*Xv .+ cosd(α).*Yv
-    # phases.v[inx_v, iny_v][(X_tilt.^2 ./ax.^2 .+ (Y_tilt).^2 ./ay^2) .< r^2 ] .= 2
 
     # Boundary condition values
     BC = ( Vx = zeros(size_x...), Vy = zeros(size_y...), Pt = zeros(size_c...), Pf = zeros(size_c...))
@@ -251,7 +226,7 @@ using Enzyme  # AD backends you want to use
 
             #--------------------------------------------#
             # Residual check
-            TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
+            @time TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
             ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
             ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
             ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
@@ -306,82 +281,12 @@ using Enzyme  # AD backends you want to use
             # Direct solver 
             @time dx = - 𝑀 \ r
 
-            # # M2Di solver
-            # fv    = -r[1:(nVx+nVy)]
-            # fpt   = -r[(nVx+nVy+1):(nVx+nVy+nPt)]
-            # fpf   = -r[(nVx+nVy+nPt+1):end]
-            # dv    = zeros(nVx+nVy)
-            # dpt   = zeros(nPt)
-            # dpf   = zeros(nPf)
-            # rv    = zeros(nVx+nVy)
-            # rpt   = zeros(nPt)
-            # rpf   = zeros(nPf)
-            # rv_t  = zeros(nVx+nVy)
-            # rpt_t = zeros(nPt)
-            # s     = zeros(nPf)
-            # ddv   = zeros(nVx+nVy)
-            # ddpt  = zeros(nPt)
-            # ddpf  = zeros(nPf)
-
-            # Jvv  = [M.Vx.Vx M.Vx.Vy;
-            #         M.Vy.Vx M.Vy.Vy]
-            # Jvp  = [M.Vx.Pt;
-            #         M.Vy.Pt]
-            # Jpv  = [M.Pt.Vx M.Pt.Vy]
-            # Jpp  = M.Pt.Pt
-            # Jppf = M.Pt.Pf
-            # Jpfv = [M.Pf.Vx M.Pf.Vy]
-            # Jpfp = M.Pf.Pt
-            # Jpf  = M.Pf.Pf
-            # Kvv  = Jvv
-
-            # @time begin 
-            #     # γ = 1e-8
-            #     # Γ = spdiagm(γ*ones(nPt))
-            #     # Pre-conditionning (~Jacobi)
-            #     Jpv_t  = Jpv  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfv  
-            #     Jpp_t  = Jpp  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfp  #.+ Γ
-            #     Jvv_t  = Kvv  - Jvp *spdiagm(1 ./ diag(Jpp_t))*Jpv 
-            #     @show typeof(SparseMatrixCSC(Jpf))
-            #     Jpf_h  = cholesky(Hermitian(SparseMatrixCSC(Jpf)), check = false  )        # Cholesky factors
-            #     Jvv_th = cholesky(Hermitian(SparseMatrixCSC(Jvv_t)), check = false)        # Cholesky factors
-            #     Jpp_th = spdiagm(1 ./diag(Jpp_t));             # trivial inverse
-            #     @views for itPH=1:15
-            #         rv    .= -( Jvv*dv  + Jvp*dpt             - fv  )
-            #         rpt   .= -( Jpv*dv  + Jpp*dpt  + Jppf*dpf - fpt )
-            #         rpf   .= -( Jpfv*dv + Jpfp*dpt + Jpf*dpf  - fpf )
-            #         s     .= Jpf_h \ rpf
-            #         rpt_t .= -( Jppf*s - rpt)
-            #         s     .=    Jpp_th*rpt_t
-            #         rv_t  .= -( Jvp*s  - rv )
-            #         ddv   .= Jvv_th \ rv_t
-            #         s     .= -( Jpv_t*ddv - rpt_t )
-            #         ddpt  .=    Jpp_th*s
-            #         s     .= -( Jpfp*ddpt + Jpfv*ddv - rpf )
-            #         ddpf  .= Jpf_h \ s
-            #         dv   .+= ddv
-            #         dpt  .+= ddpt
-            #         dpf  .+= ddpf
-            #         @printf("  --- iteration %d --- \n",itPH);
-            #         @printf("  ||res.v ||=%2.2e\n", norm(rv)/ 1)
-            #         @printf("  ||res.pt||=%2.2e\n", norm(rpt)/1)
-            #         @printf("  ||res.pf||=%2.2e\n", norm(rpf)/1)
-            #     #     if ((norm(rv)/length(rv)) < tol_linv) && ((norm(rpt)/length(rpt)) < tol_linpt) && ((norm(rpf)/length(rpf)) < tol_linpf), break; end
-            #     #     if ((norm(rv)/length(rv)) > (norm(rv0)/length(rv0)) && norm(rv)/length(rv) < tol_glob && (norm(rpt)/length(rpt)) > (norm(rpt0)/length(rpt0)) && norm(rpt)/length(rpt) < tol_glob && (norm(rpf)/length(rpf)) > (norm(rpf0)/length(rpf0)) && norm(rpf)/length(rpf) < tol_glob),
-            #     #         if noisy>=1, fprintf(' > Linear residuals do no converge further:\n'); break; end
-            #     #     end
-            #     #     rv0=rv; rpt0=rpt; rpf0=rpf; if (itPH==nPH), nfail=nfail+1; end
-            #     end
-            # end
-            
-            # dx = zeros(nVx + nVy + nPt + nPf)
-            # dx[1:(nVx+nVy)] .= dv
-            # dx[(nVx+nVy+1):(nVx+nVy+nPt)] .= dpt
-            # dx[(nVx+nVy+nPt+1):end] .= dpf
-
             #--------------------------------------------#
-            imin = LineSearch!(rvec, α, dx, R, V, P, ε̇, τ, Vi, Pi, ΔP, P0, Φ, Φ0, τ0, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
-            UpdateSolution!(V, P, α[imin]*dx, number, type, nc)
+            @time imin = LineSearch!(rvec, α, dx, R, V, P, ε̇, τ, Vi, Pi, ΔP, P0, Φ, Φ0, τ0, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+            # UpdateSolution!(V, P, α[imin]*dx, number, type, nc)
+            # @time α = BackTrackingLineSearch!(rvec, α, dx, R0, R, V, P, ε̇, τ, Vi, Pi, ΔP, P0, Φ, Φ0, τ0, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+            α = 1
+            UpdateSolution!(V, P, α*dx, number, type, nc)
         end
 
         TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
@@ -401,17 +306,6 @@ using Enzyme  # AD backends you want to use
         
         τxyc = av2D(τ.xy)
         ε̇xyc = av2D(ε̇.xy)
-
-        # # Post process 
-        # @time for i in eachindex(Φ.c)
-        #     KΦ     = materials.KΦ[phases.c[i]]
-        #     ηΦ     = materials.ηΦ[phases.c[i]] 
-        #     sinψ   = materials.sinψ[phases.c[i]] 
-        #     dPtdt  = (P.t[i] - P0.t[i]) / Δ.t
-        #     dPfdt  = (P.f[i] - P0.f[i]) / Δ.t
-        #     dΦdt   = 1/KΦ * (dPfdt - dPtdt) + 1/ηΦ * (P.f[i] - P.t[i]) + λ̇.c[i]*sinψ
-        #     Φ.c[i] = Φ0.c[i] + dΦdt*Δ.t
-        # end
 
         Vxsc = 0.5*(V.x[1:end-1,2:end-1] + V.x[2:end,2:end-1])[2:end-1,2:end-1]
         Vysc = 0.5*(V.y[2:end-1,1:end-1] + V.y[2:end-1,2:end])[2:end-1,2:end-1]
@@ -538,7 +432,7 @@ end
 
 function Run()
 
-    nc = (x=100, y=100)
+    nc = (x=150, y=100)
 
     # Mode 0   
     @time main(nc);
