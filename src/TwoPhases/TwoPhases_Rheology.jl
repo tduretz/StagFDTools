@@ -87,7 +87,7 @@ function residual_two_phase_div(x, ηve, Δt, ε̇II_eff, divVs, divqD, Φ_trial
     end
 
     return @SVector [ 
-        ε̇II_eff   -  τII/2/ηve - λ̇/2,
+        ε̇II_eff   -  τII/(2*ηve) - λ̇/2,
         f_sol,
         f_liq,
         f,
