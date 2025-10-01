@@ -119,7 +119,7 @@ function LocalRheology(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases
     sinϕ = materials.sinϕ[phases] 
     cosϕ = materials.cosϕ[phases]  
     
-    (materials.single_phase) ? α1 = 0.0 : α1 = 1.0 
+    α1 = materials.single_phase ? 0.0 : 1.0 
 
     # Initial guess
     η    = (η0 .* ε̇II_eff.^(1 ./ n .- 1.0 ))[1]
