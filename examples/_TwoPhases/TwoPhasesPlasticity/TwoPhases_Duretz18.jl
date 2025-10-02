@@ -283,10 +283,9 @@ using Enzyme  # AD backends you want to use
 
             #--------------------------------------------#
             @time imin = LineSearch!(rvec, α, dx, R, V, P, ε̇, τ, Vi, Pi, ΔP, P0, Φ, Φ0, τ0, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
-            # UpdateSolution!(V, P, α[imin]*dx, number, type, nc)
+            UpdateSolution!(V, P, α[imin]*dx, number, type, nc)
             # @time α = BackTrackingLineSearch!(rvec, α, dx, R0, R, V, P, ε̇, τ, Vi, Pi, ΔP, P0, Φ, Φ0, τ0, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
-            α = 1
-            UpdateSolution!(V, P, α*dx, number, type, nc)
+            # UpdateSolution!(V, P, α*dx, number, type, nc)
         end
 
         TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
@@ -327,9 +326,6 @@ using Enzyme  # AD backends you want to use
         probes.str[it]  = abs(ε̇bg)*it*Δ.t
 
         #-------------------------------------------# 
-
-        @info τ_ini*sc.σ
-        @show τxx_ini*sc.σ, τyy_ini*sc.σ
       
         # Visualise
         function figure()
@@ -424,8 +420,6 @@ using Enzyme  # AD backends you want to use
     end
 
     #--------------------------------------------#
-
-    save("./examples/_TwoPhases/TwoPhasesPlasticity/VE_loading_homogeneous.jld2", "probes", probes)
 
     return 
 end

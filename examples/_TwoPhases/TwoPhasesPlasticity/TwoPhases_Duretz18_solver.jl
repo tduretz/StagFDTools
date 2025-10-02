@@ -14,7 +14,7 @@ using Enzyme  # AD backends you want to use
     homo   = false
 
     # Time steps
-    nt     = 30
+    nt     = 1
     Δt0    = 1e10/sc.t 
 
     # Newton solver
@@ -22,10 +22,10 @@ using Enzyme  # AD backends you want to use
     ϵ_nl  = 1e-10
     α     = LinRange(0.05, 1.0, 5)
 
-    rad     = 1e2/sc.L 
+    rad     = 2e2/sc.L 
     Pt_ini  = 0*1e8/sc.σ
     Pf_ini  = 0*1e6/sc.σ
-    ε̇bg     = -5e-15.*sc.t
+    ε̇bg     = -5e-15*sc.t
     τ_ini   = 0*(sind(35)*(Pt_ini-Pf_ini) + 0*1e7/sc.σ*cosd(35))  
 
     # Velocity gradient matrix
@@ -114,8 +114,8 @@ using Enzyme  # AD backends you want to use
     pattern = Fields(
         Fields(@SMatrix([1 1 1; 1 1 1; 1 1 1]),                 @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([1 1 1;  1 1 1]),        @SMatrix([1 1 1;  1 1 1])), 
         Fields(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]),  @SMatrix([1 1 1; 1 1 1; 1 1 1]),                @SMatrix([1 1; 1 1; 1 1]),        @SMatrix([1 1; 1 1; 1 1])),
-        Fields(@SMatrix([0 1 0;  0 1 0]),                       @SMatrix([0 0; 1 1; 0 0]),                       @SMatrix([1]),                   @SMatrix([1])),
         Fields(@SMatrix([0 1 0;  0 1 0]),                       @SMatrix([0 0; 1 1; 0 0]),                       @SMatrix([1]),                   @SMatrix([1 1 1; 1 1 1; 1 1 1])),
+        Fields(@SMatrix([0 1 0;  0 1 0]),                       @SMatrix([0 0; 1 1; 0 0]),                       @SMatrix([1]),                   @SMatrix([1])),
     )
 
     # Sparse matrix assembly
@@ -132,8 +132,7 @@ using Enzyme  # AD backends you want to use
 
     #--------------------------------------------#
     # Intialise field
-    # L   = (x=4e3/sc.L, y=2e3/sc.L)
-    L   = (x=2e3/sc.L, y=2e3/sc.L)
+    L   = (x=4e3/sc.L, y=2e3/sc.L)
 
     Δ   = (x=L.x/nc.x, y=L.y/nc.y, t=Δt0)
     R   = (x=zeros(size_x...), y=zeros(size_y...), pt=zeros(size_c...), pf=zeros(size_c...), Φ=zeros(size_c...))
@@ -182,22 +181,6 @@ using Enzyme  # AD backends you want to use
         @views phases.c[inx_c, iny_c][(X.c.x.^2 .+ (X.c.y').^2) .<= rad^2] .= 2
         @views phases.v[inx_v, iny_v][(X.v.x.^2 .+ (X.v.y').^2) .<= rad^2] .= 2
     end
-
-    # Xc = xc .+ 0*yc'
-    # Yc = 0*xc .+ yc'
-    # Xv = xv .+ 0*yv'
-    # Yv = 0*xv .+ yv'
-    # α  = 30.
-    # # ax = 2
-    # # ay = 1/2
-    # ax = 1
-    # ay = 1
-    # X_tilt = cosd(α).*Xc .- sind(α).*Yc
-    # Y_tilt = sind(α).*Xc .+ cosd(α).*Yc
-    # phases.c[inx_c, iny_c][(X_tilt.^2 ./ax.^2 .+ (Y_tilt).^2 ./ay^2) .< r^2 ] .= 2
-    # X_tilt = cosd(α).*Xv .- sind(α).*Yv
-    # Y_tilt = sind(α).*Xv .+ cosd(α).*Yv
-    # phases.v[inx_v, iny_v][(X_tilt.^2 ./ax.^2 .+ (Y_tilt).^2 ./ay^2) .< r^2 ] .= 2
 
     # Boundary condition values
     BC = ( Vx = zeros(size_x...), Vy = zeros(size_y...), Pt = zeros(size_c...), Pf = zeros(size_c...))
@@ -304,206 +287,108 @@ using Enzyme  # AD backends you want to use
 
             #--------------------------------------------#
             # Direct solver 
+            @info "Coupled"
             @time dx = - 𝑀 \ r
 
-            𝐊 = [
-                M.Vx.Vx M.Vx.Vy;
-                M.Vy.Vx M.Vy.Vy;
-            ]
-            𝐊 = droptol!(𝐊, 1e-15)
-
-            # @show extrema(diag(M.Vx.Vx))
-            # @show extrema(diag(M.Vy.Vy))
-                                   𝑀diff = 𝐊 - 𝐊'
-            # droptol!(𝑀diff, 1e-15)
-            # @show norm(𝑀diff)
-            # 𝐊fact = cholesky(𝐊)
-
-            # error()
+    #         𝐊 = [
+    #             M.Vx.Vx M.Vx.Vy M.Vx.Pf;
+    #             M.Vy.Vx M.Vy.Vy M.Vy.Pf;
+    #             M.Pf.Vx M.Pf.Vy M.Pf.Pf;
+    #         ]
 
 
-            # 𝐊fact = cholesky(droptol!(M.Vy.Vy,1e-15))
+    #         𝐐 = [
+    #             M.Vx.Pt;
+    #             M.Vy.Pt;
+    #             0*M.Pf.Pt;
+    #         ]
+    #         𝐐ᵀ = [M.Pt.Vx M.Pt.Vy 0*M.Pt.Pf;]
+    #         𝐏  = [M.Pt.Pt;] 
+
+    #         𝐏inv  = spdiagm(1.0 ./diag(𝐏))
+    #         𝐊sc_PC      = 𝐊 .- 𝐐*(𝐏inv*𝐐ᵀ)
 
 
-            𝐊 = [
-                M.Vx.Vx M.Vx.Vy M.Vx.Pf;
-                M.Vy.Vx M.Vy.Vy M.Vy.Pf;
-                0*M.Pf.Vx 0*M.Pf.Vy M.Pf.Pf;
-            ]
+    #         𝐐 = [
+    #             M.Vx.Pt;
+    #             M.Vy.Pt;
+    #             M.Pf.Pt;
+    #         ]
+    #         𝐊sc         = 𝐊 .- 𝐐*(𝐏inv*𝐐ᵀ)
 
-            @show M.Pf.Vx
+    #         # cholesky(1/2*(𝐊sc .+ 𝐊sc'))
 
-            𝐊 = droptol!(𝐊, 1e-15)
+    #         𝐊_PC = copy(𝐊)
 
-            𝐐 = [
-                M.Vx.Pt;
-                M.Vy.Pt;
-                M.Pf.Pt;
-            ]
-            𝐐ᵀ = [M.Pt.Vx M.Pt.Vy M.Pt.Pf;]
-            𝐏  = [M.Pt.Pt;] 
+    #         # fu   = -r[1:size(𝐊,1)]
+    #         # fp   = -r[size(𝐊,1)+1:end]
 
-            𝐊_PC = copy(𝐊)
+    #         iu   = [1:(nVx + nVy); (nVx + nVy + nPt)+1:(nVx + nVy + nPt + nPf)]
+    #         ip   = (nVx + nVy)+1:(nVx + nVy + nPt)
+    #         fu   = -r[iu]
+    #         fp   = -r[ip]
 
-            fu   = -r[1:size(𝐊,1)]
-            fp   = -r[size(𝐊,1)+1:end]
-            ηb  = 1e5
-            ϵ_l = 1e-8
+    #         @info "Decoupled"
 
-            if nnz(𝐏) == 0 # incompressible limit
-                𝐏inv  = ηb .* I(size(𝐏,1))
-            else # compressible case
-                𝐏inv  = spdiagm(1.0 ./diag(𝐏))
-            end
-            𝐊sc      = 𝐊    .- 𝐐*(𝐏inv*𝐐ᵀ)
-            𝐊sc_PC   = 𝐊_PC .- 𝐐*(𝐏inv*𝐐ᵀ)
-            niter_l  = 5
-
- 
-
-            # 𝑀diff = M.Vy.Vy - M.Vy.Vy'
-            # droptol!(𝑀diff, 1e-15)
-            # @show norm(𝑀diff)
-            # @show 𝑀diff
-
-            fig  = Figure(fontsize = 20, size = (900, 600) )    
-            ax   = Axis(fig[1,1], aspect=DataAspect(), title=L"$$Strain", xlabel=L"x", ylabel=L"y")
-            spy!(ax, 𝐊)
-            ylims!(ax, size(𝐊,2), 0)
-            ax   = Axis(fig[1,2], aspect=DataAspect(), title=L"$$Strain", xlabel=L"x", ylabel=L"y")
-            spy!(ax, 𝑀diff)
-            ylims!(ax, size(𝐊,2), 0)
-            display(fig)
-            
-
-            # if fact == :chol
-                L_PC  = I(size(𝐊sc,1))
-                # 𝐊fact = cholesky(Hermitian(L_PC*𝐊sc), check=false)
-                                𝐊fact = cholesky(𝐊sc)
-
-            # elseif fact == :symchol
-            #     L_PC  = 𝐊sc'
-            #     @time 𝐊fact = cholesky(Hermitian(𝐊sc_PC), check=false)
-            #     @time Ksym = L_PC*𝐊sc
-            #     @time 𝐊fact = cholesky(Hermitian(Ksym), check=false)
-            # elseif fact == :PCchol
-            #     L_PC  = I(size(𝐊sc,1))
-            #     @time 𝐊fact = cholesky(Hermitian(𝐊sc_PC), check=false)
-            # elseif fact == :lu
-                # L_PC  = I(size(𝐊sc,1))
-                # @time 𝐊fact = lu(L_PC*𝐊sc)
-            # end
-            ru    = zeros(size(𝐊,1))
-            u     = zeros(size(𝐊,1))
-            ru    = zeros(size(𝐊,1))
-            fusc  = zeros(size(𝐊,1))
-            p     = zeros(size(𝐐,2))
-            rp    = zeros(size(𝐐,2))
-            # Iterations
-            for rit=1:niter_l           
-                ru   .= fu .- 𝐊*u  .- 𝐐*p
-                rp   .= fp .- 𝐐ᵀ*u .- 𝐏*p
-                nrmu, nrmp = norm(ru), norm(rp)
-                @printf("  --> Powell-Hestenes Iteration %02d\n  Momentum res.   = %2.2e\n  Continuity res. = %2.2e\n", rit, nrmu/sqrt(length(ru)), nrmp/sqrt(length(rp)))
-                if nrmu/sqrt(length(ru)) < ϵ_l && nrmp/sqrt(length(rp)) < ϵ_l
-                    break
-                end
-                fusc .= fu  .- 𝐐*(𝐏inv*fp .+ p)
-                u    .= 𝐊fact\(L_PC*fusc)
-
-                # # Iterative refinement
-                # ϵ_ref = 1e-7
-                # for iter_ref=1:10
-                #     ru .= 𝐊sc*u .- fusc
-                #     @printf("  --> Iterative refinement %02d\n res.   = %2.2e\n", iter_ref, norm(ru)/sqrt(length(ru)))
-                #     norm(ru)/sqrt(length(ru)) < ϵ_ref && break
-                #     du  = 𝐊fact\(L_PC*ru)
-                #     u  .-= du
-                # end
-        
-                p   .+= 𝐏inv*(fp .- 𝐐ᵀ*u .- 𝐏*p)
-            end
+    #           𝐊fact = cholesky(1/2*(𝐊_PC.+𝐊_PC'))  
 
 
+    # # if fact == :chol
+    # #     L_PC  = I(size(𝐊sc,1))
+    # #     𝐊fact = cholesky(Hermitian(L_PC*𝐊sc), check=false)
+    # # elseif fact == :symchol
+    # #     L_PC  = 𝐊sc'
+    # #     @time 𝐊fact = cholesky(Hermitian(𝐊sc_PC), check=false)
+    # #     @time Ksym = L_PC*𝐊sc
+    # #     @time 𝐊fact = cholesky(Hermitian(Ksym), check=false)
+    # # elseif fact == :PCchol
+    # #     L_PC  = I(size(𝐊sc,1))
+    # #     @time 𝐊fact = cholesky(Hermitian(𝐊sc_PC), check=false)
+    # # elseif fact == :lu
+    # #     L_PC  = I(size(𝐊sc,1))
+    # #     @time 𝐊fact = lu(L_PC*𝐊sc)
+    # # end
+    # ru    = zeros(size(𝐊,1))
+    # u     = zeros(size(𝐊,1))
+    # ru    = zeros(size(𝐊,1))
+    # fusc  = zeros(size(𝐊,1))
+    # p     = zeros(size(𝐐,2))
+    # rp    = zeros(size(𝐐,2))
+    # # Iterations
+    # ϵ_l = 1e-10
+    # for rit=1:5#niter_l           
+    #     ru   .= fu .- 𝐊*u  .- 𝐐*p
+    #     rp   .= fp .- 𝐐ᵀ*u .- 𝐏*p
+    #     nrmu, nrmp = norm(ru), norm(rp)
+    #     @printf("  --> Powell-Hestenes Iteration %02d\n  Momentum res.   = %2.2e\n  Continuity res. = %2.2e\n", rit, nrmu/sqrt(length(ru)), nrmp/sqrt(length(rp)))
+    #     if nrmu/sqrt(length(ru)) < ϵ_l && nrmp/sqrt(length(rp)) < ϵ_l
+    #         break
+    #     end
+    #     fusc .= fu  .- 𝐐*(𝐏inv*fp .+ p)
+    #     # u    .= 𝐊fact\(fusc)
 
-            error()
+    #     # # Iterative refinement
+    #     # ϵ_ref = 1e-7
+    #     # for iter_ref=1:10
+    #     #     ru .= 𝐊sc*u .- fusc
+    #     #     @printf("  --> Iterative refinement %02d\n res.   = %2.2e\n", iter_ref, norm(ru)/sqrt(length(ru)))
+    #     #     norm(ru)/sqrt(length(ru)) < ϵ_ref && break
+    #     #     du  = 𝐊fact\(ru)
+    #     #     u  .-= du
+    #     # end
+   
+    #     p   .+= 𝐏inv*(fp .- 𝐐ᵀ*u .- 𝐏*p)
+    # end
 
-            # # M2Di solver
-            # fv    = -r[1:(nVx+nVy)]
-            # fpt   = -r[(nVx+nVy+1):(nVx+nVy+nPt)]
-            # fpf   = -r[(nVx+nVy+nPt+1):end]
-            # dv    = zeros(nVx+nVy)
-            # dpt   = zeros(nPt)
-            # dpf   = zeros(nPf)
-            # rv    = zeros(nVx+nVy)
-            # rpt   = zeros(nPt)
-            # rpf   = zeros(nPf)
-            # rv_t  = zeros(nVx+nVy)
-            # rpt_t = zeros(nPt)
-            # s     = zeros(nPf)
-            # ddv   = zeros(nVx+nVy)
-            # ddpt  = zeros(nPt)
-            # ddpf  = zeros(nPf)
 
-            # Jvv  = [M.Vx.Vx M.Vx.Vy;
-            #         M.Vy.Vx M.Vy.Vy]
-            # Jvp  = [M.Vx.Pt;
-            #         M.Vy.Pt]
-            # Jpv  = [M.Pt.Vx M.Pt.Vy]
-            # Jpp  = M.Pt.Pt
-            # Jppf = M.Pt.Pf
-            # Jpfv = [M.Pf.Vx M.Pf.Vy]
-            # Jpfp = M.Pf.Pt
-            # Jpf  = M.Pf.Pf
-            # Kvv  = Jvv
+            # @time u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu,  ηb=1e3, niter_l=10, ϵ_l=1e-11)
 
-            # @time begin 
-            #     # γ = 1e-8
-            #     # Γ = spdiagm(γ*ones(nPt))
-            #     # Pre-conditionning (~Jacobi)
-            #     Jpv_t  = Jpv  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfv  
-            #     Jpp_t  = Jpp  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfp  #.+ Γ
-            #     Jvv_t  = Kvv  - Jvp *spdiagm(1 ./ diag(Jpp_t))*Jpv 
-            #     @show typeof(SparseMatrixCSC(Jpf))
-            #     Jpf_h  = cholesky(Hermitian(SparseMatrixCSC(Jpf)), check = false  )        # Cholesky factors
-            #     Jvv_th = cholesky(Hermitian(SparseMatrixCSC(Jvv_t)), check = false)        # Cholesky factors
-            #     Jpp_th = spdiagm(1 ./diag(Jpp_t));             # trivial inverse
-            #     @views for itPH=1:15
-            #         rv    .= -( Jvv*dv  + Jvp*dpt             - fv  )
-            #         rpt   .= -( Jpv*dv  + Jpp*dpt  + Jppf*dpf - fpt )
-            #         rpf   .= -( Jpfv*dv + Jpfp*dpt + Jpf*dpf  - fpf )
-            #         s     .= Jpf_h \ rpf
-            #         rpt_t .= -( Jppf*s - rpt)
-            #         s     .=    Jpp_th*rpt_t
-            #         rv_t  .= -( Jvp*s  - rv )
-            #         ddv   .= Jvv_th \ rv_t
-            #         s     .= -( Jpv_t*ddv - rpt_t )
-            #         ddpt  .=    Jpp_th*s
-            #         s     .= -( Jpfp*ddpt + Jpfv*ddv - rpf )
-            #         ddpf  .= Jpf_h \ s
-            #         dv   .+= ddv
-            #         dpt  .+= ddpt
-            #         dpf  .+= ddpf
-            #         @printf("  --- iteration %d --- \n",itPH);
-            #         @printf("  ||res.v ||=%2.2e\n", norm(rv)/ 1)
-            #         @printf("  ||res.pt||=%2.2e\n", norm(rpt)/1)
-            #         @printf("  ||res.pf||=%2.2e\n", norm(rpf)/1)
-            #     #     if ((norm(rv)/length(rv)) < tol_linv) && ((norm(rpt)/length(rpt)) < tol_linpt) && ((norm(rpf)/length(rpf)) < tol_linpf), break; end
-            #     #     if ((norm(rv)/length(rv)) > (norm(rv0)/length(rv0)) && norm(rv)/length(rv) < tol_glob && (norm(rpt)/length(rpt)) > (norm(rpt0)/length(rpt0)) && norm(rpt)/length(rpt) < tol_glob && (norm(rpf)/length(rpf)) > (norm(rpf0)/length(rpf0)) && norm(rpf)/length(rpf) < tol_glob),
-            #     #         if noisy>=1, fprintf(' > Linear residuals do no converge further:\n'); break; end
-            #     #     end
-            #     #     rv0=rv; rpt0=rpt; rpf0=rpf; if (itPH==nPH), nfail=nfail+1; end
-            #     end
-            # end
-            
-            # dx = zeros(nVx + nVy + nPt + nPf)
-            # dx[1:(nVx+nVy)] .= dv
-            # dx[(nVx+nVy+1):(nVx+nVy+nPt)] .= dpt
-            # dx[(nVx+nVy+nPt+1):end] .= dpf
+            # dx[iu] .= u
+            # dx[ip] .= p
 
             #--------------------------------------------#
             @time imin = LineSearch!(rvec, α, dx, R, V, P, ε̇, τ, Vi, Pi, ΔP, P0, Φ, Φ0, τ0, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
-            UpdateSolution!(V, P, α[imin]*dx, number, type, nc)
+            UpdateSolution!(V, P, dx, number, type, nc)
         end
 
         TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
@@ -653,14 +538,12 @@ using Enzyme  # AD backends you want to use
 
     #--------------------------------------------#
 
-    save("./examples/_TwoPhases/TwoPhasesPlasticity/VE_loading_homogeneous.jld2", "probes", probes)
-
     return 
 end
 
 function Run()
 
-    nc = (x=20, y=20)
+    nc = (x=40, y=20)
 
     # Mode 0   
     @time main(nc);

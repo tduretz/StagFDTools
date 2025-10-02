@@ -174,11 +174,12 @@ function Continuity(Vx, Vy, Pt, Pt0, Pf, Pf0, Φ0, phase, materials, type_loc, b
 
     # dlnρsdt = (1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks)
 
-    # # Single phase
-    # if materials.single_phase
-    #     dΦdt    = 0.0
-    #     dlnρsdt = dPtdt / Ks
-    # end
+    # Single phase
+    if materials.single_phase
+        dΦdt    = 0.0
+        dPsdt   = dPtdt 
+        dlnρsdt = dPsdt / Ks
+    end
 
     divVs   = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy 
     
@@ -1136,11 +1137,16 @@ function GlobalResidual!(α, dx, R, V, P, ε̇, τ, ΔP, P0, Φ, Φ0, τ0, λ̇,
     ResidualFluidContinuity2D!(R, V, P, ΔP, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
 end
 
-@inline fnorm(R, inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c) = @views (norm(R.x[inx_Vx,iny_Vx])/sqrt(length(R.x[inx_Vx,iny_Vx]))) + (norm(R.y[inx_Vy,iny_Vy])/sqrt(length(R.y[inx_Vy,iny_Vy]))) + 1*(norm(R.pt[inx_c,iny_c])/length(R.pt[inx_c,iny_c])) + 1*(norm(R.pf[inx_c,iny_c])/length(R.pf[inx_c,iny_c]))
+@inline fnorm(R, inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c) = @views (norm(R.x[inx_Vx,iny_Vx])/sqrt(length(R.x[inx_Vx,iny_Vx])))^2 + (norm(R.y[inx_Vy,iny_Vy])/sqrt(length(R.y[inx_Vy,iny_Vy])))^2 + 1*(norm(R.pt[inx_c,iny_c])/length(R.pt[inx_c,iny_c]))^2 + 1*(norm(R.pf[inx_c,iny_c])/length(R.pf[inx_c,iny_c]))^2
 
-function BackTrackingLineSearch!(rvec, α, dx, R0, R, V, P, ε̇, τ, Vi, Pi, ΔP, P0, Φ, Φ0, τ0, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ; α_init=1.0, β=0.9, c=1e-4)
+function BackTrackingLineSearch!(rvec, α, dx, R0, R, V, P, ε̇, τ, Vi, Pi, ΔP, P0, Φ, Φ0, τ0, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ; α_init=1.0, β=0.5, c=1e-4)
     
     inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, inx_v, iny_v, size_x, size_y, size_c, size_v = Ranges(nc)
+
+    Vi.x .= V.x 
+    Vi.y .= V.y 
+    Pi.t .= P.t
+    Pi.f .= P.f
 
     α = α_init
     GlobalResidual!(0.0, dx, R0, V, P, ε̇, τ, ΔP, P0, Φ, Φ0, τ0, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
@@ -1154,10 +1160,11 @@ function BackTrackingLineSearch!(rvec, α, dx, R0, R, V, P, ε̇, τ, Vi, Pi, Δ
     # # while f_norm_sq >= (1 - c * α * slope) * f0_norm_sq
 
         k    += 1
-        Vi.x .= V.x 
-        Vi.y .= V.y 
-        Pi.t .= P.t
-        Pi.f .= P.f
+
+        V.x .= Vi.x 
+        V.y .= Vi.y
+        P.t .= Pi.t
+        P.f .= Pi.f
 
         GlobalResidual!(  α, dx, R, V, P, ε̇, τ, ΔP, P0, Φ, Φ0, τ0, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
         
@@ -1170,6 +1177,9 @@ function BackTrackingLineSearch!(rvec, α, dx, R0, R, V, P, ε̇, τ, Vi, Pi, Δ
         end
 
         # @show α, f_norm_sq, f0_norm_sq, (1 - c * α * slope) * f0_norm_sq
+
+
+        @show α, f_norm_sq, f0_norm_sq, f_norm_sq/f0_norm_sq
 
         α *= β
 

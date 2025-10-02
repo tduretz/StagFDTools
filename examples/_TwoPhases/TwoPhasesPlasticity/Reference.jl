@@ -6,7 +6,7 @@ using Enzyme  # AD backends you want to use
 
     sc = (σ=1e7, t=1e10, L=1e3)
 
-    homo   = false
+    homo   = true
 
     # Time steps
     nt     = 30
@@ -527,7 +527,7 @@ end
 
 function Run()
 
-    nc = (x=200, y=100)
+    nc = (x=10, y=10)
 
     # Mode 0   
     main(nc);

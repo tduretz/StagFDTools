@@ -201,14 +201,14 @@ using TimerOutputs
             𝐊  .= [M.Vx.Vx M.Vx.Vy; M.Vy.Vx M.Vy.Vy]
             𝐐  .= [M.Vx.Pt; M.Vy.Pt]
             𝐐ᵀ .= [M.Pt.Vx M.Pt.Vy]
-            𝐏  .= [M.Pt.Pt;]             
-            
+            𝐏  .= [M.Pt.Pt;]      
+                        
             #--------------------------------------------#
      
             # Direct-iterative solver
             fu   = -r[1:size(𝐊,1)]
             fp   = -r[size(𝐊,1)+1:end]
-            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu,  ηb=1e3, niter_l=10, ϵ_l=1e-11)
+            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:chol,  ηb=1e3, niter_l=10, ϵ_l=1e-11)
             dx[1:size(𝐊,1)]     .= u
             dx[size(𝐊,1)+1:end] .= p
 
@@ -232,9 +232,6 @@ using TimerOutputs
         p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
         p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
         p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
-        p5 = heatmap(xc, yc,  (λ̇.c[inx_c, iny_c] .> 0.)', aspect_ratio=1, xlim=extrema(xc), title="ηc")
-        p6 = heatmap(xv, yv,  (λ̇.v[inx_v, iny_v] .> 0.)', aspect_ratio=1, xlim=extrema(xv), title="ηv")
- 
         display(plot(p1, p2, p3, p4, layout=(2,2)))
 
     end

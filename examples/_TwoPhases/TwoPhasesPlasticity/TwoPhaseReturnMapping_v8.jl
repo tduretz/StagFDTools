@@ -27,7 +27,7 @@ function residual_two_phase_trial(x, ε̇II_eff, Pt_trial, Pf_trial, Φ_trial, P
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
     dΦdt    = (dPfdt - dPtdt)/KΦ + (Pf - Pt)/ηΦ + λ̇*sind(ψ)*(f>=eps)
-
+    
     return @SVector[ 
         ε̇II_eff   -  τII/2/ηve - λ̇/2*(f>=eps),
         Pt - (Pt_trial + ΔPt),
@@ -48,7 +48,13 @@ function residual_two_phase_div_pressure(x, divVs, divqD, Pt0, Pf0, Φ0, p)
     dΦdt    = (dPfdt - dPtdt)/KΦ + (Pf - Pt)/ηΦ
 
     dlnρfdt = dPfdt / Kf
-    dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
+    dPsdt   = 1/(1-Φ) *(dPtdt - Φ*dPfdt)
+    dlnρsdt = dPsdt / Ks
+    @show dPsdt
+
+    # dPsdt = dΦdt*(Pt - Pf*Φ)/(1-Φ)^2 + (dPtdt - Φ*dPfdt - Pf*dΦdt) / (1 - Φ)
+    # dlnρsdt = dPsdt /Ks 
+    # @show dPsdt
 
     f_sol = dlnρsdt   - dΦdt/(1-Φ) +   divVs
     f_liq = (Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD)/ηΦ
@@ -198,7 +204,16 @@ function StressVector_trial(ϵ̇, divVs, divqD, τ0, Pt0, Pf0, Φ0, params)
     dlnρsdt = 1/(1-Φ_trial) *(dPtdt - Φ_trial*dPfdt) / Ks
     f1=dlnρsdt   - dΦdt/(1-Φ_trial) +   divVs
     f2=Φ_trial*dlnρfdt + dΦdt       + Φ_trial*divVs + divqD
-    @show f1, f2
+    @show 0, f1, f2
+
+    # Specific form 
+    Φ       = Φ_trial
+    Kd = (1-Φ)*(1/KΦ + 1/Ks)^-1
+    α  = 1 - Kd/Ks
+    B  = (1/Kd - 1/Ks) / (1/Kd - 1/Ks + Φ*(1/Kf - 1/Ks))
+    f1 = divVs     + 1/Kd*(dPtdt -   α*dPfdt) + (Pt_trial-Pf_trial)/((1-Φ)*ηΦ)
+    f2 = divqD     - α/Kd*(dPtdt - 1/B*dPfdt) - (Pt_trial-Pf_trial)/((1-Φ)*ηΦ)
+    @show 0, f1, f2
 
     ### Check residuals with corrected pressures: should be zero !
 
@@ -213,7 +228,7 @@ function StressVector_trial(ϵ̇, divVs, divqD, τ0, Pt0, Pf0, Φ0, params)
     dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
     f1=dlnρsdt   - dΦdt/(1-Φ) +   divVs
     f2=Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD
-    @show f1, f2
+    @show 1, f1, f2
 
     # Specific form 
     Kd = (1-Φ)*(1/KΦ + 1/Ks)^-1
@@ -221,12 +236,12 @@ function StressVector_trial(ϵ̇, divVs, divqD, τ0, Pt0, Pf0, Φ0, params)
     B  = (1/Kd - 1/Ks) / (1/Kd - 1/Ks + Φ*(1/Kf - 1/Ks))
     f1 = divVs     + 1/Kd*(dPtdt -   α*dPfdt) - 1/(1-Φ)*λ̇*sind(ψ) + (Pt-Pf)/((1-Φ)*ηΦ)
     f2 = divqD     - α/Kd*(dPtdt - 1/B*dPfdt) + 1/(1-Φ)*λ̇*sind(ψ) - (Pt-Pf)/((1-Φ)*ηΦ)
-    @show f1, f2
+    @show 1, f1, f2
 
     # Specific form (rederived)
     f1 = divVs    + (1/Ks)/(1-Φ) * (dPtdt - Φ*dPfdt) + (1/KΦ)/(1-Φ) * (dPtdt - dPfdt) + (Pt-Pf)/((1-Φ)*ηΦ) - 1/(1-Φ)*λ̇*sind(ψ)
     f2 = divqD    - (dPtdt - dPfdt)/KΦ + Φ*dPfdt/Kf + Φ*divVs - (Pt-Pf)/ηΦ + λ̇*sind(ψ)
-    @show f1, f2
+    @show 1, f1, f2
 
     return @SVector[τ[1], τ[2], τ[3], Pt, Pf], λ̇, Φ1, r 
 end
@@ -367,7 +382,7 @@ function two_phase_return_mapping()
     Φ    = 0.05 
 
     # Parameters
-    nt = 10
+    nt = 30
     
     params = (
         G       = 3e10/sc.σ,
@@ -448,34 +463,34 @@ function two_phase_return_mapping()
         display(D_ctl_trial)
         #########################################################
 
-        @info "TRIAL DIVERGENCES"
+        # @info "TRIAL DIVERGENCES"
 
-        x = @SVector[divVs, divqD]
-        Pressures(x, Pt0, Pf0, Φ0, params)
-        J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, Pressures, x, Pt0, Pf0, Φ0, Const(params))
-        Jp =  J.derivs[1]
-        display(Jp)
-        # error()
+        # x = @SVector[divVs, divqD]
+        # Pressures(x, Pt0, Pf0, Φ0, params)
+        # J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, Pressures, x, Pt0, Pf0, Φ0, Const(params))
+        # Jp =  J.derivs[1]
+        # display(Jp)
+        # # error()
 
-        # Invariants - TAKES IN DIVERGENCES 
-        ϵ̇          = @SVector[ε̇_eff[1], ε̇_eff[2], ε̇_eff[3], divVs, divqD]
-        σ, λ̇, Φ, r = StressVector_div(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
-        τ, Pt, Pf  = σ[1:3], σ[4], σ[5]
+        # # Invariants - TAKES IN DIVERGENCES 
+        # ϵ̇          = @SVector[ε̇_eff[1], ε̇_eff[2], ε̇_eff[3], divVs, divqD]
+        # σ, λ̇, Φ, r = StressVector_div(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
+        # τ, Pt, Pf  = σ[1:3], σ[4], σ[5]
 
-        @show τ, Pt, Pf, Φ
+        # @show τ, Pt, Pf, Φ
 
-        # Consistent tangent
-        J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_div, ϵ̇, Const(τ0), Const(Pt0),  Const(Pf0), Const(Φ0), Const(params))
+        # # Consistent tangent
+        # J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_div, ϵ̇, Const(τ0), Const(Pt0),  Const(Pf0), Const(Φ0), Const(params))
        
-        @views D_ctl_div[:,1] .= J.derivs[1][1][1]
-        @views D_ctl_div[:,2] .= J.derivs[1][2][1]
-        @views D_ctl_div[:,3] .= J.derivs[1][3][1]
-        @views D_ctl_div[:,4] .= J.derivs[1][4][1]
-        @views D_ctl_div[:,5] .= J.derivs[1][5][1]
+        # @views D_ctl_div[:,1] .= J.derivs[1][1][1]
+        # @views D_ctl_div[:,2] .= J.derivs[1][2][1]
+        # @views D_ctl_div[:,3] .= J.derivs[1][3][1]
+        # @views D_ctl_div[:,4] .= J.derivs[1][4][1]
+        # @views D_ctl_div[:,5] .= J.derivs[1][5][1]
 
-        C[4:5,4:5] .=  inv(Jp)#D_ctl_div[4:5,4:5]
+        # C[4:5,4:5] .=  inv(Jp)#D_ctl_div[4:5,4:5]
 
-        display(D_ctl_div * (C))
+        # display(D_ctl_div * (C))
         #########################################################
 
         # Probes
@@ -525,8 +540,7 @@ function two_phase_return_mapping()
         display(fig)
     end
     with_theme(figure, theme_latexfonts())
-    # display(probes.Pt)
-    # display(probes.Pf)
+
 
 end
 
