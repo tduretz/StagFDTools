@@ -38,12 +38,12 @@ Dat = Float64  # Precision (double=Float64 or single=Float32)
     if viscoelastic
         G       = 1e-7              # elastic shear modulus
         Ks      = 1e-6
-        Kϕ      = 1e-6
+        KΦ      = 1e-6
         Kf      = 1e-5
     else
         G       = 1e10              # elastic shear modulus
         Ks      = 1e10
-        Kϕ      = 1e10
+        KΦ      = 1e10
         Kf      = 1e10
     end
     # Numerics
@@ -68,7 +68,7 @@ Dat = Float64  # Precision (double=Float64 or single=Float32)
     ln1mϕ0  = zeros(Dat, nx  ,ny  ) .= ln1mϕ
     ϕ       = ϕi.*ones(Dat, nx  ,ny  )
     ϕ_viz   = ϕi.*ones(Dat, nx  ,ny  )
-    Kd      = (1 .- ϕ) .* (1/Kϕ + 1/Ks)^(-1)
+    Kd      = (1 .- ϕ) .* (1/KΦ + 1/Ks)^(-1)
     α       =  1 .- Kd./Ks
     B       = @. (1/Kd .- 1/Ks) ./ ( 1/Kd - 1/Ks + ϕ*(1/Kf - 1/Ks) )
     ϕex     = zeros(Dat, nx+2,ny+2)
@@ -220,7 +220,7 @@ Dat = Float64  # Precision (double=Float64 or single=Float32)
         end
 
         # Explicit update of porosity
-        ϕ_viz .+= dt_phys*(-(Pt.-Pf)./η_ϕ + ((Pt.-Pt0).-(Pf.-Pf0))/dt_phys./Kϕ)
+        ϕ_viz .+= dt_phys*(-(Pt.-Pf)./η_ϕ + ((Pt.-Pt0).-(Pf.-Pf0))/dt_phys./KΦ)
 
         t  += dt_phys
         push!(evo_t, t); push!(evo_τII, maximum(τII)-minimum(τII)); push!(evo_Pt, maximum(Pt)-minimum(Pt)); push!(evo_Pf, maximum(Pf)-minimum(Pf))

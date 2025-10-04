@@ -43,7 +43,7 @@ end
     ϕ0     = 1e-3
     # Dependant
     ηb0      = 2*ηs0       # Bulk viscosity
-    ηϕi      = ηb0
+    ηΦi      = ηb0
     k_ηf0    = 1.0 # Permeability / fluid viscosity
     kμfi     = 1e1
     r_in     = 1.        # Inclusion radius 
@@ -78,8 +78,8 @@ end
     V   = (x=zeros(size_x...), y=zeros(size_y...))
     η   = (x= ηs0.*ones(size_x...), y= ηs0.*ones(size_y...), p = ηs0.*ones(size_c...) )
     ϕ   = ϕ0.*ones(size_c...) 
-    ηϕ  = ηb0./(1. .-ϕ ).*ones(size_c...) 
-    Kϕ  = Kϕ0.*ones(size_c...) 
+    ηΦ  = ηb0./(1. .-ϕ ).*ones(size_c...) 
+    KΦ  = KΦ0.*ones(size_c...) 
     Ks  = Ks0.*ones(size_c...) 
     Kf  = Kf0.*ones(size_c...) 
     G   = (x= G0.*ones(size_x...), y= G0.*ones(size_y...), p = G0.*ones(size_c...) )
@@ -170,14 +170,14 @@ end
     P.f[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= r_in^2]  .= dPf
     P.f[inx_c, iny_c][(xc.^2 .+ (yc').^2) .>= r_out^2] .= Pf_out
 
-    Kϕ[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= r_in^2] .= Kϕi
+    KΦ[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= r_in^2] .= KΦi
     Ks[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= r_in^2] .= Ksi
     Kf[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= r_in^2] .= Kfi
     η.y[(xvy.^2 .+ (yvy').^2) .<= r_in^2] .= ηsi
     η.x[(xvx.^2 .+ (yvx').^2) .<= r_in^2] .= ηsi 
     G.y[(xvy.^2 .+ (yvy').^2) .<= r_in^2] .= Gi
     G.x[(xvx.^2 .+ (yvx').^2) .<= r_in^2] .= Gi 
-    ηϕ[(xce.^2 .+ (yce').^2) .<= r_in^2]  .= ηϕi
+    ηΦ[(xce.^2 .+ (yce').^2) .<= r_in^2]  .= ηΦi
 
 
 
@@ -186,22 +186,22 @@ end
 
     Ks[inx_c, iny_c][(xc.^2 .+ (yc').^2) .>= r_out^2] .= Ksi
     Kf[inx_c, iny_c][(xc.^2 .+ (yc').^2) .>= r_out^2] .= Kfi
-    Kϕ[inx_c, iny_c][(xc.^2 .+ (yc').^2) .>= r_out^2] .= Kϕi
+    KΦ[inx_c, iny_c][(xc.^2 .+ (yc').^2) .>= r_out^2] .= KΦi
     η.y[(xvy.^2 .+ (yvy').^2) .>= r_out^2] .= ηsi
     η.x[(xvx.^2 .+ (yvx').^2) .>= r_out^2] .= ηsi 
     G.y[(xvy.^2 .+ (yvy').^2) .>= r_out^2] .= Gi
     G.x[(xvx.^2 .+ (yvx').^2) .>= r_out^2] .= Gi
-    ηϕ[(xce.^2 .+ (yce').^2) .>= r_out^2]  .= ηϕi
+    ηΦ[(xce.^2 .+ (yce').^2) .>= r_out^2]  .= ηΦi
 
     η.y .= 1 ./ (1. ./ η.y .+ 1. ./ (G.y*Δ.t))
     η.x .= 1 ./ (1. ./ η.x .+ 1. ./ (G.x*Δ.t))
     
     η.p .= 0.25.*(η.x[1:end-1,2:end-1].+η.x[2:end-0,2:end-1].+η.y[2:end-1,1:end-1].+η.y[2:end-1,2:end-0])
-    Kd = (1-ϕ0) .* ( 1 ./ Kϕ + 1 ./ Ks).^1
+    Kd = (1-ϕ0) .* ( 1 ./ KΦ + 1 ./ Ks).^1
     α  = 1 .- Kd ./ Ks
     B  = (Kd.^-1 - Ks.^-1) ./ (Kd.^-1 - Ks.^-1 + ϕ.*(Kf.^-1 .- Ks.^1))
 
-    rheo = (η=η, ηϕ=ηϕ, kμf=kμf, ϕ=ϕ, B=B, α=α, Kd=Kd)
+    rheo = (η=η, ηΦ=ηΦ, kμf=kμf, ϕ=ϕ, B=B, α=α, Kd=Kd)
 
     @show extrema(α)
     @show extrema(B)

@@ -6,7 +6,7 @@ using Enzyme  # AD backends you want to use
 
     nt  = 1
     Δt0 = 1e4
-    viscoelastic = false
+    viscoelastic = true
 
     # nt  = 1
     # Δt0 = 5e9
@@ -53,7 +53,7 @@ using Enzyme  # AD backends you want to use
         G     = [1e-7 1e-7], 
         Kd    = [1e-6 1e-6],
         Ks    = [1e-6 1e-6],
-        Kϕ    = [1e-6 1e-6],
+        KΦ    = [1e-6 1e-6],
         Kf    = [1e-5 1e-5],
         k_ηf0 = [k_ηf0 k_ηf0],
     )
@@ -67,7 +67,7 @@ using Enzyme  # AD backends you want to use
         G     = [1e30 1e30], 
         Kd    = [1e30 1e30],
         Ks    = [1e30 1e30],
-        Kϕ    = [1e30 1e30],
+        KΦ    = [1e30 1e30],
         Kf    = [1e30 1e30],
         k_ηf0 = [k_ηf0 k_ηf0],
     )
@@ -78,8 +78,8 @@ using Enzyme  # AD backends you want to use
     @show materials.ηb  ./ materials.G
     @show materials.ηs0 ./ materials.Kd
     @show materials.ηb  ./ materials.Kd
-    @show materials.ηs0 ./ materials.Kϕ
-    @show materials.ηb  ./ materials.Kϕ
+    @show materials.ηs0 ./ materials.KΦ
+    @show materials.ηb  ./ materials.KΦ
     @show materials.ηs0 ./ materials.Kf
     @show materials.ηb  ./ materials.Kf
     @show r^2/k_ηf0/materials.Ks[1]
@@ -160,10 +160,9 @@ using Enzyme  # AD backends you want to use
     ln1mϕ0  = (c=log(1-ϕi).*ones(size_c...), v=log(1-ϕi).*ones(size_v...) )
 
 
-    ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
+    ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
     τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
-
     Dc      =  [@MMatrix(zeros(5,5)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)]
     Dv      =  [@MMatrix(zeros(5,5)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)]
     𝐷       = (c = Dc, v = Dv)
@@ -397,12 +396,12 @@ using Enzyme  # AD backends you want to use
         divVs = diff(V.x[2:end-1,3:end-2], dims=1)./Δ.x .+ diff(V.y[3:end-2,2:end-1], dims=2)./Δ.y
         # Post process 
         @time for i in eachindex(ϕ.c)
-            Kϕ = materials.Kϕ[phases.c[i]]
-            ηϕ = materials.ηb[phases.c[i]] 
-            ϕ.c[i] = ϕ0.c[i] .+ Δ.t*( 1/Kϕ * ((P.f[i] - P0.f[i])/Δ.t - (P.t[i] - P0.t[i])/Δ.t) + 1/ηϕ*(P.f[i] - P.t[i]) )
+            KΦ = materials.KΦ[phases.c[i]]
+            ηΦ = materials.ηb[phases.c[i]] 
+            ϕ.c[i] = ϕ0.c[i] .+ Δ.t*( 1/KΦ * ((P.f[i] - P0.f[i])/Δ.t - (P.t[i] - P0.t[i])/Δ.t) + 1/ηΦ*(P.f[i] - P.t[i]) )
             # divVs
             # ϕ.c[i] = ϕ0.c[i] +  Δ.t*(1 - ϕ0.c[i])*divVs
-            # ln1mϕ.c[i] = ln1mϕ0.c[i] .+ Δ.t/(1 - ϕ.c[i]) *( 1/Kϕ * ((P.f[i] - P0.f[i])/Δ.t + (P.t[i] - P0.t[i])/Δ.t) + 1/ηϕ*(P.f[i] - P.t[i]) )
+            # ln1mϕ.c[i] = ln1mϕ0.c[i] .+ Δ.t/(1 - ϕ.c[i]) *( 1/KΦ * ((P.f[i] - P0.f[i])/Δ.t + (P.t[i] - P0.t[i])/Δ.t) + 1/ηΦ*(P.f[i] - P.t[i]) )
             # ϕ.c[i] = 1.0 - exp(ln1mϕ.c[i])
         end
         ϕ.v[inx_v, iny_v] .= 0.25*(ϕ.c[1:end-1,1:end-1] .+ ϕ.c[1:end-1,2:end-0] .+ ϕ.c[2:end-0,1:end-1] .+ ϕ.c[2:end-0,2:end-0] )

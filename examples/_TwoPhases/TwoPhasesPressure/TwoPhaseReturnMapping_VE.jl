@@ -5,7 +5,7 @@ using GLMakie, Enzyme, LinearAlgebra#, ForwardDiff
 invII(x) = sqrt(1/2*x[1]^2 + 1/2*x[2]^2 + x[3]^2) 
 
 function residual_two_phase(x, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, p)
-    G, Kϕ, Ks, Kf, C, ϕ, ψ, ηvp, ηs, ηΦ, Δt = p.G, p.Kϕ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηs, p.ηΦ, p.Δt
+    G, KΦ, Ks, Kf, C, ϕ, ψ, ηvp, ηs, ηΦ, Δt = p.G, p.KΦ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηs, p.ηΦ, p.Δt
     elastic, plastic = p.elastic, p.plastic
     eps   = -1e-13
     ηe    = G*Δt 
@@ -16,12 +16,12 @@ function residual_two_phase(x, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, p)
     end
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
-    dΦdt    = elastic*1/Kϕ * (dPfdt - dPtdt) + 1/ηΦ * (Pf - Pt) + plastic*λ̇*sind(ψ)*(f>=eps)
+    dΦdt    = elastic*1/KΦ * (dPfdt - dPtdt) + 1/ηΦ * (Pf - Pt) + plastic*λ̇*sind(ψ)*(f>=eps)
     Φ       = Φ0 + dΦdt*Δt
     dlnρfdt = elastic * (dPfdt / Kf)
     dlnρsdt = elastic * (1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks)
 
-    # Kd = (1-Φ)*(1/Kϕ + 1/Ks)^-1
+    # Kd = (1-Φ)*(1/KΦ + 1/Ks)^-1
     # α  = 1 - Kd/Ks
     # B  = (1/Kd - 1/Ks) / (1/Kd - 1/Ks + Φ*(1/Kf - 1/Ks))
 
@@ -34,8 +34,8 @@ function residual_two_phase(x, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, p)
     # fpf2 = divqD     - α/Kd*(dPtdt - 1/B*dPfdt) + 1/(1-Φ)*λ̇*sind(ψ)*(f>=eps) - (Pt-Pf)/((1-Φ)*ηΦ)
 
     # # Equations self-rederived from Yarushina (2015) adding dilation
-    # fpt3 = divVs    + (1/Ks)/(1-Φ) * (dPtdt - Φ*dPfdt) + (1/Kϕ)/(1-Φ) * (dPtdt - dPfdt) + (Pt-Pf)/((1-Φ)*ηΦ) - 1/(1-Φ)*λ̇*sind(ψ)*(f>=eps)
-    # fpf3 = divqD    - (dPtdt - dPfdt)/Kϕ + Φ*dPfdt/Kf + Φ*divVs - (Pt-Pf)/ηΦ +   1/(1-Φ)*λ̇*sind(ψ)*(f>=eps)
+    # fpt3 = divVs    + (1/Ks)/(1-Φ) * (dPtdt - Φ*dPfdt) + (1/KΦ)/(1-Φ) * (dPtdt - dPfdt) + (Pt-Pf)/((1-Φ)*ηΦ) - 1/(1-Φ)*λ̇*sind(ψ)*(f>=eps)
+    # fpf3 = divqD    - (dPtdt - dPfdt)/KΦ + Φ*dPfdt/Kf + Φ*divVs - (Pt-Pf)/ηΦ +   1/(1-Φ)*λ̇*sind(ψ)*(f>=eps)
 
     ηs_eff = ηs#ηs*(1-Φ) + (Φ)*ηs/100
 
@@ -106,11 +106,11 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
     # Recompute components
     τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
     τ = ε̇_eff .* τII./ε̇II_eff
-    Kϕ, ηΦ, ψ, Δt = params.Kϕ, params.ηΦ, params.ψ, params.Δt
+    KΦ, ηΦ, ψ, Δt = params.KΦ, params.ηΦ, params.ψ, params.Δt
     elastic, plastic = params.elastic, params.plastic
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
-    dΦdt    = elastic * (dPfdt - dPtdt)/Kϕ + (Pf - Pt)/ηΦ + plastic * λ̇*sind(ψ) 
+    dΦdt    = elastic * (dPfdt - dPtdt)/KΦ + (Pf - Pt)/ηΦ + plastic * λ̇*sind(ψ) 
     Φ       = Φ0 + dΦdt*Δt
     return [τ[1], τ[2], τ[3], Pt, Pf], λ̇, Φ, r 
 end
@@ -136,7 +136,7 @@ function two_phase_return_mapping()
 
     params = (
         G       = 3e11/sc.σ,
-        Kϕ      = 1e9/sc.σ,
+        KΦ      = 1e9/sc.σ,
         Ks      = 1e11/sc.σ,
         Kf      = 1e10/sc.σ,
         C       = 1e100/sc.σ,
@@ -203,12 +203,11 @@ function two_phase_return_mapping()
         scatter!(ax2, probes.t*sc.t, probes.Pf*sc.σ)
         ax4 = Axis(fig[3,1], title="Porosity",  xlabel=L"$t$ [yr]",  ylabel=L"$\phi$", xlabelsize=20, ylabelsize=20)    
         scatter!(ax4, probes.t*sc.t, probes.Φ)
-        display(fig)
         # ax3 = Axis(fig[3,1], title="Plastic multiplier",  xlabel=L"$t$ [yr]",  ylabel=L"$\dot{\lambda}$ [1/s]", xlabelsize=20, ylabelsize=20)    
         # scatter!(ax3, probes.t, probes.λ̇)
         ax4 = Axis(fig[4,1], title="Residual",  xlabel=L"$t$ [yr]",  ylabel=L"$r$", xlabelsize=20, ylabelsize=20)    
         scatter!(ax4, probes.t*sc.t, log10.(probes.r))
-        @show probes.Pf
+        display(fig)
     end
     with_theme(figure, theme_latexfonts())
     # display(probes.Pt)

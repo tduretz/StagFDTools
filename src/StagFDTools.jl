@@ -6,7 +6,7 @@ include("operators.jl")
 export inn, inn_x, inn_y, av, avx, avy, harm, ∂x, ∂y, ∂x_inn, ∂y_inn, ∂kk
 
 include("Utils.jl")
-export printxy, av2D
+export GenerateGrid, printxy, av2D
 
 include("Solvers.jl")
 export DecoupledSolver
@@ -86,9 +86,10 @@ module TwoPhases
     # include("TwoPhases/TwoPhases_v2.jl")
     # Now this one is preferred because it fully accounts for porosity evolution
     include("TwoPhases/TwoPhases_v3.jl") 
-    export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx1, SetBCVy1
+    export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx1, SetBCVy1, SetBCPf1
     export AssembleFluidContinuity2D!, ResidualFluidContinuity2D!, FluidContinuity
-    export AssembleContinuity2D!, ResidualContinuity2D!, Continuity
+    export LineSearch!, BackTrackingLineSearch!
+    export AssembleContinuity2D!, ResidualContinuity2D!, Continuity, ResidualPorosity2D!, UpdatePorosity2D!
     export AssembleMomentum2D_y!, ResidualMomentum2D_y!, Momentum_y
     export AssembleMomentum2D_x!, ResidualMomentum2D_x!, Momentum_x
     # export AssembleFluidContinuity2D_VE!, ResidualFluidContinuity2D_VE!, FluidContinuity_VE
@@ -102,8 +103,10 @@ module TwoPhases
     # include("TwoPhases_VE.jl")
     # export AssembleFluidContinuity2D_VE!, ResidualFluidContinuity2D_VE!, FluidContinuity_VE
     # export AssembleContinuity2D_VE!, ResidualContinuity2D_VE!, Continuity_VE
-    include("TwoPhases/TwoPhases_Rheology.jl")
-    export LocalRheology, StressVector!, TangentOperator!
+    include("TwoPhases/TwoPhases_Rheology_Trial_P.jl")
+    export TangentOperator!
+    include("TwoPhases/TwoPhases_Rheology_Common.jl")
+    export invII, StrainRateTrial, F
 end
 
 module TwoPhases_v1

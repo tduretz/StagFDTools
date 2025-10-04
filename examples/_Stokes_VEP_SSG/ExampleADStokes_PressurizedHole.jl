@@ -89,8 +89,6 @@ end
     )
     set_boundaries_template!(type, config, nc)
 
-    # Add a constrant pressure within a circular region
-    @views type.Pt[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= radius^2] .= :constant
 
     #--------------------------------------------#
     # Equation numbering
@@ -105,7 +103,9 @@ end
     # Stencil extent for each block matrix
     pattern = Fields(
         Fields(@SMatrix([1 1 1; 1 1 1; 1 1 1]),                 @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([1 1 1; 1 1 1])), 
-        Fields(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]),  @SMatrix([1 1 1; 1 1 1; 1 1 1]),                @SMatrix([1 1; 1 1; 1 1])), 
+        Fields(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0    # Add a constrant pressure within a circular region
+    @views type.Pt[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= radius^2] .= :constant
+]),  @SMatrix([1 1 1; 1 1 1; 1 1 1]),                @SMatrix([1 1; 1 1; 1 1])), 
         Fields(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]))
     )
 
@@ -133,10 +133,9 @@ end
     Vi      = (x  = zeros(size_x...), y  = zeros(size_y...))
     η       = (c  =  ones(size_c...), v  =  ones(size_v...) )
     λ̇       = (c  = zeros(size_c...), v  = zeros(size_v...) )
-    ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
+    ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
     τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
-
     Pt      = zeros(size_c...)
     Pti     = zeros(size_c...)
     Pt0     = zeros(size_c...)

@@ -34,7 +34,7 @@ using Enzyme  # AD backends you want to use
         G     = [3e10 3e10], 
         Kd    = [1e11 1e11],
         Ks    = [1e11 1e11],
-        Kϕ    = [1e11 1e11],
+        KΦ    = [1e11 1e11],
         Kf    = [1e9  1e9],
         k_ηf0 = [k_ηf0 k_ηf0],
     )
@@ -45,8 +45,8 @@ using Enzyme  # AD backends you want to use
     @show materials.ηb  ./ materials.G
     @show materials.ηs0 ./ materials.Kd
     @show materials.ηb  ./ materials.Kd
-    @show materials.ηs0 ./ materials.Kϕ
-    @show materials.ηb  ./ materials.Kϕ
+    @show materials.ηs0 ./ materials.KΦ
+    @show materials.ηb  ./ materials.KΦ
     @show materials.ηs0 ./ materials.Kf
     @show materials.ηb  ./ materials.Kf
     @show r^2/k_ηf0/materials.Ks[1]
@@ -127,10 +127,9 @@ using Enzyme  # AD backends you want to use
     ln1mϕ0  = (c=log(1-ϕi).*ones(size_c...), v=log(1-ϕi).*ones(size_v...) )
 
 
-    ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
+    ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
     τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
-
     Dc      =  [@MMatrix(zeros(5,5)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)]
     Dv      =  [@MMatrix(zeros(5,5)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)]
     𝐷       = (c = Dc, v = Dv)
@@ -347,10 +346,10 @@ using Enzyme  # AD backends you want to use
         #--------------------------------------------#
         # Post process 
         @time for i in eachindex(ϕ.c)
-            Kϕ = materials.Kϕ[phases.c[i]]
-            ηϕ = materials.ηb[phases.c[i]] 
-            ϕ.c[i] = ϕ0.c[i] .+ Δ.t*( 1/Kϕ * ((P.f[i] - P0.f[i])/Δ.t - (P.t[i] - P0.t[i])/Δ.t) + 1/ηϕ*(P.f[i] - P.t[i]) )
-            # ln1mϕ.c[i] = ln1mϕ0.c[i] .+ Δ.t/(1 - ϕ.c[i]) *( 1/Kϕ * ((P.f[i] - P0.f[i])/Δ.t + (P.t[i] - P0.t[i])/Δ.t) + 1/ηϕ*(P.f[i] - P.t[i]) )
+            KΦ = materials.KΦ[phases.c[i]]
+            ηΦ = materials.ηb[phases.c[i]] 
+            ϕ.c[i] = ϕ0.c[i] .+ Δ.t*( 1/KΦ * ((P.f[i] - P0.f[i])/Δ.t - (P.t[i] - P0.t[i])/Δ.t) + 1/ηΦ*(P.f[i] - P.t[i]) )
+            # ln1mϕ.c[i] = ln1mϕ0.c[i] .+ Δ.t/(1 - ϕ.c[i]) *( 1/KΦ * ((P.f[i] - P0.f[i])/Δ.t + (P.t[i] - P0.t[i])/Δ.t) + 1/ηΦ*(P.f[i] - P.t[i]) )
             # ϕ.c[i] = 1.0 - exp(ln1mϕ.c[i])
         end
         ϕ.v[inx_v, iny_v] .= 0.25*(ϕ.c[1:end-1,1:end-1] .+ ϕ.c[1:end-1,2:end-0] .+ ϕ.c[2:end-0,1:end-1] .+ ϕ.c[2:end-0,2:end-0] )

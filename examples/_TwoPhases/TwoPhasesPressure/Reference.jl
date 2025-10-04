@@ -1,4 +1,4 @@
-using StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, GLMakie, LinearAlgebra, SparseArrays, Printf, JLD2
+using StagFDTools, StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, GLMakie, LinearAlgebra, SparseArrays, Printf, JLD2
 import Statistics:mean
 using Enzyme  # AD backends you want to use
 
@@ -31,28 +31,38 @@ using Enzyme  # AD backends you want to use
     # Material parameters
     materials = ( 
         oneway       = false,
-        compressible = true,
         n     = [1.0  1.0],
         ηs0   = [ηs0  ηs_inc], 
-        ηb    = [ηb0  ηb0 ]./(1-ϕ0),
+        ηΦ    = [ηb0  ηb0 ]./(1-ϕ0),
         G     = [1e30 1e30], 
         Kd    = [1e30 1e30],
         Ks    = [1e30 1e30],
-        Kϕ    = [1e30 1e30],
+        KΦ    = [1e30 1e30],
         Kf    = [1e30 1e30],
         k_ηf0 = [k_ηf0 k_ηf0],
+        ψ     = [10.    10.  ],
+        ϕ     = [35.    35.  ],
+        C     = [1e70    1e70  ],
+        ηvp   = [0.0    0.0  ],
+        cosϕ  = [0.0    0.0  ],
+        sinϕ  = [0.0    0.0  ],
+        sinψ  = [0.0    0.0  ],
     )
-   
 
+    # For plasticity
+    @. materials.cosϕ  = cosd(materials.ϕ)
+    @. materials.sinϕ  = sind(materials.ϕ)
+    @. materials.sinψ  = sind(materials.ψ)
+   
     @show materials
     @show materials.ηs0 ./ materials.G
-    @show materials.ηb  ./ materials.G
+    @show materials.ηΦ  ./ materials.G
     @show materials.ηs0 ./ materials.Kd
-    @show materials.ηb  ./ materials.Kd
-    @show materials.ηs0 ./ materials.Kϕ
-    @show materials.ηb  ./ materials.Kϕ
+    @show materials.ηΦ  ./ materials.Kd
+    @show materials.ηs0 ./ materials.KΦ
+    @show materials.ηΦ  ./ materials.KΦ
     @show materials.ηs0 ./ materials.Kf
-    @show materials.ηb  ./ materials.Kf
+    @show materials.ηΦ  ./ materials.Kf
     @show r^2/k_ηf0/materials.Ks[1]
 
     # error()
@@ -101,8 +111,8 @@ using Enzyme  # AD backends you want to use
     pattern = Fields(
         Fields(@SMatrix([0 1 0; 1 1 1; 0 1 0]),                 @SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]), @SMatrix([0 1 0;  0 1 0]),        @SMatrix([0 1 0;  0 1 0])), 
         Fields(@SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]),  @SMatrix([0 1 0; 1 1 1; 0 1 0]),                @SMatrix([0 0; 1 1; 0 0]),        @SMatrix([0 0; 1 1; 0 0])),
-        Fields(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]),                    @SMatrix([1])),
-        Fields(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]),                    @SMatrix([1 1 1; 1 1 1; 1 1 1])),
+        Fields(@SMatrix([0 1 0;  0 1 0]),                       @SMatrix([0 0; 1 1; 0 0]),                       @SMatrix([1]),                    @SMatrix([1])),
+        Fields(@SMatrix([0 1 0;  0 1 0]),                       @SMatrix([0 0; 1 1; 0 0]),                       @SMatrix([1]),                    @SMatrix([1 1 1; 1 1 1; 1 1 1])),
     )
 
     # Sparse matrix assembly
@@ -121,7 +131,7 @@ using Enzyme  # AD backends you want to use
     # Intialise field
     L   = (x=len, y=len)
     Δ   = (x=L.x/nc.x, y=L.y/nc.y, t=Δt0)
-    R   = (x=zeros(size_x...), y=zeros(size_y...), pt=zeros(size_c...), pf=zeros(size_c...))
+    R   = (x=zeros(size_x...), y=zeros(size_y...), pt=zeros(size_c...), pf=zeros(size_c...), Φ=zeros(size_c...))
     V   = (x=zeros(size_x...), y=zeros(size_y...))
     η   = (c  =  ones(size_c...), v  =  ones(size_v...) )
     ϕ   = (c=ϕi.*ones(size_c...), v=ϕi.*ones(size_v...) )
@@ -130,10 +140,9 @@ using Enzyme  # AD backends you want to use
     ln1mϕ   = (c=log(1-ϕi).*ones(size_c...), v=log(1-ϕi).*ones(size_v...) )
     ln1mϕ0  = (c=log(1-ϕi).*ones(size_c...), v=log(1-ϕi).*ones(size_v...) )
 
-    ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
+    ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
     τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
-
     Dc      =  [@MMatrix(zeros(5,5)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)]
     Dv      =  [@MMatrix(zeros(5,5)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)]
     𝐷       = (c = Dc, v = Dv)
@@ -222,7 +231,7 @@ using Enzyme  # AD backends you want to use
         end
 
         # Residual check
-        TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, type, BC, materials, phases, Δ)
+        TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, ϕ0, type, BC, materials, phases, Δ)
         ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
         ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
         ResidualContinuity2D!(R, V, P, P0, ϕ0, phases, materials, number, type, BC, nc, Δ) 
@@ -335,7 +344,7 @@ using Enzyme  # AD backends you want to use
 
         #--------------------------------------------#
         # Residual check
-        TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, type, BC, materials, phases, Δ)
+        TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, ϕ0, type, BC, materials, phases, Δ)
         ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
         ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
         ResidualContinuity2D!(R, V, P, P0, ϕ0, phases, materials, number, type, BC, nc, Δ) 
@@ -350,10 +359,10 @@ using Enzyme  # AD backends you want to use
         #--------------------------------------------#
         # Post process 
         @time for i in eachindex(ϕ.c)
-            Kϕ = materials.Kϕ[phases.c[i]]
-            ηϕ = materials.ηb[phases.c[i]] 
-            ϕ.c[i] = ϕ0.c[i] .+ Δ.t*( 1/Kϕ * ((P.f[i] - P0.f[i])/Δ.t - (P.t[i] - P0.t[i])/Δ.t) + 1/ηϕ*(P.f[i] - P.t[i]) )
-            # ln1mϕ.c[i] = ln1mϕ0.c[i] .+ Δ.t/(1 - ϕ.c[i]) *( 1/Kϕ * ((P.f[i] - P0.f[i])/Δ.t + (P.t[i] - P0.t[i])/Δ.t) + 1/ηϕ*(P.f[i] - P.t[i]) )
+            KΦ = materials.KΦ[phases.c[i]]
+            ηΦ = materials.ηb[phases.c[i]] 
+            ϕ.c[i] = ϕ0.c[i] .+ Δ.t*( 1/KΦ * ((P.f[i] - P0.f[i])/Δ.t - (P.t[i] - P0.t[i])/Δ.t) + 1/ηΦ*(P.f[i] - P.t[i]) )
+            # ln1mϕ.c[i] = ln1mϕ0.c[i] .+ Δ.t/(1 - ϕ.c[i]) *( 1/KΦ * ((P.f[i] - P0.f[i])/Δ.t + (P.t[i] - P0.t[i])/Δ.t) + 1/ηΦ*(P.f[i] - P.t[i]) )
             # ϕ.c[i] = 1.0 - exp(ln1mϕ.c[i])
         end
         ϕ.v[inx_v, iny_v] .= 0.25*(ϕ.c[1:end-1,1:end-1] .+ ϕ.c[1:end-1,2:end-0] .+ ϕ.c[2:end-0,1:end-1] .+ ϕ.c[2:end-0,2:end-0] )

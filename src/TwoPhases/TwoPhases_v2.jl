@@ -146,29 +146,29 @@ end
 function Continuity(Vx, Vy, Pt, Pt0, Pf, Pf0, ϕ, phase, materials, type_loc, bcv_loc, Δ)
     invΔx    = 1 / Δ.x
     invΔy    = 1 / Δ.y
-    ηϕ       = materials.ηb[phase]
+    ηΦ       = materials.ηb[phase]
     Kd       = materials.Kd[phase]
-    Kϕ       = materials.Kϕ[phase]
+    KΦ       = materials.KΦ[phase]
     Ks       = materials.Ks[phase]
     Kf       = materials.Kf[phase]
-    Kd = (1-ϕ) * ( 1 / Kϕ + 1 / Ks)^-1
+    Kd = (1-ϕ) * ( 1 / KΦ + 1 / Ks)^-1
     α  = ( 1 - Kd / Ks )
     # B  = (Kd^-1 - Ks^-1) / (Kd^-1 - Ks^-1 + ϕ.*(Kf^-1 - Ks^-1))
-    # fp = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy + (Pt[1] - Pf[2,2])/((1-ϕ)*ηϕ))
-    # fp = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy  + (Pt[1] - Pf[2,2])/((1-ϕ)*ηϕ) + ((Pt[1]-Pt0[1]) - (Pf[2,2]-Pf0[1]))/Kd/Δ.t 
-    fp = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy  + (Pt[1] - Pf[2,2])/((1-ϕ)*ηϕ) + ((Pt[1]-Pt0[1]) - α*(Pf[2,2]-Pf0[1]))/Kd/Δ.t 
+    # fp = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy + (Pt[1] - Pf[2,2])/((1-ϕ)*ηΦ))
+    # fp = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy  + (Pt[1] - Pf[2,2])/((1-ϕ)*ηΦ) + ((Pt[1]-Pt0[1]) - (Pf[2,2]-Pf0[1]))/Kd/Δ.t 
+    fp = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy  + (Pt[1] - Pf[2,2])/((1-ϕ)*ηΦ) + ((Pt[1]-Pt0[1]) - α*(Pf[2,2]-Pf0[1]))/Kd/Δ.t 
     # fp *= η/(Δ.x+Δ.y)
     return fp
 end
 
 function FluidContinuity(Vx, Vy, Pt, Pt0, Pf, Pf0, ϕ, phase, materials, kμ, type_loc, bcv_loc, Δ)
     
-    ηϕ       = materials.ηb[phase]
+    ηΦ       = materials.ηb[phase]
     Kd       = materials.Kd[phase]
-    Kϕ       = materials.Kϕ[phase]
+    KΦ       = materials.KΦ[phase]
     Ks       = materials.Ks[phase]
     Kf       = materials.Kf[phase]
-    Kd = (1-ϕ) * ( 1 / Kϕ + 1 / Ks)^-1
+    Kd = (1-ϕ) * ( 1 / KΦ + 1 / Ks)^-1
     α  = ( 1 - Kd / Ks )
     B  = (Kd^-1 - Ks^-1) / (Kd^-1 - Ks^-1 + ϕ.*(Kf^-1 - Ks^-1))
 
@@ -221,8 +221,8 @@ function FluidContinuity(Vx, Vy, Pt, Pt0, Pf, Pf0, ϕ, phase, materials, kμ, ty
     if materials.oneway
         F   = (qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y
     else
-        # F   = (qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y - (Pt[1]-Pf[2,2])/((1-ϕ)*ηϕ) - ((Pt[1]-Pt0[1]) - (Pf[2,2]-Pf0[1]))/Kd/Δ.t
-        F   = (qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y - (Pt[1]-Pf[2,2])/((1-ϕ)*ηϕ) - α/Kd*((Pt[1]-Pt0[1]) - (Pf[2,2]-Pf0[1])/B )/Δ.t
+        # F   = (qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y - (Pt[1]-Pf[2,2])/((1-ϕ)*ηΦ) - ((Pt[1]-Pt0[1]) - (Pf[2,2]-Pf0[1]))/Kd/Δ.t
+        F   = (qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y - (Pt[1]-Pf[2,2])/((1-ϕ)*ηΦ) - α/Kd*((Pt[1]-Pt0[1]) - (Pf[2,2]-Pf0[1])/B )/Δ.t
     end
 
     return F

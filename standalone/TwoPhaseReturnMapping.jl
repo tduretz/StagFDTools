@@ -5,10 +5,10 @@ using GLMakie, Enzyme, LinearAlgebra#, ForwardDiff
 invII(x) = sqrt(1/2*x[1]^2 + 1/2*x[2]^2 + x[3]^2) 
 
 function residual_two_phase(x, ε̇II_eff, divV, divqD, Pt0, Pf0, ϕ, p)
-    G, Kϕ, Ks, Kf, C, ϕ, ψ, ηvp, Δt = p.G, p.Kϕ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.Δt
+    G, KΦ, Ks, Kf, C, ϕ, ψ, ηvp, Δt = p.G, p.KΦ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.Δt
     eps   = -1e-13
     ηe    = G*Δt
-    χe    = Kϕ*Δt
+    χe    = KΦ*Δt
     τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
     f      = τII  - C*cosd(ϕ) - (Pt - Pf)*sind(ϕ)
     return [ 
@@ -65,7 +65,7 @@ function single_phase_return_mapping()
     nt = 10
     params = (
         G     = 1.0,
-        Kϕ    = 3.0,
+        KΦ    = 3.0,
         Ks    = 3.0,
         Kf    = 3.0,
         C     = 1.0,

@@ -43,12 +43,12 @@ Dat = Float64  # Precision (double=Float64 or single=Float32)
     if viscoelastic
         G       = 1e-7              # elastic shear modulus
         Ks      = 1e-6
-        Kϕ      = 1e-6
+        KΦ      = 1e-6
         Kf      = 1e-5
     else
         G       = 1e10              # elastic shear modulus
         Ks      = 1e10
-        Kϕ      = 1e10
+        KΦ      = 1e10
         Kf      = 1e10
     end
     # Numerics
@@ -189,7 +189,7 @@ Dat = Float64  # Precision (double=Float64 or single=Float32)
             τxyv   .= 2.0.*ηv_ve.*Exyv1
             τII    .= sqrt.(0.5*(τxx.^2 .+ τyy.^2) .+ τxy.^2)
             # Porosity
-            ϕ      .= ϕ0 .+ dt*((Pf.-Pt)./η_ϕ .+ 1 ./Kϕ .* ((Pf.-Pf0)./dt .- (Pt.-Pt0)./dt ))
+            ϕ      .= ϕ0 .+ dt*((Pf.-Pt)./η_ϕ .+ 1 ./KΦ .* ((Pf.-Pf0)./dt .- (Pt.-Pt0)./dt ))
             # Density
             dρsdt  .= ρs ./ Ks .*  1 ./ (1 .- ϕ) .* ((Pt.-Pt0)./dt .- ϕ .* (Pf.-Pf0)./dt) 
             dρfdt  .= ρf ./ Kf .* (Pf.-Pf0)./dt 

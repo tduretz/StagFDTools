@@ -92,7 +92,7 @@ using Enzyme  # AD backends you want to use
     V   = (x=zeros(size_x...), y=zeros(size_y...))
     η   = (x= ηs0.*ones(size_x...), y= ηs0.*ones(size_y...), p = ηs0.*ones(size_c...) )
     ϕ   = ϕ0.*ones(size_c...) 
-    ηϕ  = ηb0./(1. .-ϕ ).*ones(size_c...) 
+    ηΦ  = ηb0./(1. .-ϕ ).*ones(size_c...) 
     kμf = (x= k_ηf0.*ones(size_x...), y= k_ηf0.*ones(size_y...))
     P   = (t=zeros(size_c...), f=zeros(size_c...))
     xv  = LinRange(-L.x/2, L.x/2, nc.x+1)
@@ -110,7 +110,7 @@ using Enzyme  # AD backends you want to use
     η.y[(xvy.^2 .+ (yvy').^2) .<= r^2] .= ηs_inc
     η.x[(xvx.^2 .+ (yvx').^2) .<= r^2] .= ηs_inc 
     η.p .= 0.25.*(η.x[1:end-1,2:end-1].+η.x[2:end-0,2:end-1].+η.y[2:end-1,1:end-1].+η.y[2:end-1,2:end-0])
-    rheo = (η=η, ηϕ=ηϕ, kμf=kμf, ϕ=ϕ)
+    rheo = (η=η, ηΦ=ηΦ, kμf=kμf, ϕ=ϕ)
 
     # Boundary condition values
     BC = ( Vx = zeros(size_x...), Vy = zeros(size_y...), Pt = zeros(size_c...), Pf = zeros(size_c...))
