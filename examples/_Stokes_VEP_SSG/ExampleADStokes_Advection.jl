@@ -1,14 +1,13 @@
-using StagFDTools, StagFDTools.StokesJustPIC, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf, GLMakie, MathTeXEngine
-Makie.update_theme!( fonts = (regular = texfont(), bold = texfont(:bold), italic = texfont(:italic)))
+using StagFDTools, StagFDTools.StokesJustPIC, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf, GLMakie
 import Statistics:mean
 using JustPIC, JustPIC._2D
 import JustPIC.@index
 const backend = JustPIC.CPUBackend 
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
-using TimerOutputs, GridGeometryUtils
+using TimerOutputs
 
-function compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v, nphases)
+function compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v)
     sum       = (c  =  ones(size_c...), v  =  ones(size_v...) )
 
     for I in CartesianIndices(β.c) 
@@ -16,7 +15,7 @@ function compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, 
         β.c[i,j] = 0.0
         G.c[i,j] = 0.0
         sum.c[i,j] = 0.0
-        for p = 1:nphases # loop on phases
+        for p = 1:2 # loop on phases
             if i>1 && j>1 && i<nc.x+2 && j<nc.y+2 
                 phase_ratio = @index phase_ratios.center[p, i-1, j-1]
                 β.c[i,j]   += phase_ratio * materials.β[p]
@@ -34,7 +33,7 @@ function compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, 
         i, j = I[1], I[2]
         G.v[i,j]   = 0.0
         sum.v[i,j] = 0.0
-        for p = 1:nphases # loop on phases
+        for p = 1:2 # loop on phases
             if i>1 && j>1 && i<nc.x+3 && j<nc.y+3 
                 phase_ratio = @index phase_ratios.vertex[p, i-1, j-1]
                 G.v[i,j]   += phase_ratio * materials.G[p]
@@ -44,46 +43,32 @@ function compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, 
     end
     G.v[[1 end],:] .=  G.v[[2 end-1],:]
     G.v[:,[1 end]] .=  G.v[:,[2 end-1]]
-    @show extrema(sum.c[2:end-1,2:end-1]),  extrema(sum.v[2:end-1,2:end-1])
+    @show extrema(sum.c),  extrema(sum.v)
 end
 
-function set_phases!(phases, particles, garnets, micas, layering)
+function set_phases!(phases, particles)
     Threads.@threads for j in axes(phases, 2)
         for i in axes(phases, 1)
             for ip in cellaxes(phases)
                 # quick escape
                 @index(particles.index[ip, i, j]) == 0 && continue
-
-                # Set material geometry 
                 x = @index particles.coords[1][ip, i, j]
                 y = @index particles.coords[2][ip, i, j]
-                𝐱 = @SVector([x, y])
-
-                @index phases[ip, i, j] = 1.0
-
-                if inside(𝐱, layering)
+                if (x^2 + (y)^2) <= 0.1^2
                     @index phases[ip, i, j] = 2.0
+                else
+                    @index phases[ip, i, j] = 1.0
                 end
-
-                for igeom in eachindex(garnets) # Garnets: phase 2
-                    if inside(𝐱, garnets[igeom])
-                        @index phases[ip, i, j] = 3.0
-                    end
-                end
-                 
-                # for igeom in eachindex(micas) # Micas: phase 3
-                #     if inside(𝐱, micas[igeom])
-                #         @index phases[ip, i, j] = 3.0
-                #     end
-                # end
-
             end
         end
     end
 end
 
-@views function main(nc, BC_template, D_template)
+@views function main(BC_template, D_template)
     #--------------------------------------------#
+
+    # Resolution
+    nc = (x = 25, y = 25)
 
     # Boundary loading type
     config = BC_template
@@ -91,47 +76,27 @@ end
 
     # Material parameters
     materials = ( 
-        compressible = true,
+        compressible = false,
         plasticity   = :none,
-        n    = [1.0    1.0    1.0  ],
-        η0   = [1e0    1e0    1e3  ], 
-        G    = [1e30   1e30   1e30 ],
-        C    = [150    150    150  ],
-        ϕ    = [30.    30.    30.  ],
-        ηvp  = [0.5    0.5    0.5  ],
-        β    = [1e-5   1e-5   1e-5 ],
-        ψ    = [3.0    3.0    3.0  ],
-        B    = [0.     0.     0.   ],
-        cosϕ = [0.0    0.0    0.0  ],
-        sinϕ = [0.0    0.0    0.0  ],
-        sinψ = [0.0    0.0    0.0  ],
+        n    = [1.0    1.0  ],
+        η0   = [1e0    1e5  ], 
+        G    = [1e60   2e60 ],
+        C    = [150    150  ],
+        ϕ    = [30.    30.  ],
+        ηvp  = [0.5    0.5  ],
+        β    = [1e-20  2e-20],
+        ψ    = [3.0    3.0  ],
+        B    = [0.     0.   ],
+        cosϕ = [0.0    0.0  ],
+        sinϕ = [0.0    0.0  ],
+        sinψ = [0.0    0.0  ],
     )
-    materials.B .= (2*materials.η0).^(-materials.n)
-    nphases      = length(materials.η0)  
-
-    # Material geometries
-    garnets = (
-        Hexagon((-.0, 0.0), 0.200; θ = π/4),
-    )
-
-    micas = (
-        Rectangle((0.1, -0.1), 0.03, 0.07; θ = -π / 4), #0.1, -0.1, 0.03, 0.07, -45
-    )
-
-    layering = Layering(
-        (0., 0.5), 
-        0.1, 
-        0.5; 
-        θ = 0.,  
-        perturb_amp=0*1.0, 
-        perturb_width=1.0
-    )
+    materials.B   .= (2*materials.η0).^(-materials.n)
 
     # Time steps
     Δt0   = 0.5
-    nt    = 100
-    ALE   = false
-    C     = 0.5
+    nt    = 20
+    ALE   = true
 
     # Newton solver
     niter = 2
@@ -256,8 +221,8 @@ end
     particle_args = phases, = init_cell_arrays(particles, Val(1))  # cool
 
     # Set material geometry 
-    set_phases!(phases, particles, garnets, micas, layering)
-    phase_ratios = JustPIC._2D.PhaseRatios(backend, nphases, values(nc));
+    set_phases!(phases, particles)
+    phase_ratios = JustPIC._2D.PhaseRatios(backend, 2, values(nc));
     update_phase_ratios!(phase_ratios, particles, xci, xvi, phases)
 
     #--------------------------------------------#
@@ -266,13 +231,10 @@ end
     err  = (x = zeros(niter), y = zeros(niter), p = zeros(niter))
     to   = TimerOutput()
 
-    fig = Figure(size=(500,500))
-
     #--------------------------------------------#
 
-    # for it=1:nt
-record(fig, "results/SimpleShearGarnets.mp4", 1:nt; framerate=15) do it
-    
+    for it=1:nt
+
         @printf("Step %04d\n", it)
         err.x .= 0.
         err.y .= 0.
@@ -285,7 +247,7 @@ record(fig, "results/SimpleShearGarnets.mp4", 1:nt; framerate=15) do it
         Pt0   .= Pt
 
         # Compute bulk and shear moduli
-        compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v, nphases)
+        compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v)
 
         for iter=1:niter
 
@@ -294,19 +256,15 @@ record(fig, "results/SimpleShearGarnets.mp4", 1:nt; framerate=15) do it
             #--------------------------------------------#
             # Residual check        
             @timeit to "Residual" begin
-                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, G, β, V, Pt, Pt0, ΔPt, type, BC, materials, phase_ratios, Δ)
+                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, G, β, V, Pt, ΔPt, type, BC, materials, phase_ratios, Δ)
                 ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, β, materials, number, type, BC, nc, Δ) 
                 ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, G, materials, number, type, BC, nc, Δ)
                 ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, G, materials, number, type, BC, nc, Δ)
             end
 
-            @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
-            @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-            @show norm(R.p[inx_c,iny_c])/sqrt(nPt)
-
-            err.x[iter] = @views norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
-            err.y[iter] = @views norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-            err.p[iter] = @views norm(R.p[inx_c,iny_c])/sqrt(nPt)
+            err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
+            err.y[iter] = norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
+            err.p[iter] = norm(R.p[inx_c,iny_c])/sqrt(nPt)
             max(err.x[iter], err.y[iter]) < ϵ_nl ? break : nothing
 
             #--------------------------------------------#
@@ -329,11 +287,11 @@ record(fig, "results/SimpleShearGarnets.mp4", 1:nt; framerate=15) do it
             𝐏  .= [M.Pt.Pt;]             
             
             #--------------------------------------------#
-
+     
             # Direct-iterative solver
             fu   = -r[1:size(𝐊,1)]
             fp   = -r[size(𝐊,1)+1:end]
-            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu,  ηb=1e4, niter_l=10, ϵ_l=1e-10)
+            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:chol,  ηb=1e4, niter_l=10, ϵ_l=1e-10)
             dx[1:size(𝐊,1)]     .= u
             dx[size(𝐊,1)+1:end] .= p
 
@@ -341,13 +299,14 @@ record(fig, "results/SimpleShearGarnets.mp4", 1:nt; framerate=15) do it
             # Line search & solution update
             @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, G, β, 𝐷, 𝐷_ctl, number, type, BC, materials, phase_ratios, nc, Δ)
             UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
-            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, G, β, V, Pt, Pt0, ΔPt, type, BC, materials, phase_ratios, Δ)
+            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, G, β, V, Pt, ΔPt, type, BC, materials, phase_ratios, Δ)
         end
 
         # Update pressure    
         Pt .+= ΔPt.c 
 
         # Advection with JustPIC
+        C       = 0.1
         Vmax    = max(maximum(abs.(V.x)), maximum(abs.(V.y)))
         Δ       = (x=L.x/nc.x, y=L.y/nc.y, t = C * min(Δ.x, Δ.y)/Vmax)
         grid_vx = (xv, yce)
@@ -357,6 +316,7 @@ record(fig, "results/SimpleShearGarnets.mp4", 1:nt; framerate=15) do it
         move_particles!(particles, values(xvi), particle_args)
         inject_particles_phase!(particles, phases, (), (), values(xvi))
         update_phase_ratios!(phase_ratios, particles, xci, xvi, phases)
+        compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v)
 
         if ALE
             ε̇bg = D_BC[1,1]
@@ -375,6 +335,7 @@ record(fig, "results/SimpleShearGarnets.mp4", 1:nt; framerate=15) do it
             grid_vx = (xv, yce)
             grid_vy = (xce, yv)
             # Δt = C * min(Δ...) / max(maximum(abs.(V.x)), maximum(abs.(V.y)))
+            # @parallel SetVelocity(V, verts, ε̇bg)
 
             # Initial velocity & pressure field
             V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
@@ -402,80 +363,67 @@ record(fig, "results/SimpleShearGarnets.mp4", 1:nt; framerate=15) do it
         #--------------------------------------------#
 
         # Visualise
-        # function visualisation(fig)
-            empty!(fig)
+        function visualisation()
             phc = [p[1] for p in phase_ratios.center]
             phv = [p[1] for p in phase_ratios.vertex]
             #-----------  
+            fig = Figure(size=(500,800))
             #-----------
-            ax = Axis(fig[1,1], aspect=DataAspect(), title=L"$$Pressure", xlabel=L"$x$", ylabel=L"$y$")
-            hm = heatmap!(ax, xc, yc,  (Pt[inx_c,iny_c]), colormap=(:bluesreds), colorrange=(-3,3))
-            Colorbar(fig, hm, width = 10,
-            labelsize = 10, ticklabelsize = 10, bbox=ax.scene.viewport,
-            alignmode = Outside(8), halign = :right, ticklabelcolor = :black, labelcolor = :black,
-            tickcolor = :black)
-            # Vxc = 0.5.*(V_adv.x[1:end-1,2:end-1] .+ V_adv.x[2:end,2:end-1])
-            # Vyc = 0.5.*(V_adv.y[2:end-1,1:end-1] .+ V_adv.y[2:end-1,2:end])
-            # arrows2d!(ax, xc, yc, Vxc, Vyc, lengthscale = 0.05)
-            ax  = Axis(fig[1,2], aspect=DataAspect(), title=L"$$Materials", xlabel=L"$x$", ylabel=L"$y$")
+            ax  = Axis(fig[1,1], aspect=DataAspect(), title="Pressure", xlabel="x", ylabel="y")
+            heatmap!(ax, xc, yc,  (Pt[inx_c,iny_c]), colormap=:bluesreds)
+            Vxc = 0.5.*(V_adv.x[1:end-1,2:end-1] .+ V_adv.x[2:end,2:end-1])
+            Vyc = 0.5.*(V_adv.y[2:end-1,1:end-1] .+ V_adv.y[2:end-1,2:end])
+            arrows2d!(ax, xc, yc, Vxc, Vyc, lengthscale = 0.05)
+            ax  = Axis(fig[1,2], aspect=DataAspect(), title="Particles", xlabel="x", ylabel="y")
             p    = particles.coords
             ppx, ppy = p
             pxv  = ppx.data[:]
             pyv  = ppy.data[:]
             clr  = phases.data[:]
             idxv = particles.index.data[:]
-            scatter!(ax, Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=GLMakie.Reverse(:roma), markersize=5)
-            xlims!(ax, extrema(xv))
-            ylims!(ax, extrema(yv))
-            ax = Axis(fig[2,1], aspect=DataAspect(), title=L"$\tau_{xx}$", xlabel=L"$x$", ylabel=L"$y$")
-            hm = heatmap!(ax, xc, yc,  τ.xx[inx_c,iny_c], colormap=(:bluesreds), colorrange=(-2,2))
-            Colorbar(fig, hm, width = 10,
-            labelsize = 10, ticklabelsize = 10, bbox=ax.scene.viewport,
-            alignmode = Outside(8), halign = :right, ticklabelcolor = :black, labelcolor = :black,
-            tickcolor = :black)
-            ax = Axis(fig[2,2], aspect=DataAspect(), title=L"$\tau_{xy}$", xlabel=L"$x$", ylabel=L"$y$")
-            hm = heatmap!(ax, xv, yv,  τ.xy[inx_v,iny_v], colormap=(:bluesreds), colorrange=(-0,3.0))
-            Colorbar(fig, hm, width = 10,
-            labelsize = 10, ticklabelsize = 10, bbox=ax.scene.viewport,
-            alignmode = Outside(8), halign = :right, ticklabelcolor = :black, labelcolor = :black,
-            tickcolor = :black)
-            # ax  = Axis(fig[3,1], aspect=DataAspect(), title="phc", xlabel="x", ylabel="y")
-            # spy!(ax, 𝐊 - 𝐊')
-            # ax  = Axis(fig[3,1], aspect=DataAspect(), title="phc", xlabel="x", ylabel="y")
-            # heatmap!(ax, xc, yc,  G.c[inx_c,iny_c], colormap=:bluesreds)
-            # ax  = Axis(fig[3,2], aspect=DataAspect(), title="phv", xlabel="x", ylabel="y")
-            # heatmap!(ax, xv, yv,  G.v[inx_v,iny_v], colormap=:bluesreds)
-            # @show norm(𝐊 - 𝐊')
-            # @show norm(𝐐 + 𝐐ᵀ')
+            scatter!(ax, Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=:roma, markersize=5)
+            ax  = Axis(fig[2,1], aspect=DataAspect(), title="Txx", xlabel="x", ylabel="y")
+            heatmap!(ax, xc, yc,  τ.xx, colormap=:bluesreds)
+            ax  = Axis(fig[2,2], aspect=DataAspect(), title="Tyy", xlabel="x", ylabel="y")
+            heatmap!(ax, xc, yc,  τ.yy, colormap=:bluesreds)
+            ax  = Axis(fig[3,1], aspect=DataAspect(), title="phc", xlabel="x", ylabel="y")
+            heatmap!(ax, xc, yc,  G.c[inx_c,iny_c], colormap=:bluesreds)
+            ax  = Axis(fig[3,2], aspect=DataAspect(), title="phv", xlabel="x", ylabel="y")
+            heatmap!(ax, xv, yv,  G.v[inx_v,iny_v], colormap=:bluesreds)
             #-----------
             display(fig)
-        # end
-        # with_theme(visualisation(fig), theme_latexfonts())
+        end
+        with_theme(visualisation, theme_latexfonts())
     end
     # display(to)
 end
 
 
 let
-
-    # Resolution
-    nc = (x = 250, y = 250)
-
     # # Boundary condition templates
     BCs = [
-        # :free_slip,
-        :EW_periodic,
+        :free_slip,
     ]
+
+    # # Boundary deformation gradient matrix
+    # D_BCs = [
+    #     @SMatrix( [1 0; 0 -1] ),
+    # ]
+
+    # BCs = [
+    #     # :EW_periodic,
+    #     :all_Dirichlet,
+    # ]
 
     # Boundary deformation gradient matrix
     D_BCs = [
-        # @SMatrix( [1 0; 0 -1] ),
-         @SMatrix( [0 1; 0  0] ),
+        #  @SMatrix( [0 1; 0  0] ),
+        @SMatrix( [1 0; 0 -1] ),
     ]
 
     # Run them all
     for iBC in eachindex(BCs)
         @info "Running $(string(BCs[iBC])) and D = $(D_BCs[iBC])"
-        main(nc, BCs[iBC], D_BCs[iBC])
+        main(BCs[iBC], D_BCs[iBC])
     end
 end
