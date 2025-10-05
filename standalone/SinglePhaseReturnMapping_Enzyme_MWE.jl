@@ -1,4 +1,4 @@
-using Enzyme, LinearAlgebra
+using Enzyme, LinearAlgebra, StaticArrays
 
 invII(x) = sqrt(1/2*x[1]^2 + 1/2*x[2]^2 + x[3]^2) 
 
@@ -10,7 +10,7 @@ function residual_single_phase(x, ε̇II_eff, divV, P0, p)
     χe    = K*Δt
     τII, P, λ̇ = x[1], x[2], x[3]
     f      = τII  - C*cosd(ϕ) - P*sind(ϕ)
-    return [ 
+    return @SVector[ 
         ε̇II_eff  -  (τII)/2/ηe - λ̇*(f>=eps),
         divV     + (P - P0)/χe - λ̇*sind(ψ)*(f>=eps),
         (f - ηvp*λ̇)*(f>=eps) +  λ̇*1*(f<eps)
@@ -24,7 +24,7 @@ function StressVector(ϵ̇, τ0, P0, params)
     ε̇II_eff, τII = invII(ε̇_eff), invII(τ0)
 
     # Initialise inner solution array
-    x = [τII, P0, 0.0]
+    x = @SVector([τII, P0, 0.0])
 
     # Newton iteration
     for iter=1:10

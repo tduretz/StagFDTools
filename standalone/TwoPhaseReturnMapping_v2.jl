@@ -5,20 +5,20 @@ using GLMakie, Enzyme, LinearAlgebra#, ForwardDiff
 invII(x) = sqrt(1/2*x[1]^2 + 1/2*x[2]^2 + x[3]^2) 
 
 function residual_two_phase(x, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, p)
-    G, Kϕ, Ks, Kf, C, ϕ, ψ, ηvp, ηΦ, Δt = p.G, p.Kϕ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηΦ, p.Δt
+    G, KΦ, Ks, Kf, C, ϕ, ψ, ηvp, ηΦ, Δt = p.G, p.KΦ, p.Ks, p.Kf, p.C, p.ϕ, p.ψ, p.ηvp, p.ηΦ, p.Δt
     eps   = -1e-13
     ηe    = G*Δt 
-    χe    = Kϕ*Δt
+    χe    = KΦ*Δt
     τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
     f       = τII  - C*cosd(ϕ) - (Pt - Pf)*sind(ϕ)
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
-    dΦdt    = 1/Kϕ * (dPfdt - dPtdt) + 1/ηΦ * (Pf - Pt) + λ̇*sind(ψ)*(f>=eps)
+    dΦdt    = 1/KΦ * (dPfdt - dPtdt) + 1/ηΦ * (Pf - Pt) + λ̇*sind(ψ)*(f>=eps)
     Φ       = Φ0 + dΦdt*Δt
     dlnρfdt = dPfdt / Kf
     dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
 
-    Kd = (1-Φ)*(1/Kϕ + 1/Ks)^-1
+    Kd = (1-Φ)*(1/KΦ + 1/Ks)^-1
     α  = 1 - Kd/Ks
     B  = (1/Kd - 1/Ks) / (1/Kd - 1/Ks + Φ*(1/Kf - 1/Ks))
 
@@ -31,8 +31,8 @@ function residual_two_phase(x, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, p)
     # fpf2 = divqD     - α/Kd*(dPtdt - 1/B*dPfdt) + 1/(1-Φ)*λ̇*sind(ψ)*(f>=eps) - (Pt-Pf)/((1-Φ)*ηΦ)
 
     # # Equations self-rederived from Yarushina (2015) adding dilation
-    # fpt3 = divVs    + (1/Ks)/(1-Φ) * (dPtdt - Φ*dPfdt) + (1/Kϕ)/(1-Φ) * (dPtdt - dPfdt) + (Pt-Pf)/((1-Φ)*ηΦ) - 1/(1-Φ)*λ̇*sind(ψ)*(f>=eps)
-    # fpf3 = divqD    - (dPtdt - dPfdt)/Kϕ + Φ*dPfdt/Kf + Φ*divVs - (Pt-Pf)/ηΦ +   1/(1-Φ)*λ̇*sind(ψ)*(f>=eps)
+    # fpt3 = divVs    + (1/Ks)/(1-Φ) * (dPtdt - Φ*dPfdt) + (1/KΦ)/(1-Φ) * (dPtdt - dPfdt) + (Pt-Pf)/((1-Φ)*ηΦ) - 1/(1-Φ)*λ̇*sind(ψ)*(f>=eps)
+    # fpf3 = divqD    - (dPtdt - dPfdt)/KΦ + Φ*dPfdt/Kf + Φ*divVs - (Pt-Pf)/ηΦ +   1/(1-Φ)*λ̇*sind(ψ)*(f>=eps)
 
     return [ 
         ε̇II_eff   -  (τII)/2/ηe - λ̇*(f>=eps),
@@ -91,10 +91,10 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
     # Recompute components
     τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
     τ = ε̇_eff .* τII./ε̇II_eff
-    Kϕ, ηΦ, ψ, Δt = params.Kϕ, params.ηΦ, params.ψ, params.Δt
+    KΦ, ηΦ, ψ, Δt = params.KΦ, params.ηΦ, params.ψ, params.Δt
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
-    dΦdt    = 1/Kϕ * (dPfdt - dPtdt) + 1/ηΦ * (Pf - Pt) + λ̇*sind(ψ) 
+    dΦdt    = 1/KΦ * (dPfdt - dPtdt) + 1/ηΦ * (Pf - Pt) + λ̇*sind(ψ) 
     Φ       = Φ0 + dΦdt*Δt
     return [τ[1], τ[2], τ[3], Pt, Pf], λ̇, Φ 
 end
@@ -118,7 +118,7 @@ function two_phase_return_mapping()
     
     params = (
         G     = 1.0,
-        Kϕ    = 3.0,
+        KΦ    = 3.0,
         Ks    = 3.0,
         Kf    = 3.0,
         C     = .02,
