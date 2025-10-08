@@ -1,4 +1,5 @@
-using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, GLMakie, LinearAlgebra, SparseArrays, Printf
+using Plots #GLMakie
+using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
@@ -100,10 +101,9 @@ using TimerOutputs
     Vi      = (x  = zeros(size_x...), y  = zeros(size_y...))
     η       = (c  =  ones(size_c...), v  =  ones(size_v...) )
     λ̇       = (c  = zeros(size_c...), v  = zeros(size_v...) )
-    ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
+    ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
     τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
-
     Pt      = zeros(size_c...)
     Pti     = zeros(size_c...)
     Pt0     = zeros(size_c...)
@@ -202,8 +202,8 @@ using TimerOutputs
             𝐊  .= [M.Vx.Vx M.Vx.Vy; M.Vy.Vx M.Vy.Vy]
             𝐐  .= [M.Vx.Pt; M.Vy.Pt]
             𝐐ᵀ .= [M.Pt.Vx M.Pt.Vy]
-            𝐏  .= [M.Pt.Pt;]             
-            
+            𝐏  .= [M.Pt.Pt;]      
+                        
             #--------------------------------------------#
      
             # Direct-iterative solver
@@ -226,22 +226,31 @@ using TimerOutputs
 
         #--------------------------------------------#
 
-        #-----------  
-        fig = Figure(size=(600, 600))
-        #-----------
-        ax  = Axis(fig[1,1], aspect=DataAspect(), title="Vx", xlabel="x", ylabel="y")
-        heatmap!(ax, xv, yc, (V.x[inx_Vx,iny_Vx])')
-        ax  = Axis(fig[1,2], aspect=DataAspect(), title="Vy", xlabel="x", ylabel="y")
-        heatmap!(ax, xc, yv, V.y[inx_Vy,iny_Vy]')
-        ax  = Axis(fig[2,1], aspect=DataAspect(), title="Vy", xlabel="x", ylabel="y")
-        heatmap!(ax, xc, yc,  Pt[inx_c,iny_c]')
-        ax  = Axis(fig[2,2], aspect=DataAspect(), title="Convergence", xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error")
-        scatter!(ax, 1:niter, log10.(err.x[1:niter]), label="Vx")
-        scatter!(ax, 1:niter, log10.(err.y[1:niter]), label="Vy")
-        scatter!(ax, 1:niter, log10.(err.p[1:niter]), label="Pt")
-        #-----------
-        display(fig)
-        #-----------
+        p3 = heatmap(xv, yc, (V.x[inx_Vx,iny_Vx])', aspect_ratio=1, xlim=extrema(xv), title="Vx")
+        p4 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy")
+        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt")
+        p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright, title=BC_template)
+        p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
+        p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
+        p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
+        display(plot(p1, p2, p3, p4, layout=(2,2)))
+
+        # #-----------  
+        # fig = Figure(size=(600, 600))
+        # #-----------
+        # ax  = Axis(fig[1,1], aspect=DataAspect(), title="Vx", xlabel="x", ylabel="y")
+        # heatmap!(ax, xv, yc, (V.x[inx_Vx,iny_Vx]))
+        # ax  = Axis(fig[1,2], aspect=DataAspect(), title="Vy", xlabel="x", ylabel="y")
+        # heatmap!(ax, xc, yv, V.y[inx_Vy,iny_Vy])
+        # ax  = Axis(fig[2,1], aspect=DataAspect(), title="Vy", xlabel="x", ylabel="y")
+        # heatmap!(ax, xc, yc,  Pt[inx_c,iny_c])
+        # ax  = Axis(fig[2,2], aspect=DataAspect(), title="Convergence", xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error")
+        # scatter!(ax, 1:niter, log10.(err.x[1:niter]), label="Vx")
+        # scatter!(ax, 1:niter, log10.(err.y[1:niter]), label="Vy")
+        # scatter!(ax, 1:niter, log10.(err.p[1:niter]), label="Pt")
+        # #-----------
+        # display(fig)
+        # #-----------
     end
 
     display(to)

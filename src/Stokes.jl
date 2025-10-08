@@ -566,11 +566,9 @@ function SetBCVx1(Vx, typex, bcx, Δ)
     for jj in axes(typex, 2)
         if typex[1,jj] == :Neumann_normal
             MVx[1,jj] = fma(2, Δ.x*bcx[1,jj], Vx[2,jj])
-            # @show MVx[1,jj]
         end
         if typex[end,jj] == :Neumann_normal
             MVx[end,jj] = fma(2,-Δ.x*bcx[end,jj], Vx[end-1,jj])
-            # @show MVx[end,jj]
         end
     end
     return SMatrix(MVx)
@@ -993,7 +991,7 @@ function LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, 
         ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
         ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
         ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-        rvec[i] = @views norm(R.x[inx_Vx,iny_Vx])/length(R.x[inx_Vx,iny_Vx]) + norm(R.y[inx_Vy,iny_Vy])/length(R.y[inx_Vy,iny_Vy]) + 0*norm(R.p[inx_c,iny_c])/length(R.p[inx_c,iny_c])  
+        rvec[i] = @views norm(R.x[inx_Vx,iny_Vx])/length(R.x[inx_Vx,iny_Vx]) + norm(R.y[inx_Vy,iny_Vy])/length(R.y[inx_Vy,iny_Vy]) + norm(R.p[inx_c,iny_c])/length(R.p[inx_c,iny_c])  
     end
     imin = argmin(rvec)
     V.x .= Vi.x 
@@ -1007,6 +1005,8 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, 
     _ones = @SVector ones(4)
 
     # @show "centroids"
+
+    D_test = @MMatrix ones(4,4)
 
     # Loop over centroids
     for j=2:size(ε̇.xx,2)-1, i=2:size(ε̇.xx,1)-1
@@ -1056,6 +1056,22 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, 
             𝐷.c[i,j] .= diagm(2*jac.val[2] * _ones)
             𝐷.c[i,j][4,4] = 1
 
+            # ############### TEST
+            # ε̇vec   = @SVector([ε̇xx[1]+τ0.xx[i,j]/(2*G[1]*Δ.t), ε̇yy[1]+τ0.yy[i,j]/(2*G[1]*Δ.t), ε̇̄xy[1]+τ̄xy0[1]/(2*G[1]*Δ.t), Dkk[1]])
+            # jac2   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_div!, ε̇vec, Const(Dkk[1]), Const(Pt0[i,j]), Const(materials), Const(phases.c[i,j]), Const(Δ))
+
+            # @views D_test[:,1] .= jac2.derivs[1][1][1]
+            # @views D_test[:,2] .= jac2.derivs[1][2][1]
+            # @views D_test[:,3] .= jac2.derivs[1][3][1]
+            # @views D_test[:,4] .= jac2.derivs[1][4][1]
+
+            # K = 1 / materials.β[phases.c[i,j]]
+            # C = @SMatrix[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 -1/(K*Δ.t)]
+            # # 𝐷.c[i,j][4,4] = -K*Δ.t
+
+            # 𝐷_ctl.c[i,j] .= D_test*C
+            # ############### TEST
+
             # Update stress
             τ.xx[i,j]  = jac.val[1][1]
             τ.yy[i,j]  = jac.val[1][2]
@@ -1071,7 +1087,7 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, 
     # @show "vertices"
 
     # Loop over vertices
-    for j=3:size(ε̇.xy,2)-2, i=3:size(ε̇.xy,1)-2
+    for j=2:size(ε̇.xy,2)-1, i=2:size(ε̇.xy,1)-1
         Vx     = SMatrix{3,2}(      V.x[ii,jj] for ii in i-1:i+1, jj in j:j+1  )
         Vy     = SMatrix{2,3}(      V.y[ii,jj] for ii in i:i+1  , jj in j-1:j+1)
         bcx    = SMatrix{3,2}(    BC.Vx[ii,jj] for ii in i-1:i+1, jj in j:j+1  )
@@ -1120,6 +1136,21 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, 
         # Tangent operator used for Picard Linearisation
         𝐷.v[i,j] .= diagm(2*jac.val[2] * _ones)
         𝐷.v[i,j][4,4] = 1
+
+        # ############### TEST
+        # ε̇vec  = @SVector([ε̇̄xx[1]+τ̄xx0[1]/(2*G[1]*Δ.t), ε̇̄yy[1]+τ̄yy0[1]/(2*G[1]*Δ.t), ε̇xy[1]+τ0.xy[i,j]/(2*G[1]*Δ.t), D̄kk[1]])
+        # jac2   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_div!, ε̇vec, Const(D̄kk[1]), Const(P̄0[1]), Const(materials), Const(phases.v[i,j]), Const(Δ))
+
+        # @views D_test[:,1] .= jac2.derivs[1][1][1]
+        # @views D_test[:,2] .= jac2.derivs[1][2][1]
+        # @views D_test[:,3] .= jac2.derivs[1][3][1]
+        # @views D_test[:,4] .= jac2.derivs[1][4][1]
+
+        # K = 1 / materials.β[phases.c[i,j]]
+        # C = @SMatrix[1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 -1/(K*Δ.t)]
+
+        # 𝐷_ctl.v[i,j] .= D_test*C
+        # ############### TEST
 
         # Update stress
         τ.xy[i,j] = jac.val[1][3]

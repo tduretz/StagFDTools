@@ -39,7 +39,7 @@ using Enzyme  # AD backends you want to use
         G     = [1e-7 1e-7], 
         Kd    = [1e-6 1e-6],
         Ks    = [1e-6 1e-6],
-        Kϕ    = [1e-6 1e-6],
+        KΦ    = [1e-6 1e-6],
         Kf    = [1e-5 1e-5],
         k_ηf0 = [k_ηf0 k_ηf0],
     )
@@ -53,7 +53,7 @@ using Enzyme  # AD backends you want to use
         G     = [1e30 1e30], 
         Kd    = [1e30 1e30],
         Ks    = [1e30 1e30],
-        Kϕ    = [1e30 1e30],
+        KΦ    = [1e30 1e30],
         Kf    = [1e30 1e30],
         k_ηf0 = [k_ηf0 k_ηf0],
     )
@@ -130,10 +130,9 @@ using Enzyme  # AD backends you want to use
     η   = (c  =  ones(size_c...), v  =  ones(size_v...) )
     ϕ   = (c=ϕ0.*ones(size_c...), v=ϕ0.*ones(size_c...) )
     
-    ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
+    ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
     τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
-
     Dc      =  [@MMatrix(zeros(5,5)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)]
     Dv      =  [@MMatrix(zeros(5,5)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)]
     𝐷       = (c = Dc, v = Dv)

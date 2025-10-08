@@ -75,7 +75,7 @@ function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, T, ΔP, τ0, 𝐷, phases, mate
     fx  = ( τxx[2]  - τxx[1] ) * invΔx
     fx += ( τxy[2]  - τxy[1] ) * invΔy
     fx -= ( Ptc[2]  - Ptc[1] ) * invΔx
-    fx *= -1 #* Δ.x * Δ.y
+    fx *= -1 * Δ.x * Δ.y
 
     return fx
 end
@@ -138,7 +138,7 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, T, ΔP, τ0, 𝐷, phases, mate
     fy  = ( τyy[2]  -  τyy[1] ) * invΔy
     fy += ( τxy[2]  -  τxy[1] ) * invΔx
     fy -= ( Ptc[2]  -  Ptc[1])  * invΔy
-    fy *= -1 #* Δ.x * Δ.y
+    fy *= -1 * Δ.x * Δ.y
     
     return fy
 end
@@ -150,12 +150,12 @@ function Continuity(Vx, Vy, Pt, Pt0, T, T0, phase, materials, type_loc, bcv_loc,
     ρr       = materials.ρr[phase]
     α        = materials.α[phase]
     β        = 1/(materials.K[phase])
-    ρ        = ρr * exp(β*Pt[1,1]  - α*T[2,2])
-    ρ0       = ρr * exp(β*Pt0      - α*T0)
+    ρ        = ρr* exp(β*Pt[1,1]  - α*T[2,2])
+    ρ0       = ρr* exp(β*Pt0      - α*T0)
     dlnρdt   = (log(ρ) - log(ρ0))/Δ.t
-    fp = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy + 0*Dzz  + dlnρdt
-    # fp *= η/(Δ.x+Δ.y)
-    return fp
+    f = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy + 0*Dzz  + dlnρdt 
+    f    *= max(invΔx, invΔy)
+    return f
 end
 
 function HeatDiffusion(Vx, Vy, Pt, Pt0, T, T0, phase, materials, k, type_loc, bcv_loc, Δ)
@@ -222,18 +222,18 @@ end
 
 function Numbering!(N, type, nc)
     
-    ndof  = 0
+   ndof  = 0
     neq   = 0
     noisy = false
 
     ############ Numbering Vx ############
-    periodic_west  = sum(any(i->i==:periodic, type.Vx[2,:], dims=2)) > 0
-    periodic_south = sum(any(i->i==:periodic, type.Vx[:,2], dims=1)) > 0
+    periodic_west  = sum(any(i->i==:periodic, type.Vx[1,3:end-2], dims=2)) > 0
+    periodic_south = sum(any(i->i==:periodic, type.Vx[3:end-2,2], dims=1)) > 0
 
     shift  = (periodic_west) ? 1 : 0 
     # Loop through inner nodes of the mesh
     for j=3:nc.y+4-2, i=2:nc.x+3-1
-        if type.Vx[i,j] == :Dirichlet_normal || (type.Vx[i,j] != :periodic && i==nc.x+3-1) || type.Vx[i,j] == :constant 
+        if type.Vx[i,j] == :Dirichlet_normal || (type.Vx[i,j] == :periodic && i==nc.x+3-1)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof+=1
@@ -243,7 +243,9 @@ function Numbering!(N, type, nc)
 
     # Copy equation indices for periodic cases
     if periodic_west
-        N.Vx[1,:] .= N.Vx[end-2,:]
+        N.Vx[1,:]     .= N.Vx[end-2,:]
+        N.Vx[end-1,:] .= N.Vx[2,:]
+        N.Vx[end,:]   .= N.Vx[3,:]
     end
 
     # Copy equation indices for periodic cases
@@ -261,12 +263,12 @@ function Numbering!(N, type, nc)
 
     ############ Numbering Vy ############
     ndof  = 0
-    periodic_west  = sum(any(i->i==:periodic, type.Vy[2,:], dims=2)) > 0
-    periodic_south = sum(any(i->i==:periodic, type.Vy[:,2], dims=1)) > 0
+    periodic_west  = sum(any(i->i==:periodic, type.Vy[2,3:end-2], dims=2)) > 0
+    periodic_south = sum(any(i->i==:periodic, type.Vy[3:end-2,1], dims=1)) > 0
     shift = periodic_south ? 1 : 0
     # Loop through inner nodes of the mesh
     for j=2:nc.y+3-1, i=3:nc.x+4-2
-        if type.Vy[i,j] == :Dirichlet_normal || (type.Vy[i,j] != :periodic && j==nc.y+3-1) || type.Vy[i,j] == :constant 
+        if type.Vy[i,j] == :Dirichlet_normal || (type.Vy[i,j] == :periodic && j==nc.y+3-1)
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof+=1
@@ -276,7 +278,9 @@ function Numbering!(N, type, nc)
 
     # Copy equation indices for periodic cases
     if periodic_south
-        N.Vy[:,1] .= N.Vy[:,end-2]
+        N.Vy[:,1]     .= N.Vy[:,end-2]
+        N.Vy[:,end-1] .= N.Vy[:,2]
+        N.Vy[:,end]   .= N.Vy[:,3]
     end
 
     # Copy equation indices for periodic cases
@@ -354,13 +358,13 @@ function SetRHS!(r, R, number, type, nc)
 
     nVx, nVy, nPt   = maximum(number.Vx), maximum(number.Vy), maximum(number.Pt)
 
-    for j=2:nc.y+3-1, i=3:nc.x+4-2
+       for j=2:nc.y+3-1, i=2:nc.x+3-1
         if type.Vx[i,j] == :in
             ind = number.Vx[i,j]
             r[ind] = R.x[i,j]
         end
     end
-    for j=3:nc.y+4-2, i=2:nc.x+3-1
+    for j=2:nc.y+3-1, i=2:nc.x+3-1
         if type.Vy[i,j] == :in
             ind = number.Vy[i,j] + nVx
             r[ind] = R.y[i,j]
@@ -384,19 +388,21 @@ function UpdateSolution!(V, T, P, dx, number, type, nc)
 
     nVx, nVy, nPt   = maximum(number.Vx), maximum(number.Vy), maximum(number.Pt)
 
-    for j=2:nc.y+3-1, i=3:nc.x+4-2
+    for j=1:size(V.x,2), i=1:size(V.x,1)
         if type.Vx[i,j] == :in
             ind = number.Vx[i,j]
-            V.x[i,j] += dx[ind] 
+            V.x[i,j] += dx[ind]
         end
     end
-    for j=3:nc.y+4-2, i=2:nc.x+3-1
+ 
+    for j=1:size(V.y,2), i=1:size(V.y,1)
         if type.Vy[i,j] == :in
             ind = number.Vy[i,j] + nVx
             V.y[i,j] += dx[ind]
         end
     end
-    for j=2:nc.y+1, i=2:nc.x+1
+    
+    for j=1:size(P.t,2), i=1:size(P.t,1)
         if type.Pt[i,j] == :in
             ind = number.Pt[i,j] + nVx + nVy
             P.t[i,j] += dx[ind]
@@ -870,11 +876,11 @@ end
 
 function AssembleHeatDiffusion2D!(K, V, T, T0, P, P0, phases, materials, num, pattern, type, BC, nc, Δ) 
                 
-    shift    = (x=1, y=1)
+    shift = (x=1, y=1)
     ∂R∂Vx = @MMatrix zeros(3,2)
     ∂R∂Vy = @MMatrix zeros(2,3)
     ∂R∂Pt = @MMatrix zeros(1,1)
-    ∂R∂T = @MMatrix zeros(3,3)
+    ∂R∂T  = @MMatrix zeros(3,3)
 
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
         Pt_loc     = MMatrix{1,1}(      P.t[ii,jj] for ii in i:i, jj in j:j)
@@ -963,13 +969,13 @@ function SetBCVy1(Vy, typey, bcy, Δ)
         if typey[1,jj] == :Dirichlet_tangent
             MVy[1,jj] = fma(2, bcy[1,jj], -Vy[2,jj])
         elseif typey[1,jj] == :Neumann_tangent
-            MVy[1,jj] = fma(Δ.y, bcy[1,jj], Vy[2,jj])
+            MVy[1,jj] = fma(Δ.x, bcy[1,jj], Vy[2,jj])
         end
 
         if typey[end,jj] == :Dirichlet_tangent
             MVy[end,jj] = fma(2, bcy[end,jj], -Vy[end-1,jj])
         elseif typey[end,jj] == :Neumann_tangent
-            MVy[end,jj] = fma(Δ.y, bcy[end,jj], Vy[end-1,jj])
+            MVy[end,jj] = fma(Δ.x, bcy[end,jj], Vy[end-1,jj])
         end
     end
     # N/S

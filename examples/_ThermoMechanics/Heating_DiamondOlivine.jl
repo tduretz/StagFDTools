@@ -1,6 +1,6 @@
 using StagFDTools, StagFDTools.ThermoMechanics, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf, JLD2
 import Statistics:mean
-using Enzyme, GLMakie 
+using Enzyme, GLMakie, GridGeometryUtils 
 
 hours = 3600
 
@@ -15,28 +15,44 @@ hours = 3600
     J  = m * sc.L^2.0 / sc.t^2.0
     W  = J/sc.t
 
-    nt           = 100
-    niter        = 5
-    ϵ_nl         = 1e-8
     ηi           = 1e18 / (sc.σ*sc.t)
     ηinc         = 1e18 / (sc.σ*sc.t)
-    Gi           = 1e10 / sc.σ  
-    Ginc         = Gi/1#(6.0)
+    Gi           = 535e9/ sc.σ  
+    Ginc         = 80e9/ sc.σ
     Ki           = 444e9 / sc.σ 
-    αi           = 1e-5 / (1/sc.T)
-    Δt0          = ηi/Gi/4.0/1000
-    ki           = 3.0    / (W/sc.L/sc.T)
-    ρi           = 3000.0 / (m/sc.L^3)
-    ρinc         = 1000.0 / (m/sc.L^3)
-    cpi          = 1000.0 / (J/m/sc.T)
+    Kinc         = 126e9 / sc.σ
+    αi           = 1e-6 / (1/sc.T)
+    αinc         = 3.2e-5 / (1/sc.T)
+    ki           = 2e3    / (W/sc.L/sc.T)
+    kinc         = 4.0    / (W/sc.L/sc.T)
+    ρi           = 3500.0 / (m/sc.L^3)
+    ρinc         = 3300.0 / (m/sc.L^3)
+    cpi          = 509.0 / (J/m/sc.T)
+    cpinc        = 800.0 / (J/m/sc.T)
+    Pinc         = 1e9 / sc.σ
+
+    nt           = 10
+    niter        = 5
+    ϵ_nl         = 1e-8
+    Δt0          = ηi/Gi/4.0/100
     ε̇            = 0*1e-6   / (1/sc.t)
     L            = 2e-3     / sc.L
-    r            = 0.4/1000    / sc.L
     T_ini        = 300.0  / sc.T
     T_fin        = 1100.0 / sc.T
-    dTdt         = (T_fin - T_ini) / (100*Δt0)
+    dTdt         = (T_fin - T_ini) / (nt*Δt0)
     P_ini        = 1e6    / sc.σ
     t            = 0.0
+    r            = 0.3/1000    / sc.L
+
+    # Material geometries
+    inclusion = Ellipse((0.0, 0.0), r, r; θ = 1 * π / 4)
+
+    # inclusion = Ellipse((0.0, 0.0), r/3, 2r; θ = 1 * π / 4)
+
+    # inclusion = Rectangle((0.0, -0.0), r*sqrt(π), r*sqrt(π); θ = -0*π / 4)
+
+    # inclusion = Hexagon((0.0, -0.0), r; θ = -1*π / 4)
+
 
     # Velocity gradient matrix
     D_BC = @SMatrix( [ε̇ 0; 0 -ε̇] )
@@ -49,10 +65,10 @@ hours = 3600
         n            = [1.0  1.0],
         ηs0          = [ηi  ηinc], 
         G            = [Gi  Ginc], 
-        K            = [Ki  Ki  ],
-        α            = [αi  αi  ],
-        k            = [ki  ki  ],
-        cp           = [cpi cpi ],
+        K            = [Ki  Kinc],
+        α            = [αi  αinc],
+        k            = [ki  kinc],
+        cp           = [cpi cpinc],
         ρr           = [ρi  ρinc],
     )
  
@@ -68,16 +84,28 @@ hours = 3600
     )
     # -------- Vx -------- #
     type.Vx[inx_Vx,iny_Vx]  .= :in       
-    type.Vx[2,iny_Vx]       .= :Dirichlet_normal 
-    type.Vx[end-1,iny_Vx]   .= :Dirichlet_normal 
+    type.Vx[end-0,iny_Vx]   .= :Neumann_normal
+    type.Vx[1,iny_Vx]       .= :Neumann_normal 
     type.Vx[inx_Vx,2]       .= :Dirichlet_tangent
     type.Vx[inx_Vx,end-1]   .= :Dirichlet_tangent
     # -------- Vy -------- #
     type.Vy[inx_Vy,iny_Vy]  .= :in       
     type.Vy[2,iny_Vy]       .= :Dirichlet_tangent
     type.Vy[end-1,iny_Vy]   .= :Dirichlet_tangent
-    type.Vy[inx_Vy,2]       .= :Dirichlet_normal 
-    type.Vy[inx_Vy,end-1]   .= :Dirichlet_normal 
+    type.Vy[inx_Vy,1]       .= :Neumann_normal 
+    type.Vy[inx_Vy,end-0]   .= :Neumann_normal 
+    #-------- Vx -------- #
+    # type.Vx[inx_Vx,iny_Vx]  .= :in       
+    # type.Vx[2,iny_Vx]       .= :Dirichlet_normal 
+    # type.Vx[end-1,iny_Vx]   .= :Dirichlet_normal 
+    # type.Vx[inx_Vx,2]       .= :Dirichlet_tangent
+    # type.Vx[inx_Vx,end-1]   .= :Dirichlet_tangent
+    # # -------- Vy -------- #
+    # type.Vy[inx_Vy,iny_Vy]  .= :in       
+    # type.Vy[2,iny_Vy]       .= :Dirichlet_tangent
+    # type.Vy[end-1,iny_Vy]   .= :Dirichlet_tangent
+    # type.Vy[inx_Vy,2]       .= :Dirichlet_normal 
+    # type.Vy[inx_Vy,end-1]   .= :Dirichlet_normal 
     # -------- Pt -------- #
     type.Pt[2:end-1,2:end-1] .= :in
     # -------- T -------- #
@@ -95,6 +123,10 @@ hours = 3600
         fill(0, (nc.x+2, nc.y+2)),
     )
     Numbering!(number, type, nc)
+
+    # printxy(type.Vx)
+    # printxy(number.Vx)
+    # error()
 
     # Stencil extent for each block matrix
     pattern = Fields(
@@ -127,7 +159,7 @@ hours = 3600
     T0  = (c  =  T_ini.*ones(size_c...), v  =  T_ini.*ones(size_v...) )
     ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), zz = zeros(size_c...), xy = zeros(size_v...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), zz = zeros(size_c...), xy = zeros(size_v...) )
-    τ       = (xx = zeros(size_c...), yy = zeros(size_c...), zz = zeros(size_c...), xy = zeros(size_v...) )
+    τ       = (xx = zeros(size_c...), yy = zeros(size_c...), zz = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     Dc      =  [@MMatrix(zeros(5,5)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)]
     Dv      =  [@MMatrix(zeros(5,5)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)]
     𝐷       = (c = Dc, v = Dv)
@@ -153,31 +185,32 @@ hours = 3600
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
     V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
 
-    Xc = xc .+ 0*yc'
-    Yc = 0*xc .+ yc'
-    Xv = xv .+ 0*yv'
-    Yv = 0*xv .+ yv'
-    α  = 30.
-    ax = 1
-    ay = 1
-    X_tilt = cosd(α).*Xc .- sind(α).*Yc
-    Y_tilt = sind(α).*Xc .+ cosd(α).*Yc
-    phases.c[inx_c, iny_c][(X_tilt.^2 ./ax.^2 .+ (Y_tilt).^2 ./ay^2) .< r^2 ] .= 2
-    X_tilt = cosd(α).*Xv .- sind(α).*Yv
-    Y_tilt = sind(α).*Xv .+ cosd(α).*Yv
-    phases.v[inx_v, iny_v][(X_tilt.^2 ./ax.^2 .+ (Y_tilt).^2 ./ay^2) .< r^2 ] .= 2
+    for i in inx_c, j in iny_c   # loop on centroids
+        𝐱 = @SVector([xc[i-1], yc[j-1]])
+        if inside(𝐱, inclusion)
+            phases.c[i, j] = 2
+            P.t[i, j] = Pinc
+        end
+    end
+       for i in inx_v, j in iny_v  # loop on vertices
+        𝐱 = @SVector([xv[i-1], yv[j-1]])
+        if inside(𝐱, inclusion)
+            phases.v[i, j] = 2
+        end
+    end
 
     # Boundary condition values
     BC = ( Vx = zeros(size_x...), Vy = zeros(size_y...), Pt = zeros(size_c...), T = zeros(size_c...))
-    BC.Vx[     2, iny_Vx] .= (type.Vx[     1, iny_Vx] .== :Neumann_normal)  .* D_BC[1,1]
-    BC.Vx[ end-1, iny_Vx] .= (type.Vx[   end, iny_Vx] .== :Neumann_normal)  .* D_BC[1,1]
-    BC.Vx[inx_Vx,      2] .= (type.Vx[inx_Vx,      2] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[inx_Vx,     2] .== :Dirichlet_tangent) .* (D_BC[1,1]*xv .+ D_BC[1,2]*yv[1]  )
-    BC.Vx[inx_Vx,  end-1] .= (type.Vx[inx_Vx,  end-1] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[inx_Vx, end-1] .== :Dirichlet_tangent) .* (D_BC[1,1]*xv .+ D_BC[1,2]*yv[end])
-    BC.Vy[inx_Vy,     2 ] .= (type.Vy[inx_Vy,     1 ] .== :Neumann_normal)  .* D_BC[2,2]
-    BC.Vy[inx_Vy, end-1 ] .= (type.Vy[inx_Vy,   end ] .== :Neumann_normal)  .* D_BC[2,2]
-    BC.Vy[     2, iny_Vy] .= (type.Vy[     2, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[    2, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[1]   .+ D_BC[2,2]*yv)
-    BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
-
+    @views begin
+        BC.Vx[     2, iny_Vx] .= (type.Vx[     1, iny_Vx] .== :Neumann_normal) .* D_BC[1,1]
+        BC.Vx[ end-1, iny_Vx] .= (type.Vx[   end, iny_Vx] .== :Neumann_normal) .* D_BC[1,1]
+        BC.Vx[inx_Vx,      2] .= (type.Vx[inx_Vx,      2] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[inx_Vx,     2] .== :Dirichlet_tangent) .* (D_BC[1,1]*xv .+ D_BC[1,2]*yv[1]  )
+        BC.Vx[inx_Vx,  end-1] .= (type.Vx[inx_Vx,  end-1] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[inx_Vx, end-1] .== :Dirichlet_tangent) .* (D_BC[1,1]*xv .+ D_BC[1,2]*yv[end])
+        BC.Vy[inx_Vy,     2 ] .= (type.Vy[inx_Vy,     1 ] .== :Neumann_normal) .* D_BC[2,2]
+        BC.Vy[inx_Vy, end-1 ] .= (type.Vy[inx_Vy,   end ] .== :Neumann_normal) .* D_BC[2,2]
+        BC.Vy[     2, iny_Vy] .= (type.Vy[     2, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[    2, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[1]   .+ D_BC[2,2]*yv)
+        BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
+    end
     #--------------------------------------------#
 
     err    = (x = zeros(niter), y = zeros(niter), Pt = zeros(niter), T = zeros(niter))
@@ -211,7 +244,6 @@ hours = 3600
         BC.T .= T_ini .+ dTdt*t
 
         @show BC.T[2,2]*sc.T
-        # error("s") 
 
         # Time integration loop
         for iter=1:niter
@@ -280,12 +312,12 @@ hours = 3600
 
         # Post process stress and strain rate
         τxyc = av2D(τ.xy)
-        τII  = sqrt.( 0.5.*(τ.xx[inx_c,iny_c].^2 + τ.yy[inx_c,iny_c].^2 + (-τ.xx[inx_c,iny_c]-τ.yy[inx_c,iny_c]).^2) .+ τxyc[inx_c,iny_c].^2 )
 
-        probes.T[it]   = mean(T.c[inx_c,iny_c])
-        probes.Pt[it]  = mean(P.t[inx_c,iny_c])
+        probes.T[it]   = mean(T.c[phases.c .== 2])
+        probes.Pt[it]  = maximum(P.t[phases.c .== 2])
         probes.t[it]   = t
-        probes.τII[it] = mean(τII)
+        probes.τII[it] = maximum(τ.II[phases.c .== 1])
+        @show mean(T.c[inx_c,iny_c])*sc.T
 
         # Post process 
         Vxsc = 0.5*(V.x[1:end-1,2:end-1] + V.x[2:end,2:end-1])
@@ -293,25 +325,40 @@ hours = 3600
         Vs   = sqrt.( Vxsc.^2 .+ Vysc.^2)
 
         # Visualise
-        fig = Figure()
-        ax  = Axis(fig[1:3,1], aspect=DataAspect(), title="Strain rate", xlabel="x", ylabel="y")
-        # heatmap!(ax, xc, yc,  (R.T[inx_c,iny_c]), colormap=:bluesreds)
-        heatmap!(ax, xc, yc,  (phases.c[inx_c,iny_c]), colormap=:bluesreds)
-        # contour!(ax, xc, yc,  phases.c[inx_c,iny_c], color=:black)
-        st = 10
-        # arrows!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], arrowsize = 0, lengthscale=0.04, linewidth=2, color=:white)
-        ax  = Axis(fig[1,2], xlabel="Time (h)", ylabel="Effective stress (Pa)")
-        scatter!(ax, probes.t[1:nt]./hours, probes.τII[1:nt]*sc.σ )
-        ax  = Axis(fig[2,2], xlabel="Time (h)", ylabel="Pressure (GPa)")
-        scatter!(ax, probes.t[1:nt]./hours, probes.Pt[1:nt]*sc.σ./1e9 )
-        ax  = Axis(fig[3,2], xlabel="Time (h)", ylabel="Temperature (K)")
-        scatter!(ax, probes.t[1:nt]./hours, probes.T[1:nt]*sc.T )
-        # ax  = Axis(fig[2,2], xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error")
-        # scatter!(ax, 1:niter, log10.(err.x[1:niter]) )
-        # scatter!(ax, 1:niter, log10.(err.y[1:niter]) )
-        # scatter!(ax, 1:niter, log10.(err.Pt[1:niter]) )
-        # scatter!(ax, 1:niter, log10.(err.T[1:niter]) )
-        display(fig)
+        function figure()
+            ftsz = 25
+
+            fig = Figure()
+            empty!(fig)
+            ax  = Axis(fig[1,1], aspect=DataAspect(), title=L"$$Pressure", xlabel="x", ylabel="y")
+            # heatmap!(ax, xc, yc,  (R.T[inx_c,iny_c]), colormap=:bluesreds)
+            # heatmap!(ax, xc, yc,  (phases.c[inx_c,iny_c]), colormap=:bluesreds)
+            # contour!(ax, xc, yc,  phases.c[inx_c,iny_c], color=:black)
+            hm =heatmap!(ax, xc, yc,  (P.t[inx_c,iny_c]*sc.σ/1e9), colormap=:bluesreds)
+            Colorbar(fig[2, 1], hm, label = L"$P$ (GPa)", height=10, width = 200, labelsize = 15, ticklabelsize = 15, vertical=false, valign=true, flipaxis = true )
+            
+            ax  = Axis(fig[1,2], aspect=DataAspect(), title=L"$$Deviatoric stress", xlabel="x", ylabel="y")
+            hm =heatmap!(ax, xc, yc,  (τ.II[inx_c,iny_c]*sc.σ/1e9), colormap=:bluesreds)
+            Colorbar(fig[2, 2], hm, label = L"$τ$ (GPa)", height=10, width = 200, labelsize = 15, ticklabelsize = 15, vertical=false, valign=true, flipaxis = true )
+            
+            st = 10
+            # arrows!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], arrowsize = 0, lengthscale=0.04, linewidth=2, color=:white)
+            # ax  = Axis(fig[3,2], xlabel="Time (h)", ylabel="τ dia. (GPa)")
+            # scatter!(ax, probes.t[1:nt]./hours, probes.τII[1:nt]*sc.σ./1e9 ) 
+            ax  = Axis(fig[3,2], xlabel=L"$T$ (\degree~C)", ylabel=L"$\tau$ dia. (GPa)")
+            scatter!(ax, probes.T[1:it]*sc.T, probes.τII[1:it]*sc.σ./1e9 ) 
+            ax  = Axis(fig[3,1], xlabel=L"$T$  (\degree~C)", ylabel=L"$P$ ol. (GPa)")
+            scatter!(ax, probes.T[1:it]*sc.T, probes.Pt[1:it]*sc.σ./1e9 )
+            # ax  = Axis(fig[3,3], xlabel="Time (h)", ylabel="Temperature (K)")
+            # scatter!(ax, probes.t[1:nt]./hours, probes.T[1:nt]*sc.T )
+            # ax  = Axis(fig[2,2], xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error")
+            # scatter!(ax, 1:niter, log10.(err.x[1:niter]) )
+            # scatter!(ax, 1:niter, log10.(err.y[1:niter]) )
+            # scatter!(ax, 1:niter, log10.(err.Pt[1:niter]) )
+            # scatter!(ax, 1:niter, log10.(err.T[1:niter]) )
+            display(fig)
+        end
+        with_theme(figure, theme_latexfonts())
       
     end
 
@@ -322,7 +369,7 @@ end
 
 function Run()
 
-    nc = (x=40, y=40)
+    nc = (x=100, y=100)
 
     main(nc)
     
