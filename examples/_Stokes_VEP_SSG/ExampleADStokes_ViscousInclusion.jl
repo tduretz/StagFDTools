@@ -8,7 +8,7 @@ using TimerOutputs
     #--------------------------------------------#
 
     # Resolution
-    nc = (x = 150, y = 150)
+    nc = (x = 50, y = 50)
 
     # Boundary loading type
     config = BC_template
@@ -121,7 +121,7 @@ using TimerOutputs
     yv = LinRange(-L.y/2, L.y/2, nc.y+1)
     xc = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
     yc = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
-    phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...))  # phase on velocity points
+    phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...)) 
 
     # Initial velocity & pressure field
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
@@ -141,8 +141,9 @@ using TimerOutputs
     BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
 
     # Set material geometry 
-    phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
-    phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= 0.1^2] .= 2
+    rad = 0.1 + 1e-13
+    phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= rad^2] .= 2
+    phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= rad^2] .= 2
 
     #--------------------------------------------#
 
