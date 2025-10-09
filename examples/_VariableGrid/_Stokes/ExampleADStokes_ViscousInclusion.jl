@@ -1,14 +1,17 @@
 using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
-using DifferentiationInterface
+#using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 using TimerOutputs
+
+include("stokes_vargrid_corrected.jl")
+include("rheology_var.jl")
 
 @views function main(BC_template, D_template)
     #--------------------------------------------#
 
     # Resolution
-    nc = (x = 50, y = 50)
+    nc = (x = 5, y = 5)
 
     # Boundary loading type
     config = BC_template
@@ -89,10 +92,6 @@ using TimerOutputs
     dx = zeros(nVx + nVy + nPt)
     r  = zeros(nVx + nVy + nPt)
 
-    #--------------------------------------------#
-    # Intialise field
-    L   = (x=1.0, y=1.0)
-    Δ   = (x=L.x/nc.x, y=L.y/nc.y, t = Δt0)
 
     # Allocations
     R       = (x  = zeros(size_x...), y  = zeros(size_y...), p  = zeros(size_c...))
@@ -100,9 +99,9 @@ using TimerOutputs
     Vi      = (x  = zeros(size_x...), y  = zeros(size_y...))
     η       = (c  =  ones(size_c...), v  =  ones(size_v...) )
     λ̇       = (c  = zeros(size_c...), v  = zeros(size_v...) )
-    ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
+    ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
-    τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
+    τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
     Pt      = zeros(size_c...)
     Pti     = zeros(size_c...)
     Pt0     = zeros(size_c...)
@@ -115,14 +114,112 @@ using TimerOutputs
     D_ctl_v =  [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)]
     𝐷_ctl   = (c = D_ctl_c, v = D_ctl_v)
 
+    #--------------------------------------------#
+    # Intialise field
+    #L   = (x=1.0, y=1.0)
+    #Δ   = (x=L.x/nc.x, y=L.y/nc.y, t = Δt0)
+
+    
+    # Intialize field
+    L   = (x=1.0, y=1.0)
+
+    uniform_grid = false
+    if uniform_grid
+        original = false
+        if original
+            Δ   = (x=L.x/nc.x, y=L.y/nc.y, t = Δt0)
+            # Mesh coordinates
+            xv = LinRange(-L.x/2, L.x/2, nc.x+1)
+            yv = LinRange(-L.y/2, L.y/2, nc.y+1)
+            xc = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
+            yc = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
+        else
+            Δ   = (x = fill(L.x/nc.x,nc.x+2), y = fill(L.y/nc.y,nc.y+2), t=fill(Δt0,1))
+            display(Δ.x)
+            display(Δ.y)
+            display(Δ.t)
+
+            # Mesh coordinates
+            xv = LinRange(-L.x/2, L.x/2, nc.x+1)
+            yv = LinRange(-L.y/2, L.y/2, nc.y+1)
+            #xc = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x) # sans les ghosts??
+            #yc = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y) # idem ici ?? why?
+            # je reproduis ça quand même sans les ghosts pour les tests
+            xc  = LinRange(-L.x/2+Δ.x[1]/2, L.x/2-Δ.x[end]/2, nc.x)
+            yc  = LinRange(-L.y/2+Δ.y[1]/2, L.y/2-Δ.y[end]/2, nc.y)
+            display(xc)
+            display(yc)        
+        end
+    else
+
+        μ = ( x = 0.0, y = 0.0)
+        σ = ( x = 0.2, y = 0.2)
+        inflimit = (x = -L.x/2, y = -L.y/2)
+        suplimit = (x =  L.x/2, y =  L.y/2)
+
+        # nodes
+        xv_in = normal_linspace_interval(inflimit.x, suplimit.x, μ.x, σ.x, nc.x-1)
+        yv_in = normal_linspace_interval(inflimit.y, suplimit.y, μ.y, σ.y, nc.y-1)
+
+        # spaces between nodes
+        Δ = (x = zeros(nc.x+2), y = zeros(nc.y+2), t=fill(Δt0,1)) # nb cells
+        enddelta = nc.x+2
+        println(diff(xv_in))
+        println(Δ.x[2:enddelta-1])
+        Δ.x[3:enddelta-2] = diff(xv_in) # le diff fait perdre une dimension
+        Δ.y[3:enddelta-2] = diff(yv_in)
+        Δ.x[1]   = Δ.x[3]
+        Δ.x[2]   = Δ.x[3]
+        Δ.x[enddelta] = Δ.x[enddelta-2]
+        Δ.x[enddelta-1] = Δ.x[enddelta-2]
+        println("delta x")
+        println(enddelta)
+        println(Δ.x[enddelta])
+        println(Δ.x)
+        Δ.y[1]   = Δ.y[3]
+        Δ.y[2]   = Δ.y[3]
+        Δ.y[enddelta] = Δ.y[enddelta-2]
+        Δ.y[enddelta-1] = Δ.y[enddelta-2]
+
+        endv = nc.x+1
+        xv  = zeros(endv)
+        yv  = zeros(endv)
+        xv[2:endv-1] .= xv_in # nc.x+1-2+1=nc.x-1, c'est bien xvin
+        xv[1]   = xv[2] - Δ.x[2]
+        xv[endv] = xv[endv-1] + Δ.x[enddelta-1]
+        yv[2:endv-1] .= yv_in
+        yv[1]   = yv[2] - Δ.y[2]
+        yv[endv] = yv[endv-1] + Δ.y[enddelta-1]
+        xc = 0.5*(xv[2:endv] + xv[1:endv-1])
+        yc = 0.5*(yv[2:endv] + yv[1:endv-1])
+
+        display("xc")
+        println(xc)
+        println("xv")
+        println(xv)
+        println("Δ.x")
+        println(Δ.x)
+
+    end
+
+    display(size(xc))
+    display(size(yc))
+    display(size(xv))
+    display(size(yv))
+    
     # Mesh coordinates
-    xv = LinRange(-L.x/2, L.x/2, nc.x+1)
-    yv = LinRange(-L.y/2, L.y/2, nc.y+1)
-    xc = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
-    yc = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
-    phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...)) 
+    #xv = LinRange(-L.x/2, L.x/2, nc.x+1)
+    #yv = LinRange(-L.y/2, L.y/2, nc.y+1)
+    #xc = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
+    #yc = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
+    phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...))  # phase on velocity points
 
     # Initial velocity & pressure field
+    display(Ranges(nc))
+    println(xv)
+    println(xc)
+    println(yv')
+    println(yc')
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
     V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
     Pt[inx_c, iny_c ]  .= 10.                 
@@ -140,9 +237,8 @@ using TimerOutputs
     BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
 
     # Set material geometry 
-    rad = 0.1 + 1e-13
-    phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= rad^2] .= 2
-    phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= rad^2] .= 2
+    phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
+    phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= 0.1^2] .= 2
 
     #--------------------------------------------#
 
@@ -172,11 +268,14 @@ using TimerOutputs
             #--------------------------------------------#
             # Residual check        
             @timeit to "Residual" begin
-                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
-                ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
-                ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-                ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+                TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
+                ResidualContinuity2D_var!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
+                ResidualMomentum2D_x_var!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+                ResidualMomentum2D_y_var!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
             end
+
+            display(R.x[3,3])
+            display(R.y[3,3])
 
             err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
             err.y[iter] = norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
@@ -190,9 +289,9 @@ using TimerOutputs
             #--------------------------------------------#
             # Assembly
             @timeit to "Assembly" begin
-                AssembleContinuity2D!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-                AssembleMomentum2D_x!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-                AssembleMomentum2D_y!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+                AssembleContinuity2D_var!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+                AssembleMomentum2D_x_var!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+                AssembleMomentum2D_y_var!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
             end
 
             #--------------------------------------------# 
@@ -213,9 +312,9 @@ using TimerOutputs
 
             #--------------------------------------------#
             # Line search & solution update
-            @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+            @timeit to "Line search" imin = LineSearch_var!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
             UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
-            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
+            TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
         end
 
         # Update pressure
@@ -231,6 +330,7 @@ using TimerOutputs
         p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
         p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
         display(plot(p1, p2, p3, p4, layout=(2,2)))
+        sleep(10)
 
     end
 
