@@ -1009,10 +1009,10 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, 
     D_test = @MMatrix ones(4,4)
 
     # Loop over centroids
-    for j=2:size(ε̇.xx,2)-1, i=2:size(ε̇.xx,1)-1
-        # if (i==1 && j==1) || (i==size(ε̇.xx,1) && j==1) || (i==1 && j==size(ε̇.xx,2)) || (i==size(ε̇.xx,1) && j==size(ε̇.xx,2))
-        #     # Avoid the outer corners - nothing is well defined there ;)
-        # else
+    for j=1:size(ε̇.xx,2)-0, i=1:size(ε̇.xx,1)-0
+        if (i==1 && j==1) || (i==size(ε̇.xx,1) && j==1) || (i==1 && j==size(ε̇.xx,2)) || (i==size(ε̇.xx,1) && j==size(ε̇.xx,2))
+            # Avoid the outer corners - nothing is well defined there ;)
+        else
             Vx     = SMatrix{2,3}(      V.x[ii,jj] for ii in i:i+1,   jj in j:j+2)
             Vy     = SMatrix{3,2}(      V.y[ii,jj] for ii in i:i+2,   jj in j:j+1)
             bcx    = SMatrix{2,3}(    BC.Vx[ii,jj] for ii in i:i+1,   jj in j:j+2)
@@ -1081,7 +1081,7 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, 
             λ̇.c[i,j]   = jac.val[3]
             η.c[i,j]   = jac.val[2]
             ΔPt.c[i,j] = (jac.val[1][4] - Pt[i,j])
-        # end
+        end
     end
 
     # @show "vertices"
