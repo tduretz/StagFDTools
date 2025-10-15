@@ -10,30 +10,38 @@ hours = 3600
 
 @views function main(nc)
 
-    sc = (L=1e-3, t=1e0, σ=1e7, T=1000)
+    sc = (L=1e0, t=1e-2, σ=1e9, T=1)
     m  = sc.σ * sc.L * sc.t^2.0
     J  = m * sc.L^2.0 / sc.t^2.0
     W  = J/sc.t
 
     ηi           = 1e18 / (sc.σ*sc.t)
     ηinc         = 1e18 / (sc.σ*sc.t)
+    ηrim         = 1e8 / (sc.σ*sc.t)
     Gi           = 535e9/ sc.σ  
     Ginc         = 80e9/ sc.σ
+    Grim         = 80e26/ sc.σ
     Ki           = 444e9 / sc.σ 
     Kinc         = 126e9 / sc.σ
+    Krim         = 2.2e9 / sc.σ
     αi           = 1e-6 / (1/sc.T)
     αinc         = 3.2e-5 / (1/sc.T)
+    αrim         = 2.6e-4 / (1/sc.T)
     ki           = 2e3    / (W/sc.L/sc.T)
     kinc         = 4.0    / (W/sc.L/sc.T)
+    krim         = 0.6    / (W/sc.L/sc.T)
     ρi           = 3500.0 / (m/sc.L^3)
     ρinc         = 3300.0 / (m/sc.L^3)
+    ρrim         = 997.0 / (m/sc.L^3)
     cpi          = 509.0 / (J/m/sc.T)
     cpinc        = 800.0 / (J/m/sc.T)
+    cprim        = 4184.0 / (J/m/sc.T)
     Pinc         = 1e9 / sc.σ
+    Prim         = 0e9 / sc.σ
 
     nt           = 10
     niter        = 5
-    ϵ_nl         = 1e-8
+    ϵ_nl         = 1e-10
     Δt0          = ηi/Gi/4.0/100
     ε̇            = 0*1e-6   / (1/sc.t)
     L            = 2e-3     / sc.L
@@ -45,14 +53,21 @@ hours = 3600
     r            = 0.3/1000    / sc.L
 
     # Material geometries
-    inclusion = Ellipse((0.0, 0.0), r, r; θ = 1 * π / 4)
+    shape  = :hexagon
+    rimmed = true
+    r2     = 1.2*r 
 
-    # inclusion = Ellipse((0.0, 0.0), r/3, 2r; θ = 1 * π / 4)
-
-    # inclusion = Rectangle((0.0, -0.0), r*sqrt(π), r*sqrt(π); θ = -0*π / 4)
-
-    # inclusion = Hexagon((0.0, -0.0), r; θ = -1*π / 4)
-
+    if shape === :circle
+        inclusion = Ellipse((0.0, 0.0), r, r; θ = 1 * π / 4)
+        rim       = Ellipse((0.0, 0.0), r2, r2; θ = 1 * π / 4)
+    elseif shape === :ellipse
+        inclusion = Ellipse((0.0, 0.0), r/3, 2r; θ = 1 * π / 4)
+    elseif shape === :rectangle
+        inclusion = Rectangle((0.0, -0.0), r*sqrt(π), r*sqrt(π); θ = -0*π / 4)
+    elseif shape === :hexagon
+        inclusion = Hexagon((0.0, -0.0), r; θ = -1*π / 4)
+        rim       = Hexagon((0.0, -0.0), r2; θ = -1*π / 4)
+    end
 
     # Velocity gradient matrix
     D_BC = @SMatrix( [ε̇ 0; 0 -ε̇] )
@@ -62,14 +77,14 @@ hours = 3600
         oneway       = false,
         compressible = true,
         Dzz          = 0.0,
-        n            = [1.0  1.0],
-        ηs0          = [ηi  ηinc], 
-        G            = [Gi  Ginc], 
-        K            = [Ki  Kinc],
-        α            = [αi  αinc],
-        k            = [ki  kinc],
-        cp           = [cpi cpinc],
-        ρr           = [ρi  ρinc],
+        n            = [1.0 1.0   1.0  ],
+        ηs0          = [ηi  ηinc  ηrim ], 
+        G            = [Gi  Ginc  Grim ], 
+        K            = [Ki  Kinc  Krim ],
+        α            = [αi  αinc  αrim ],
+        k            = [ki  kinc  krim ],
+        cp           = [cpi cpinc cprim],
+        ρr           = [ρi  ρinc  ρrim ],
     )
  
     # Resolution
@@ -187,6 +202,10 @@ hours = 3600
 
     for i in inx_c, j in iny_c   # loop on centroids
         𝐱 = @SVector([xc[i-1], yc[j-1]])
+        if rimmed && inside(𝐱, rim)
+            phases.c[i, j] = 3
+            P.t[i, j] = Prim
+        end
         if inside(𝐱, inclusion)
             phases.c[i, j] = 2
             P.t[i, j] = Pinc
@@ -194,6 +213,9 @@ hours = 3600
     end
        for i in inx_v, j in iny_v  # loop on vertices
         𝐱 = @SVector([xv[i-1], yv[j-1]])
+        if rimmed && inside(𝐱, rim)
+            phases.v[i, j] = 3
+        end
         if inside(𝐱, inclusion)
             phases.v[i, j] = 2
         end
@@ -244,6 +266,7 @@ hours = 3600
         BC.T .= T_ini .+ dTdt*t
 
         @show BC.T[2,2]*sc.T
+        nRT0 = 1.0
 
         # Time integration loop
         for iter=1:niter
@@ -296,10 +319,13 @@ hours = 3600
             ResidualHeatDiffusion2D!(R, V, T, T0, P, P0, phases, materials, number, type, BC, nc, Δ) 
 
             @info "Iteration $(iter)"
+            if iter==1
+                nRT0 = norm(R.T[inx_c,iny_c])
+            end
             @printf("f_x = %1.2e\n", norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx))
             @printf("f_y = %1.2e\n", norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy))
             @printf("f_P = %1.2e\n", norm(R.pt[inx_c,iny_c]) /sqrt(nPt))
-            @printf("f_T = %1.2e\n", norm(R.T[inx_c,iny_c])  /sqrt(nT ))
+            @printf("f_T = %1.2e %1.2e\n", norm(R.T[inx_c,iny_c])  /sqrt(nT ), norm(R.T[inx_c,iny_c])/nRT0)
             err.x[iter]  = @views norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
             err.y[iter]  = @views norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
             err.Pt[iter] = @views norm(R.pt[inx_c,iny_c])/sqrt(nPt)
@@ -330,15 +356,18 @@ hours = 3600
 
             fig = Figure()
             empty!(fig)
-            ax  = Axis(fig[1,1], aspect=DataAspect(), title=L"$$Pressure", xlabel="x", ylabel="y")
-            # heatmap!(ax, xc, yc,  (R.T[inx_c,iny_c]), colormap=:bluesreds)
+            ax = Axis(fig[1,1], aspect=DataAspect(), title=L"$$Pressure", xlabel="x", ylabel="y")
+            # hm = heatmap!(ax, xc, yc,  (R.T[inx_c,iny_c]), colormap=:bluesreds)
             # heatmap!(ax, xc, yc,  (phases.c[inx_c,iny_c]), colormap=:bluesreds)
-            # contour!(ax, xc, yc,  phases.c[inx_c,iny_c], color=:black)
+            # hm =heatmap!(ax, xc, yc,  (T.c[inx_c,iny_c]*sc.σ/1e9), colormap=:bluesreds)
             hm =heatmap!(ax, xc, yc,  (P.t[inx_c,iny_c]*sc.σ/1e9), colormap=:bluesreds)
+            contour!(ax, xc, yc,  phases.c[inx_c,iny_c], color=:white)
+
             Colorbar(fig[2, 1], hm, label = L"$P$ (GPa)", height=10, width = 200, labelsize = 15, ticklabelsize = 15, vertical=false, valign=true, flipaxis = true )
             
-            ax  = Axis(fig[1,2], aspect=DataAspect(), title=L"$$Deviatoric stress", xlabel="x", ylabel="y")
-            hm =heatmap!(ax, xc, yc,  (τ.II[inx_c,iny_c]*sc.σ/1e9), colormap=:bluesreds)
+            ax = Axis(fig[1,2], aspect=DataAspect(), title=L"$$Deviatoric stress", xlabel="x", ylabel="y")
+            hm = heatmap!(ax, xc, yc,  (τ.II[inx_c,iny_c]*sc.σ/1e9), colormap=:bluesreds)
+            contour!(ax, xc, yc,  phases.c[inx_c,iny_c], color=:white)
             Colorbar(fig[2, 2], hm, label = L"$τ$ (GPa)", height=10, width = 200, labelsize = 15, ticklabelsize = 15, vertical=false, valign=true, flipaxis = true )
             
             st = 10
@@ -346,9 +375,9 @@ hours = 3600
             # ax  = Axis(fig[3,2], xlabel="Time (h)", ylabel="τ dia. (GPa)")
             # scatter!(ax, probes.t[1:nt]./hours, probes.τII[1:nt]*sc.σ./1e9 ) 
             ax  = Axis(fig[3,2], xlabel=L"$T$ (\degree~C)", ylabel=L"$\tau$ dia. (GPa)")
-            scatter!(ax, probes.T[1:it]*sc.T, probes.τII[1:it]*sc.σ./1e9 ) 
+            scatter!(ax, probes.T[1:it]*sc.T .-273.15, probes.τII[1:it]*sc.σ./1e9 ) 
             ax  = Axis(fig[3,1], xlabel=L"$T$  (\degree~C)", ylabel=L"$P$ ol. (GPa)")
-            scatter!(ax, probes.T[1:it]*sc.T, probes.Pt[1:it]*sc.σ./1e9 )
+            scatter!(ax, probes.T[1:it]*sc.T  .-273.15, probes.Pt[1:it]*sc.σ./1e9 )
             # ax  = Axis(fig[3,3], xlabel="Time (h)", ylabel="Temperature (K)")
             # scatter!(ax, probes.t[1:nt]./hours, probes.T[1:nt]*sc.T )
             # ax  = Axis(fig[2,2], xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error")
@@ -356,6 +385,12 @@ hours = 3600
             # scatter!(ax, 1:niter, log10.(err.y[1:niter]) )
             # scatter!(ax, 1:niter, log10.(err.Pt[1:niter]) )
             # scatter!(ax, 1:niter, log10.(err.T[1:niter]) )
+            
+            if rimmed
+                save("./results/DiOl_rimmed_$(shape).png", fig, px_per_unit = 4) 
+            else
+                save("./results/DiOl_$(shape).png", fig, px_per_unit = 4) 
+            end
             display(fig)
         end
         with_theme(figure, theme_latexfonts())
@@ -369,7 +404,7 @@ end
 
 function Run()
 
-    nc = (x=100, y=100)
+    nc = (x=150, y=150)
 
     main(nc)
     
