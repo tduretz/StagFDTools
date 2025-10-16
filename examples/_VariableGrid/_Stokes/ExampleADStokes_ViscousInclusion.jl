@@ -190,7 +190,6 @@ include("rheology_var.jl")
             volVertices = zeros(endv-2,endv-2)
             for i=1:endv-2
                 for j=1:endv-2
-                    #volVertices[i,j] = ((Δ.x[i]+Δ.x[i+1])/2)*((Δ.y[j]+Δ.y[j+1])/2)
                     volVertices[i,j] = (xc[i+1]-xc[i])*(yc[j+1]-yc[j])
                 end
             end
@@ -207,7 +206,7 @@ include("rheology_var.jl")
                         
             display(plot(p2, p3, layout=(1,2)))
 
-            sleep(40)
+            sleep(5)
         end
 
     end
