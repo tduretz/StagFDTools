@@ -190,13 +190,24 @@ include("rheology_var.jl")
             volVertices = zeros(endv-2,endv-2)
             for i=1:endv-2
                 for j=1:endv-2
-                    volVertices[i,j] = ((Δ.x[i+1]+Δ.x[i+2])/2)*((Δ.y[j+1]+Δ.y[j+2])/2)
+                    #volVertices[i,j] = ((Δ.x[i]+Δ.x[i+1])/2)*((Δ.y[j]+Δ.y[j+1])/2)
+                    volVertices[i,j] = (xc[i+1]-xc[i])*(yc[j+1]-yc[j])
                 end
             end
             p2 = heatmap(xv[2:end-1], yv[2:end-1], volVertices, aspect_ratio=1, xlim=xv[end-1], title="Volume Vertices", color=:vik)
 
-            display(plot(p1, p2, layout=(2,1)))
-            sleep(20)
+            p3 = plot(aspect_ratio=:equal, xlabel="x", ylabel="y", title="grid", legend=false)
+            for x in xv
+                plot!(p3, [x, x], [minimum(yv), maximum(yv)], color=:black, linewidth=0.5)
+            end
+            for y in yv
+                plot!(p3, [minimum(xv), maximum(xv)], [y, y], color=:black, linewidth=0.5)
+            end
+            scatter!(p3, repeat(xc, outer=length(yc)), repeat(yc, inner=length(xc)), markersize=4, markercolor=:red, markerstrokewidth=0, label="Cell centers")
+                        
+            display(plot(p2, p3, layout=(1,2)))
+
+            sleep(40)
         end
 
     end
