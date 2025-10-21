@@ -37,8 +37,8 @@ function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, �
             Vx     = SetBCVx1_var(Vx, typex, bcx, Δx_Vx, Δy_Vx)
             Vy     = SetBCVy1_var(Vy, typey, bcy, Δx_Vy, Δy_Vy)
 
-            Dxx = ∂x_inn(Vx) / Δx_Vx[1] #((Δx_Vx[1]+Δx_Vx[2])/2)
-            Dyy = ∂y_inn(Vy) / Δy_Vy[1] #((Δy_Vy[1]+Δy_Vy[2])/2)
+            Dxx = ∂x_inn(Vx) / ((Δx_Vx[1]+Δx_Vx[2])/2) #Δx_Vx[1] #((Δx_Vx[1]+Δx_Vx[2])/2)
+            Dyy = ∂y_inn(Vy) / ((Δy_Vy[1]+Δy_Vy[2])/2) #Δy_Vy[1] #((Δy_Vy[1]+Δy_Vy[2])/2)
             Dxy = ∂y(Vx) / ((Δy_Vx[1]+Δy_Vx[2])/2) #Δ.y[j]
             Dyx = ∂x(Vy) / ((Δx_Vy[1]+Δx_Vy[2])/2) #Δ.x[i]
 
@@ -98,8 +98,8 @@ function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, �
         Vx     = SetBCVx1_var(Vx, typex, bcx, Δx_Vx, Δy_Vx)
         Vy     = SetBCVy1_var(Vy, typey, bcy, Δx_Vy, Δy_Vy)
     
-        Dxx    = ∂x(Vx) / Δ.x[i+1]
-        Dyy    = ∂y(Vy) / Δ.y[j+1]
+        Dxx    = ∂x(Vx) / ((Δ.x[i+1]+Δ.x[i])/2) #Δ.x[i+1]
+        Dyy    = ∂y(Vy) / ((Δ.y[j+1]+Δ.y[j])/2)
         Dxy    = ∂y_inn(Vx) / ((Δy_Vx[1]+Δy_Vx[2])/2)
         Dyx    = ∂x_inn(Vy) / ((Δx_Vy[1]+Δx_Vy[2])/2)
 
@@ -310,8 +310,8 @@ function SMomentum_x_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
     Vy = SetBCVy1_var(Vy_loc, type.y, bcv.y, Δx_Vy, Δy_Vy)
 
     # Velocity gradient
-    Dxx = ∂x(Vx) * invΔx
-    Dyy = ∂y_inn(Vy) * invΔy # (2/(Δy_Vy[end]+Δy_Vy[end-1])) #invΔy
+    Dxx = ∂x(Vx) * (2/(Δx_Vx[end]+Δx_Vx[end-1])) #invΔx
+    Dyy = ∂y_inn(Vy) * (2/(Δy_Vy[end]+Δy_Vy[end-1])) #invΔy # (2/(Δy_Vy[end]+Δy_Vy[end-1])) #invΔy
     Dxy = ∂y(Vx) * (2/(Δy_Vx[end-1]+Δy_Vx[end])) #(1/Δy_Vx[end-1])
     Dyx = ∂x_inn(Vy) * (2/(Δx_Vy[end-1]+Δx_Vy[end]))
 
@@ -356,11 +356,11 @@ function SMomentum_x_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
     end
 
     # Residual
-    fx  = ( τxx[2]  - τxx[1] ) * invΔx
+    fx  = ( τxx[2]  - τxx[1] ) * (2/(Δx_Vx[end-1]+Δx_Vx[end])) #invΔx
     fx += ( τxy[2]  - τxy[1] ) * (2/(Δy_Vx[end-1]+Δy_Vx[end])) #invΔy
-    fx -= ( Ptc[2]  - Ptc[1] ) * invΔx
+    fx -= ( Ptc[2]  - Ptc[1] ) * (2/(Δx_Vx[end-1]+Δx_Vx[end])) #invΔx
     #fx *= -1* Δ.x[ix] * Δ.y[jy] # j'ai fait une modif ici avec i et j
-    fx *= -1 * Δx_Vx[end-1] * ((Δy_Vx[end-1]+Δy_Vx[end])/2) #Δy_Vy[end-1]
+    fx *= -1 * ((Δx_Vx[end-1]+Δx_Vx[end])/2) * ((Δy_Vx[end-1]+Δy_Vx[end])/2) #Δx_Vx[end-1] * ((Δy_Vx[end-1]+Δy_Vx[end])/2) #Δy_Vy[end-1]
 
     return fx
 end
@@ -412,8 +412,8 @@ function SMomentum_y_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
     Vy = SetBCVy1_var(Vy_loc, type.y, bcv.y, Δx_Vy, Δy_Vy)
 
     # Velocity gradient
-    Dxx = ∂x_inn(Vx) * invΔx #(2/(Δx_Vx[end]+Δx_Vx[end-1])) #* invΔx
-    Dyy = ∂y(Vy) * invΔy
+    Dxx = ∂x_inn(Vx) * (2/(Δx_Vx[end]+Δx_Vx[end-1])) #invΔx #(2/(Δx_Vx[end]+Δx_Vx[end-1])) #* invΔx
+    Dyy = ∂y(Vy) * (2/(Δy_Vy[end]+Δy_Vy[end-1])) #invΔy
     Dxy = ∂y_inn(Vx) * (2/(Δy_Vx[end]+Δy_Vx[end-1])) #* (1/Δy_Vx[end-1])
     Dyx = ∂x(Vy) * (2/(Δx_Vy[end-1]+Δx_Vy[end]))
 
@@ -458,10 +458,10 @@ function SMomentum_y_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
     end
 
     # Residual
-    fy  = ( τyy[2]  -  τyy[1] ) * invΔy
+    fy  = ( τyy[2]  -  τyy[1] ) * (2/(Δy_Vy[end-1]+Δy_Vy[end])) #invΔy
     fy += ( τxy[2]  -  τxy[1] ) * (2/(Δx_Vy[end-1]+Δx_Vy[end])) #invΔx
-    fy -= ( Ptc[2]  -  Ptc[1])  * invΔy
-    fy *= -1 * ((Δx_Vy[end-1]+Δx_Vy[end])/2) * Δy_Vy[end-1] #Δx_Vy[end-1] * Δy_Vy[end-1]
+    fy -= ( Ptc[2]  -  Ptc[1])  * (2/(Δy_Vy[end-1]+Δy_Vy[end])) #invΔy
+    fy *= -1 * ((Δx_Vy[end-1]+Δx_Vy[end])/2) * (2/(Δy_Vy[end-1]+Δy_Vy[end])) #Δy_Vy[end-1] #Δx_Vy[end-1] * Δy_Vy[end-1]
     
     return fy
 end
