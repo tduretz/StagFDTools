@@ -168,12 +168,14 @@ include("rheology_var.jl")
             yv = normal_linspace_interval(inflimit.y, suplimit.y, μ.y, σ.y, nc.y+1)
 
             # spaces between nodes
-            enddelta = nc.x+2
+            enddelta = nc.x+4
             Δ = (x = zeros(enddelta), y = zeros(enddelta), t=fill(Δt0,1)) # nb cells
-            Δ.x[2:end-1]   .= diff(xv)
-            Δ.x[[1, end]] .= Δ.x[[2, end-1]]
-            Δ.y[2:end-1]   .= diff(yv)
-            Δ.y[[1, end]] .= Δ.y[[2, end-1]]
+            Δ.x[3:end-2]   .= diff(xv)
+            Δ.x[[1, end]] .= Δ.x[[3, end-2]]
+            Δ.x[[2, end-1]] .= Δ.x[[3, end-2]]
+            Δ.y[3:end-2]   .= diff(yv)
+            Δ.y[[1, end]] .= Δ.y[[3, end-2]]
+            Δ.y[[2, end-1]] .= Δ.y[[3, end-2]]
 
             endv = nc.x+1
             
