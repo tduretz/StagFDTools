@@ -37,10 +37,10 @@ function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, �
             Vx     = SetBCVx1_var(Vx, typex, bcx, Δx_Vx, Δy_Vx)
             Vy     = SetBCVy1_var(Vy, typey, bcy, Δx_Vy, Δy_Vy)
 
-            Dxx = ∂x_inn(Vx) / ((Δx_Vx[1]+Δx_Vx[2])/2)
-            Dyy = ∂y_inn(Vy) / ((Δy_Vy[1]+Δy_Vy[2])/2)
-            Dxy = ∂y(Vx) / Δ.y[j]
-            Dyx = ∂x(Vy) / Δ.x[i]
+            Dxx = ∂x_inn(Vx) / Δx_Vx[1] #((Δx_Vx[1]+Δx_Vx[2])/2)
+            Dyy = ∂y_inn(Vy) / Δy_Vy[1] #((Δy_Vy[1]+Δy_Vy[2])/2)
+            Dxy = ∂y(Vx) / ((Δy_Vx[1]+Δy_Vx[2])/2) #Δ.y[j]
+            Dyx = ∂x(Vy) / ((Δx_Vy[1]+Δx_Vy[2])/2) #Δ.x[i]
 
             Dkk = Dxx .+ Dyy
             ε̇xx = @. Dxx - Dkk ./ 3
@@ -311,8 +311,8 @@ function SMomentum_x_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
 
     # Velocity gradient
     Dxx = ∂x(Vx) * invΔx
-    Dyy = ∂y_inn(Vy) * (2/(Δy_Vy[end]+Δy_Vy[end-1])) #invΔy
-    Dxy = ∂y(Vx) * (1/Δy_Vx[end-1])
+    Dyy = ∂y_inn(Vy) * invΔy # (2/(Δy_Vy[end]+Δy_Vy[end-1])) #invΔy
+    Dxy = ∂y(Vx) * (2/(Δy_Vx[end-1]+Δy_Vx[end])) #(1/Δy_Vx[end-1])
     Dyx = ∂x_inn(Vy) * (2/(Δx_Vy[end-1]+Δx_Vy[end]))
 
     # Strain rate
@@ -357,10 +357,10 @@ function SMomentum_x_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
 
     # Residual
     fx  = ( τxx[2]  - τxx[1] ) * invΔx
-    fx += ( τxy[2]  - τxy[1] ) * invΔy
+    fx += ( τxy[2]  - τxy[1] ) * (2/(Δy_Vx[end-1]+Δy_Vx[end])) #invΔy
     fx -= ( Ptc[2]  - Ptc[1] ) * invΔx
     #fx *= -1* Δ.x[ix] * Δ.y[jy] # j'ai fait une modif ici avec i et j
-    fx *= -1 * Δx_Vx[end-1] * Δy_Vy[end-1]
+    fx *= -1 * Δx_Vx[end-1] * ((Δy_Vx[end-1]+Δy_Vx[end])/2) #Δy_Vy[end-1]
 
     return fx
 end
@@ -412,10 +412,10 @@ function SMomentum_y_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
     Vy = SetBCVy1_var(Vy_loc, type.y, bcv.y, Δx_Vy, Δy_Vy)
 
     # Velocity gradient
-    Dxx = ∂x_inn(Vx) * (2/(Δx_Vx[end]+Δx_Vx[end-1])) #* invΔx
+    Dxx = ∂x_inn(Vx) * invΔx #(2/(Δx_Vx[end]+Δx_Vx[end-1])) #* invΔx
     Dyy = ∂y(Vy) * invΔy
     Dxy = ∂y_inn(Vx) * (2/(Δy_Vx[end]+Δy_Vx[end-1])) #* (1/Δy_Vx[end-1])
-    Dyx = ∂x(Vy) * (1/Δx_Vy[end-1])
+    Dyx = ∂x(Vy) * (2/(Δx_Vy[end-1]+Δx_Vy[end]))
 
     # Strain rate
     ε̇kk = @. Dxx + Dyy
@@ -459,9 +459,9 @@ function SMomentum_y_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
 
     # Residual
     fy  = ( τyy[2]  -  τyy[1] ) * invΔy
-    fy += ( τxy[2]  -  τxy[1] ) * invΔx
+    fy += ( τxy[2]  -  τxy[1] ) * (2/(Δx_Vy[end-1]+Δx_Vy[end])) #invΔx
     fy -= ( Ptc[2]  -  Ptc[1])  * invΔy
-    fy *= -1 * Δx_Vx[end-1] * Δy_Vy[end-1]
+    fy *= -1 * ((Δx_Vy[end-1]+Δx_Vy[end])/2) * Δy_Vy[end-1] #Δx_Vy[end-1] * Δy_Vy[end-1]
     
     return fy
 end

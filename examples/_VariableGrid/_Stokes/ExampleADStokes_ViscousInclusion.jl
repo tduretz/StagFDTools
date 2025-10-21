@@ -360,7 +360,7 @@ include("rheology_var.jl")
         #p2 = heatmap(xv, yc, η.v[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="eta v", color=:vik)
         
         display(plot(p1, p2, p3, p4, layout=(2,2)))
-        sleep(10)
+        sleep(40)
 
         p = plot(aspect_ratio=:equal, xlabel="x", ylabel="y", title="grid", legend=false)
         for x in xv
