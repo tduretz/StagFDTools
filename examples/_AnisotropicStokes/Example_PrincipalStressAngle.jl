@@ -59,9 +59,15 @@ function ViscousRheology(θ, η_n, δ, D)
     ε̇1[1] = ve[1,1]/scalee
     ε̇1[2] = ve[2,1]/scalee
 
+    εxx = ε̇vec[1]
+    εyy = ε̇vec[2]
+    εxy = ε̇vec[3]
+    
+
     # compute angle between σ1 and ε̇1 (in radians)
     α = atan(ε̇1[2], ε̇1[1]) - atan(σ1[2], σ1[1])
-    
+    # mathematical 
+    α2 = atan(2 * εxy ./ (εxx - εyy)) / 2 - atan((2 * εxy .* (δ + (1 - δ) .* cos(4 * θ) + 1) + (δ - 1) .* (εxx - εyy) .* sin(4 * θ)) ./ (2 * εxy .* (δ - 1) .* sin(4 * θ) + (εxx - εyy) .* (δ + (δ - 1) .* cos(4 * θ) + 1))) / 2
     # Visualize σ1 and ε̇1 directions
     # fig = cm.Figure()
     # ax  = cm.Axis(fig[1,1], aspect=1)
@@ -71,7 +77,7 @@ function ViscousRheology(θ, η_n, δ, D)
     # cm.arrows2d!(ax, [0], [0], [ε̇1[1]], [ε̇1[2]], align = :center, tiplength = 0, lengthscale=0.5, tipwidth=1, color=:red)
     # display(fig)
 
-    return σ1, ε̇1, τ_II, α
+    return σ1, ε̇1, τ_II, α, α2
 end
 
 let
@@ -86,27 +92,31 @@ let
     ε̇1    = [@MVector(zeros(2)) for _ in eachindex(θ), _ in eachindex(δ)]
     τ_II  = zeros(length(θ), length(δ))
     α = zeros(length(θ), length(δ))
+    α2 = zeros(length(θ), length(δ))
 
     for iθ in eachindex(θ) , iδ in eachindex(δ)
-        σ1[iθ, iδ], ε̇1[iθ, iδ], τ_II[iθ, iδ], α[iθ, iδ] = ViscousRheology(θ[iθ], ηn, δ[iδ], D)
+        σ1[iθ, iδ], ε̇1[iθ, iδ], τ_II[iθ, iδ], α[iθ, iδ], α2[iθ,iδ] = ViscousRheology(θ[iθ], ηn, δ[iδ], D)
     end
     
     fig = cm.Figure()
     ax  = cm.Axis(fig[1,1], aspect=cm.DataAspect(), xlabel="θ [°]", ylabel="α [°]")
     δind = 10
     cm.lines!(ax, θ*180/π, α[:,δind]*180/π, color=:blue, label="δ=$(δ[δind])")
+    cm.scatter!(ax, θ[1:5:end]*180/π, α2[1:5:end,δind]*180/π, color=:orange, label="δ=$(δ[δind])")
     cm.axislegend(ax)
     display(fig)
     fig = cm.Figure()
     ax  = cm.Axis(fig[1,1], aspect=cm.DataAspect(), xlabel="δ", ylabel="α [°]")
     θind = 45
     cm.lines!(ax, δ, α[θind,:]*180/π, color=:red, label="θ=$(θ[θind]*180/π)°")
+    cm.scatter!(ax, δ[1:5:end], α2[θind,1:5:end]*180/π, color=:green, label="θ=$(θ[θind]*180/π)°")
     cm.axislegend(ax)
     display(fig)
 
     fig2 = cm.Figure()
     ax2  = cm.Axis(fig2[1,1], aspect=1, xlabel="θ [°]", ylabel="δ")
     hm   = cm.heatmap!(ax2, θ*180/π, δ, α*180/π, colormap=:bluesreds)
+    # hm2  = cm.heatmap!(ax2, θ*180/π, δ, (α-α2)*180/π, colormap=:bluesreds)
     cm.Colorbar(fig2[1,2], hm, label="α [°]")
     display(fig2)
 end
