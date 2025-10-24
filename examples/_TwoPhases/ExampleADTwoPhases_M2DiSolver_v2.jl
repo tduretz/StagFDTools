@@ -77,7 +77,7 @@ function main(nc)
     R   = (x=zeros(size_x...), y=zeros(size_y...), pt=zeros(size_c...), pf=zeros(size_c...))
     V   = (x=zeros(size_x...), y=zeros(size_y...))
     η   = (x= ones(size_x...), y= ones(size_y...), p=ones(size_c...) )
-    ηϕ  = ones(size_c...) 
+    ηΦ  = ones(size_c...) 
     ϕ   = ones(size_c...) 
     kμf = (x= kμf0*ones(size_x...), y= kμf0*ones(size_y...))
     P   = (t=zeros(size_c...), f=zeros(size_c...))
@@ -114,8 +114,8 @@ function main(nc)
     η.p .= 0.25.*(η.x[1:end-1,2:end-1].+η.x[2:end-0,2:end-1].+η.y[2:end-1,1:end-1].+η.y[2:end-1,2:end-0])
     ϕ   .= 1e-3
     ϕ0   = 1e-3
-    ηϕ  .= 100. / (1-ϕ0)
-    rheo = (η=η, ηϕ=ηϕ, kμf=kμf, ϕ=ϕ)
+    ηΦ  .= 100. / (1-ϕ0)
+    rheo = (η=η, ηΦ=ηΦ, kμf=kμf, ϕ=ϕ)
 
     # Boundary condition values
     BC = ( Vx = zeros(size_x...), Vy = zeros(size_y...), Pt = zeros(size_c...), Pf = zeros(size_c...))

@@ -8,7 +8,7 @@ using TimerOutputs
     #--------------------------------------------#
 
     # Resolution
-    nc = (x = 150, y = 150)
+    nc = (x = 50, y = 50)
 
     # Boundary loading type
     config = BC_template
@@ -19,7 +19,7 @@ using TimerOutputs
         compressible = false,
         plasticity   = :none,
         n    = [1.0    1.0  ],
-        η0   = [1e2    1e-1 ], 
+        η0   = [1e0    1e5  ], 
         G    = [1e6    1e6  ],
         C    = [150    150  ],
         ϕ    = [30.    30.  ],
@@ -100,13 +100,14 @@ using TimerOutputs
     Vi      = (x  = zeros(size_x...), y  = zeros(size_y...))
     η       = (c  =  ones(size_c...), v  =  ones(size_v...) )
     λ̇       = (c  = zeros(size_c...), v  = zeros(size_v...) )
-    ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
+    ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
-    τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
+    τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     Pt      = zeros(size_c...)
     Pti     = zeros(size_c...)
     Pt0     = zeros(size_c...)
-    ΔPt     = zeros(size_c...)
+    ΔPt     = (c=zeros(size_c...), Vx = zeros(size_x...), Vy = zeros(size_y...))
+
     Dc      =  [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)]
     Dv      =  [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)]
     𝐷       = (c = Dc, v = Dv)
@@ -119,7 +120,7 @@ using TimerOutputs
     yv = LinRange(-L.y/2, L.y/2, nc.y+1)
     xc = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
     yc = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
-    phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...))  # phase on velocity points
+    phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...)) 
 
     # Initial velocity & pressure field
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
@@ -139,8 +140,9 @@ using TimerOutputs
     BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
 
     # Set material geometry 
-    phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
-    phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= 0.1^2] .= 2
+    rad = 0.1 + 1e-13
+    phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= rad^2] .= 2
+    phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= rad^2] .= 2
 
     #--------------------------------------------#
 
@@ -170,7 +172,7 @@ using TimerOutputs
             #--------------------------------------------#
             # Residual check        
             @timeit to "Residual" begin
-                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
+                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
                 ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
                 ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
                 ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
@@ -213,17 +215,17 @@ using TimerOutputs
             # Line search & solution update
             @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
             UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
-            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
+            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
         end
 
         # Update pressure
-        Pt .+= ΔPt 
+        Pt .+= ΔPt.c 
 
         #--------------------------------------------#
 
-        p3 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Vx")
-        p4 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy")
-        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt")
+        p3 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Vx", color=:vik)
+        p4 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy", color=:vik)
+        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]'.-mean( Pt[inx_c,iny_c]), aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik)
         p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright, title=BC_template)
         p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
         p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
