@@ -17,7 +17,7 @@ include("rheology_var.jl")
     #--------------------------------------------#
 
     # Resolution
-    nc = (x = 5, y = 5)
+    nc = (x = 11, y = 11)
 
     # Boundary loading type
     config = BC_template
@@ -153,63 +153,76 @@ include("rheology_var.jl")
             display(yc)
         end
     else
-        withghosts = false
-        if withghosts
+        μ = ( x = 0.0, y = 0.0)
+        σ = ( x = 0.2, y = 0.2)
+        inflimit = (x = -L.x/2, y = -L.y/2)
+        suplimit = (x =  L.x/2, y =  L.y/2)
 
+        # nodes
+        xv = normal_linspace_interval(inflimit.x, suplimit.x, μ.x, σ.x, nc.x+1)
+        yv = normal_linspace_interval(inflimit.y, suplimit.y, μ.y, σ.y, nc.y+1)
 
-        else
-            μ = ( x = 0.0, y = 0.0)
-            σ = ( x = 0.2, y = 0.2)
-            inflimit = (x = -L.x/2, y = -L.y/2)
-            suplimit = (x =  L.x/2, y =  L.y/2)
+        # spaces between nodes
+        enddelta = nc.x+4
+        Δ = (x = zeros(enddelta), y = zeros(enddelta), t=fill(Δt0,1)) # nb cells
+        #=Δ.x[2:end-1]  .= diff(xv)
+        Δ.x[[1, end]] .= Δ.x[[2, end-1]]
+        Δ.y[2:end-1]  .= diff(yv)
+        Δ.y[[1, end]] .= Δ.y[[2, end-1]]=#
 
-            # nodes
-            xv = normal_linspace_interval(inflimit.x, suplimit.x, μ.x, σ.x, nc.x+1)
-            yv = normal_linspace_interval(inflimit.y, suplimit.y, μ.y, σ.y, nc.y+1)
-
-            # spaces between nodes
-            enddelta = nc.x+4
-            Δ = (x = zeros(enddelta), y = zeros(enddelta), t=fill(Δt0,1)) # nb cells
-            Δ.x[3:end-2]   .= diff(xv)
-            Δ.x[[1, end]] .= Δ.x[[3, end-2]]
-            Δ.x[[2, end-1]] .= Δ.x[[3, end-2]]
-            Δ.y[3:end-2]   .= diff(yv)
-            Δ.y[[1, end]] .= Δ.y[[3, end-2]]
-            Δ.y[[2, end-1]] .= Δ.y[[3, end-2]]
-
-            endv = nc.x+1
             
-            xc = 0.5*(xv[2:endv] + xv[1:endv-1])
-            yc = 0.5*(yv[2:endv] + yv[1:endv-1])
+        Δ.x[3:end-2]   .= diff(xv)
+        Δ.x[[1, end]] .= Δ.x[[3, end-2]]
+        Δ.x[[2, end-1]] .= Δ.x[[3, end-2]]
+        Δ.y[3:end-2]   .= diff(yv)
+        Δ.y[[1, end]] .= Δ.y[[3, end-2]]
+        Δ.y[[2, end-1]] .= Δ.y[[3, end-2]]
 
-            volCell = zeros(nc.x,nc.y)
-            for i=1:nc.x
-                for j=1:nc.y
-                    volCell[i,j] = Δ.x[i+1]*Δ.y[j+1]
-                end
-            end
-            p1 = heatmap(xc, yc, volCell, aspect_ratio=1, xlim=extrema(xc), title="Volume Cellules", color=:vik)
-            volVertices = zeros(endv-2,endv-2)
-            for i=1:endv-2
-                for j=1:endv-2
-                    volVertices[i,j] = (xc[i+1]-xc[i])*(yc[j+1]-yc[j])
-                end
-            end
-            p2 = heatmap(xv[2:end-1], yv[2:end-1], volVertices, aspect_ratio=1, xlim=xv[end-1], title="Volume Vertices", color=:vik)
+        endv = nc.x+1
+            
+        xc = 0.5*(xv[2:endv] + xv[1:endv-1])
+        yc = 0.5*(yv[2:endv] + yv[1:endv-1])
+        
+        xv_delta = zeros(nc.x+5)
+        yv_delta = zeros(nc.y+5)
+        xv_delta[3:end-2] = xv
+        xv_delta[2] = xv_delta[3]-Δ.x[2]
+        xv_delta[1] = xv_delta[2]-Δ.x[1]
+        xv_delta[end-1] = xv_delta[end-2]+Δ.x[end-1]
+        xv_delta[end] = xv_delta[end-1]+Δ.x[end]
+        yv_delta[3:end-2] = yv
+        yv_delta[2] = yv_delta[3]-Δ.y[2]
+        yv_delta[1] = yv_delta[2]-Δ.y[1]
+        yv_delta[end-1] = yv_delta[end-2]+Δ.y[end-1]
+        yv_delta[end] = yv_delta[end-1]+Δ.y[end]
 
-            p3 = plot(aspect_ratio=:equal, xlabel="x", ylabel="y", title="grid", legend=false)
-            for x in xv
-                plot!(p3, [x, x], [minimum(yv), maximum(yv)], color=:black, linewidth=0.5)
+        #=volCell = zeros(nc.x+4,nc.y+4)
+        for i=1:nc.x+4
+            for j=1:nc.y+4
+                volCell[i,j] = Δ.x[i]*Δ.y[j]
             end
-            for y in yv
-                plot!(p3, [minimum(xv), maximum(xv)], [y, y], color=:black, linewidth=0.5)
-            end
-            scatter!(p3, repeat(xc, outer=length(yc)), repeat(yc, inner=length(xc)), markersize=4, markercolor=:red, markerstrokewidth=0, label="Cell centers")
-                        
-            display(plot(p2, p3, layout=(1,2)))
-
-            sleep(5)
         end
+        p1 = heatmap(xv_delta, yv_delta, volCell, aspect_ratio=1, xlim=extrema(xc), title="Volume Cellules", color=:vik)
+        volVertices = zeros(endv-2,endv-2)
+        for i=1:endv-2
+            for j=1:endv-2
+                volVertices[i,j] = (xc[i+1]-xc[i])*(yc[j+1]-yc[j])
+            end
+        end
+        p2 = heatmap(xv[2:end-1], yv[2:end-1], volVertices, aspect_ratio=1, xlim=xv[end-1], title="Volume Vertices", color=:vik)
+
+        p3 = plot(aspect_ratio=:equal, xlabel="x", ylabel="y", title="grid", legend=false)
+        for x in xv
+            plot!(p3, [x, x], [minimum(yv), maximum(yv)], color=:black, linewidth=0.5)
+        end
+        for y in yv
+            plot!(p3, [minimum(xv), maximum(xv)], [y, y], color=:black, linewidth=0.5)
+        end
+        scatter!(p3, repeat(xc, outer=length(yc)), repeat(yc, inner=length(xc)), markersize=4, markercolor=:red, markerstrokewidth=0, label="Cell centers")
+                        
+        display(plot(p2, p1, layout=(1,2)))
+
+        sleep(10)=#
 
     end
 
@@ -286,15 +299,9 @@ include("rheology_var.jl")
             #--------------------------------------------#
             # Assembly
             @timeit to "Assembly" begin
-                if withghosts
-                    AssembleContinuity2D_var_ghosts!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-                    AssembleMomentum2D_x_var_ghosts!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-                    AssembleMomentum2D_y_var_ghosts!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-                else
                     AssembleContinuity2D_var!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
                     AssembleMomentum2D_x_var!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
                     AssembleMomentum2D_y_var!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-                end
             end
 
             #--------------------------------------------# 
@@ -327,35 +334,43 @@ include("rheology_var.jl")
 
         p3 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Vx", color=:vik)
         p4 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy", color=:vik)
-        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]'.-mean( Pt[inx_c,iny_c]), aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik)
-        
+        #p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]'.-mean( Pt[inx_c,iny_c]), aspect_ratio=1, xlim=extrema(xc), title="Pt'", color=:vik)
+        #p1 = heatmap(xc, yc,  Pt[inx_c,iny_c].-mean( Pt[inx_c,iny_c]), aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik)
+        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt'", color=:vik)
+        p1 = heatmap(xc, yc,  Pt[inx_c,iny_c], aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik)
+
         # Evaluate analytical solution
-        p_ana = zeros(nc.x+2, nc.y+2)
+        p_ana = zeros(nc.x, nc.y)
         for i=1:nc.x, j=1:nc.y
             sol       = Stokes2D_Schmid2003( [xc[i]; yc[j]] )
             p_ana[i,j]    = sol.p
         end
         println("Max diff of Pt")
-        println(findmax(p_ana - Pt))
-        Vy_ana = zeros(nc.x+4, nc.y+3)
-        for i=1:nc.x+1, j=1:nc.y+1
+        println(findmax(p_ana .- Pt[inx_c,iny_c]))
+        Vy_ana = zeros(nc.x, nc.y+1)
+        for i=1:nc.x, j=1:nc.y+1
             sol       = Stokes2D_Schmid2003( [xv[i]; yv[j]] )
             Vy_ana[i,j]   = sol.V[2]
         end
         println("Max diff of V.y")
-        println(findmax(Vy_ana - V.y))
-        Vx_ana = zeros(nc.x+3, nc.y+4)
-        for i=1:nc.x+1, j=1:nc.y+1
+        println(findmax(Vy_ana .- V.y[inx_Vy,iny_Vy]))
+        Vx_ana = zeros(nc.x+1, nc.y)
+        for i=1:nc.x+1, j=1:nc.y
             sol       = Stokes2D_Schmid2003( [xv[i]; yv[j]] )
             Vx_ana[i,j]   = sol.V[1]
         end
         println("Max diff of V.x")
-        println(findmax(Vx_ana - V.x))
+        println(findmax(Vx_ana .- V.x[inx_Vx,iny_Vx]))
 
-        p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright, title=BC_template)
+        # test symétrie
+        println("Diff sym Pt")
+        println(findmax(Pt[inx_c,iny_c]'.-Pt[inx_c,iny_c]))
+
+
+        #=p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright, title=BC_template)
         p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
         p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
-        p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
+        p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")=#
         #p1 = heatmap(xv, yc, η.c[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="eta c", color=:vik)
         #p2 = heatmap(xv, yc, η.v[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="eta v", color=:vik)
         
