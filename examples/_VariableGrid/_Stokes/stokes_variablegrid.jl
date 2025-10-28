@@ -15,7 +15,7 @@ function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, �
     _ones = @SVector ones(4)
 
     # Loop over centroids
-    for j=1:size(ε̇.xx,2)-0, i=1:size(ε̇.xx,1)-0
+    for j=1:size(ε̇.xx,2), i=1:size(ε̇.xx,1)
         if (i==1 && j==1) || (i==size(ε̇.xx,1) && j==1) || (i==1 && j==size(ε̇.xx,2)) || (i==size(ε̇.xx,1) && j==size(ε̇.xx,2))
             # Avoid the outer corners - nothing is well defined there ;)
         else
@@ -52,7 +52,7 @@ function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, �
             ε̇vec  = @SVector([ε̇xx[1]+τ0.xx[i,j]/(2*G[1]*Δ.t[1]), ε̇yy[1]+τ0.yy[i,j]/(2*G[1]*Δ.t[1]), ε̇̄xy[1]+τ̄xy0[1]/(2*G[1]*Δ.t[1]), Pt[i,j]])
             # Tangent operator used for Newton Linearisation
             Δt =  Δ.t[1]
-            jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_var!, ε̇vec, Const(materials), Const(phases.c[i,j]), Const(Δt)) #, Const(Δ.y))
+            jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_var!, ε̇vec, Const(materials), Const(phases.c[i,j]), Const(Δt))
             
             # Why the hell is enzyme breaking the Jacobian into vectors??? :D
             @views 𝐷_ctl.c[i,j][:,1] .= jac.derivs[1][1][1]
@@ -232,14 +232,14 @@ end
 function Continuity_var(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δx_Vx, Δy_Vy, Δt)
     invΔx = 2 / (Δx_Vx[1]+Δx_Vx[2])
     invΔy = 2 / (Δy_Vy[1]+Δy_Vy[2])
+    invArea = invΔx * invΔy
     invΔt = 1 / Δt
     β     = materials.β[phase]
     η     = materials.β[phase]
     comp  = materials.compressible
 
-    f     = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy) + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
-
-    #f    *= max(invΔx, invΔy)
+    f     = ((Vx[2,2] - Vx[1,2]) * invΔy + (Vy[2,2] - Vy[2,1]) * invΔx) + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
+    f    *= invArea
     return f
 end
 

@@ -17,7 +17,7 @@ include("rheology_var.jl")
     #--------------------------------------------#
 
     # Resolution
-    nc = (x = 11, y = 11)
+    nc = (x = 7, y = 7)
 
     # Boundary loading type
     config = BC_template
@@ -282,10 +282,26 @@ include("rheology_var.jl")
             # Residual check        
             @timeit to "Residual" begin
                 TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
-                ResidualContinuity2D_var!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
+                ResidualContinuity2D_var!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
                 ResidualMomentum2D_x_var!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
                 ResidualMomentum2D_y_var!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
             end
+
+            println(size(𝐷.c))
+            println(size(𝐷.v))
+            println("size R.x")
+            println(size(R.x))
+            println("size R.y")
+            println(size(R.y))
+            println("size R.p")
+            println(size(R.p))
+            p3 = heatmap(xv, yc, R.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="R.x", color=:vik)
+            #p3 = heatmap(xv, yc, 𝐷.v[2:end-1], aspect_ratio=1, xlim=extrema(xv), title="D.v", color=:vik)
+            p4 = heatmap(xc, yv, R.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="R.y", color=:vik)
+            p2 = heatmap(xc, yc, R.p[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="R.p", color=:vik)
+            #p2 = heatmap(xc, yc, 𝐷.c, aspect_ratio=1, xlim=extrema(xc), title="D.c", color=:vik)
+            display(plot(p2,p3,p4,layout=(2,2)))
+            sleep(5)
 
             err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
             err.y[iter] = norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
@@ -334,10 +350,10 @@ include("rheology_var.jl")
 
         p3 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Vx", color=:vik)
         p4 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy", color=:vik)
-        #p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]'.-mean( Pt[inx_c,iny_c]), aspect_ratio=1, xlim=extrema(xc), title="Pt'", color=:vik)
-        #p1 = heatmap(xc, yc,  Pt[inx_c,iny_c].-mean( Pt[inx_c,iny_c]), aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik)
-        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt'", color=:vik)
-        p1 = heatmap(xc, yc,  Pt[inx_c,iny_c], aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik)
+        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]'.-mean( Pt[inx_c,iny_c]), aspect_ratio=1, xlim=extrema(xc), title="Pt'", color=:vik)
+        p1 = heatmap(xc, yc,  Pt[inx_c,iny_c].-mean( Pt[inx_c,iny_c]), aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik)
+        #p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt'", color=:vik)
+        #p1 = heatmap(xc, yc,  Pt[inx_c,iny_c], aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik)
 
         # Evaluate analytical solution
         p_ana = zeros(nc.x, nc.y)
@@ -364,6 +380,12 @@ include("rheology_var.jl")
 
         # test symétrie
         println("Diff sym Pt")
+        println(Pt[inx_c,iny_c]')
+        println(Pt[inx_c,iny_c])
+        diffPt = zeros(nc.x,nc.y)
+        diffPt = Pt[inx_c,iny_c]'.-Pt[inx_c,iny_c]
+        println(diffPt)
+        println(findmax(diffPt'-diffPt))
         println(findmax(Pt[inx_c,iny_c]'.-Pt[inx_c,iny_c]))
 
 
