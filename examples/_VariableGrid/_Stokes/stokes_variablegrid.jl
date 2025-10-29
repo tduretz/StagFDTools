@@ -15,7 +15,7 @@ function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, �
     _ones = @SVector ones(4)
 
     # Loop over centroids
-    for j=1:size(ε̇.xx,2), i=1:size(ε̇.xx,1)
+    for j=1:size(ε̇.xx,2)-0, i=1:size(ε̇.xx,1)-0
         if (i==1 && j==1) || (i==size(ε̇.xx,1) && j==1) || (i==1 && j==size(ε̇.xx,2)) || (i==size(ε̇.xx,1) && j==size(ε̇.xx,2))
             # Avoid the outer corners - nothing is well defined there ;)
         else
@@ -76,7 +76,7 @@ function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, �
     end
 
     # Loop over vertices
-    for j=1:size(ε̇.xy,2)-2, i=1:size(ε̇.xy,1)-2
+    for j=2:size(ε̇.xy,2)-2, i=2:size(ε̇.xy,1)-2
         Vx     = SMatrix{3,2}(      V.x[ii,jj] for ii in i:i+2,   jj in j+1:j+2)
         Vy     = SMatrix{2,3}(      V.y[ii,jj] for ii in i+1:i+2, jj in j:j+2  )
         bcx    = SMatrix{3,2}(    BC.Vx[ii,jj] for ii in i:i+2,   jj in j+1:j+2)
@@ -149,13 +149,17 @@ function SetBCVx1_var(Vx, typex, bcx, Δx, Δy)
         if typex[ii,1] == :Dirichlet_tangent
             MVx[ii,1] = fma(2, bcx[ii,1], -Vx[ii,2])
         elseif typex[ii,1] == :Neumann_tangent
-            MVx[ii,1] = fma(((Δy[1]+Δy[2])/2), bcx[ii,1], Vx[ii,2])
+            coeff = ((Δy[1]+Δy[2])/2)
+            #coeff = Δy[1]
+            MVx[ii,1] = fma(coeff, bcx[ii,1], Vx[ii,2])
         end
 
         if typex[ii,end] == :Dirichlet_tangent
             MVx[ii,end] = fma(2, bcx[ii,end], -Vx[ii,end-1])
         elseif typex[ii,end] == :Neumann_tangent
-            MVx[ii,end] = fma(((Δy[end]+Δy[end-1])/2), bcx[ii,end], Vx[ii,end-1])
+            coeff = ((Δy[end]+Δy[end-1])/2)
+            #coeff = Δy[end]
+            MVx[ii,end] = fma(coeff, bcx[ii,end], Vx[ii,end-1])
         end
     end
 
@@ -183,13 +187,17 @@ function SetBCVy1_var(Vy, typey, bcy, Δx, Δy)
         if typey[1,jj] == :Dirichlet_tangent
             MVy[1,jj] = fma(2, bcy[1,jj], -Vy[2,jj])
         elseif typey[1,jj] == :Neumann_tangent
-            MVy[1,jj] = fma(((Δx[1]+Δx[2])/2), bcy[1,jj], Vy[2,jj])
+            coeff = ((Δx[1]+Δx[2])/2)
+            #coeff = Δx[1]
+            MVy[1,jj] = fma(coeff, bcy[1,jj], Vy[2,jj])
         end
 
         if typey[end,jj] == :Dirichlet_tangent
             MVy[end,jj] = fma(2, bcy[end,jj], -Vy[end-1,jj])
         elseif typey[end,jj] == :Neumann_tangent
-            MVy[end,jj] = fma(((Δx[end]+Δx[end-1])/2), bcy[end,jj], Vy[end-1,jj])
+            coeff = ((Δx[end]+Δx[end-1])/2)
+            #coeff = Δx[end]
+            MVy[end,jj] = fma(coeff, bcy[end,jj], Vy[end-1,jj])
         end
     end
     # N/S
@@ -215,31 +223,31 @@ function ResidualContinuity2D_var!(R, V, P, P0, ΔP, τ0, 𝐷, phases, material
             Vy_loc     = SMatrix{3,2}(      V.y[ii,jj] for ii in i:i+2, jj in j:j+1)
 
             Δx_Vx_loc     = SVector{2}(Δ.x[ii] for ii in i:i+1)
+            Δy_Vx_loc     = SVector{3}(Δ.y[jj] for jj in j:j+2)
             Δy_Vy_loc     = SVector{2}(Δ.y[jj] for jj in j:j+1)
+            Δx_Vy_loc     = SVector{3}(Δ.x[ii] for ii in i:i+2)
 
             Δt_loc = Δ.t[1]
 
             bcv_loc    = (;)
             type_loc   = (;)
             D          = (;)
-            R.p[i,j]   = Continuity_var(Vx_loc, Vy_loc, P[i,j], P0[i,j], D, phases.c[i,j], materials, type_loc, bcv_loc, Δx_Vx_loc, Δy_Vy_loc, Δt_loc)
+            R.p[i,j]   = Continuity_var(Vx_loc, Vy_loc, P[i,j], P0[i,j], D, phases.c[i,j], materials, type_loc, bcv_loc, Δx_Vx_loc, Δy_Vx_loc, Δy_Vy_loc, Δx_Vy_loc, Δt_loc)
         end
     end
     return nothing
 end
 
 
-function Continuity_var(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δx_Vx, Δy_Vy, Δt)
-    invΔx = 2 / (Δx_Vx[1]+Δx_Vx[2])
-    invΔy = 2 / (Δy_Vy[1]+Δy_Vy[2])
-    invArea = invΔx * invΔy
+function Continuity_var(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δx_Vx, Δy_Vx, Δy_Vy, Δx_Vy, Δt)
+    invAreaVx = 1 / ( Δx_Vx[2] * Δy_Vy[2] )
+    invAreaVy = 1 / ( Δx_Vx[2] * Δy_Vy[2] )
     invΔt = 1 / Δt
     β     = materials.β[phase]
     η     = materials.β[phase]
     comp  = materials.compressible
 
-    f     = ((Vx[2,2] - Vx[1,2]) * invΔy + (Vy[2,2] - Vy[2,1]) * invΔx) + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
-    f    *= invArea
+    f     = (Vx[2,2] - Vx[1,2]) * Δx_Vx[2] * invAreaVx + (Vy[2,2] - Vy[2,1]) * Δy_Vy[2] * invAreaVy + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
     return f
 end
 
@@ -293,10 +301,10 @@ function SMomentum_x_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
     Vy = SetBCVy1_var(Vy_loc, type.y, bcv.y, Δx_Vy, Δy_Vy)
 
     # Velocity gradient
-    Dxx = ∂x(Vx) * (2/(Δx_Vx[1]+Δx_Vx[2]))
-    Dyy = ∂y_inn(Vy) * (2/(Δy_Vy[2]+Δy_Vy[1]))
-    Dxy = ∂y(Vx) * (2/(Δy_Vx[1]+Δy_Vx[2]))
-    Dyx = ∂x_inn(Vy) * (2/(Δx_Vy[1]+Δx_Vy[2]))
+    Dxx = ∂x(Vx) * (2/(Δx_Vx[3]+Δx_Vx[2])) #(1/Δx_Vx[2]) #(2/(Δx_Vx[3]+Δx_Vx[2]))
+    Dyy = ∂y_inn(Vy) * (2/(Δy_Vy[4]+Δy_Vy[3])) #(1/Δy_Vy[3]) # (2/(Δy_Vy[4]+Δy_Vy[3]))
+    Dxy = ∂y(Vx) * (2/(Δy_Vx[3]+Δy_Vx[2]))
+    Dyx = ∂x_inn(Vy) * (2/(Δx_Vy[3]+Δx_Vy[2]))
 
     # Strain rate
     ε̇kk = @. Dxx + Dyy
@@ -339,10 +347,10 @@ function SMomentum_x_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
     end
 
     # Residual
-    fx  = ( τxx[2]  - τxx[1] ) * (2/(Δx_Vx[1]+Δx_Vx[2]))
-    fx += ( τxy[2]  - τxy[1] ) * (2/(Δy_Vx[1]+Δy_Vx[2]))
-    fx -= ( Ptc[2]  - Ptc[1] ) * (2/(Δx_Vx[1]+Δx_Vx[2]))
-    fx *= -1 * ((Δx_Vx[1]+Δx_Vx[2])/2) * ((Δy_Vx[1]+Δy_Vx[2])/2) 
+    fx  = ( τxx[2]  - τxx[1] ) * (2/(Δx_Vx[3]+Δx_Vx[2])) #(1/Δx_Vx[2]) #(2/(Δx_Vx[3]+Δx_Vx[2]))
+    fx += ( τxy[2]  - τxy[1] ) * (2/(Δy_Vx[3]+Δy_Vx[2]))
+    fx -= ( Ptc[2]  - Ptc[1] ) * (2/(Δx_Vx[3]+Δx_Vx[2])) #(1/Δx_Vx[2]) #(2/(Δx_Vx[3]+Δx_Vx[2]))
+    fx *= -1 * ((Δx_Vx[3]+Δx_Vx[2])/2) * ((Δy_Vx[3]+Δy_Vx[2])/2)  #-1 * Δx_Vx[2] * ((Δy_Vx[3]+Δy_Vx[2])/2)  #-1 * ((Δx_Vx[3]+Δx_Vx[2])/2) * ((Δy_Vx[3]+Δy_Vx[2])/2) 
 
     return fx
 end
@@ -394,10 +402,10 @@ function SMomentum_y_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
     Vy = SetBCVy1_var(Vy_loc, type.y, bcv.y, Δx_Vy, Δy_Vy)
 
     # Velocity gradient
-    Dxx = ∂x_inn(Vx) * (2/(Δx_Vx[2]+Δx_Vx[1]))
-    Dyy = ∂y(Vy) * (2/(Δy_Vy[2]+Δy_Vy[1]))
-    Dxy = ∂y_inn(Vx) * (2/(Δy_Vx[1]+Δy_Vx[2]))
-    Dyx = ∂x(Vy) * (2/(Δx_Vy[1]+Δx_Vy[2]))
+    Dxx = ∂x_inn(Vx) * (2/(Δx_Vx[4]+Δx_Vx[3])) #(1/Δx_Vx[3]) #(2/(Δx_Vx[4]+Δx_Vx[3]))
+    Dyy = ∂y(Vy) * (2/(Δy_Vy[2]+Δy_Vy[3])) #(1/Δy_Vy[2]) #(2/(Δy_Vy[2]+Δy_Vy[3]))
+    Dxy = ∂y_inn(Vx) * (2/(Δy_Vx[3]+Δy_Vx[2]))
+    Dyx = ∂x(Vy) * (2/(Δx_Vy[3]+Δx_Vy[2]))
 
     # Strain rate
     ε̇kk = @. Dxx + Dyy
@@ -440,10 +448,10 @@ function SMomentum_y_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
     end
 
     # Residual
-    fy  = ( τyy[2]  -  τyy[1] ) * (2/(Δy_Vy[1]+Δy_Vy[2]))
-    fy += ( τxy[2]  -  τxy[1] ) * (2/(Δx_Vy[1]+Δx_Vy[2]))
-    fy -= ( Ptc[2]  -  Ptc[1])  * (2/(Δy_Vy[1]+Δy_Vy[2]))
-    fy *= -1 * ((Δx_Vy[1]+Δx_Vy[2])/2) * ((Δy_Vy[1]+Δy_Vy[2])/2)
+    fy  = ( τyy[2]  -  τyy[1] ) * (2/(Δy_Vy[3]+Δy_Vy[2])) #(1/Δy_Vy[2]) #(2/(Δy_Vy[3]+Δy_Vy[2]))
+    fy += ( τxy[2]  -  τxy[1] ) * (2/(Δx_Vy[3]+Δx_Vy[2]))
+    fy -= ( Ptc[2]  -  Ptc[1])  * (2/(Δy_Vy[1]+Δy_Vy[2])) #(1/Δy_Vy[2]) #(2/(Δy_Vy[1]+Δy_Vy[2]))
+    fy *= -1 * ((Δx_Vy[3]+Δx_Vy[2])/2) * ((Δy_Vy[3]+Δy_Vy[2])/2) #-1 * ((Δx_Vy[3]+Δx_Vy[2])/2) * Δy_Vy[2] #-1 * ((Δx_Vy[3]+Δx_Vy[2])/2) * ((Δy_Vy[3]+Δy_Vy[2])/2)
     
     return fy
 end
@@ -477,11 +485,13 @@ function AssembleContinuity2D_var!(K, V, P, Pt0, ΔP, τ0, 𝐷, phases, materia
         fill!(∂R∂P , 0e0)
         
         Δx_Vx_loc     = SVector{2}(Δ.x[ii] for ii in i:i+1)
+        Δy_Vx_loc     = SVector{3}(Δ.y[jj] for jj in j:j+2)
         Δy_Vy_loc     = SVector{2}(Δ.y[jj] for jj in j:j+1)
+        Δx_Vy_loc     = SVector{3}(Δ.x[ii] for ii in i:i+2)
 
         Δt_loc        = Δ.t[1]
 
-        autodiff(Enzyme.Reverse, Continuity_var, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂P), Const(Pt0[i,j]), Const(D), Const(phases.c[i,j]), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δx_Vx_loc), Const(Δy_Vy_loc), Const(Δt_loc))
+        autodiff(Enzyme.Reverse, Continuity_var, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂P), Const(Pt0[i,j]), Const(D), Const(phases.c[i,j]), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δx_Vx_loc), Const(Δy_Vx_loc), Const(Δy_Vy_loc), Const(Δx_Vy_loc), Const(Δt_loc))
 
         # Pt --- Vx
         Local = SMatrix{2,3}(num.Vx[ii,jj] for ii in i:i+1, jj in j:j+2)# .* pattern[3][1]        

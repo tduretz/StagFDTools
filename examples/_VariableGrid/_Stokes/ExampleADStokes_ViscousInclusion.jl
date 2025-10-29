@@ -17,7 +17,7 @@ include("rheology_var.jl")
     #--------------------------------------------#
 
     # Resolution
-    nc = (x = 7, y = 7)
+    nc = (x = 5, y = 5)
 
     # Boundary loading type
     config = BC_template
@@ -163,8 +163,7 @@ include("rheology_var.jl")
         yv = normal_linspace_interval(inflimit.y, suplimit.y, μ.y, σ.y, nc.y+1)
 
         # spaces between nodes
-        enddelta = nc.x+4
-        Δ = (x = zeros(enddelta), y = zeros(enddelta), t=fill(Δt0,1)) # nb cells
+        Δ = (x = zeros(nc.x+4), y = zeros(nc.y+4), t=fill(Δt0,1)) # nb cells
         #=Δ.x[2:end-1]  .= diff(xv)
         Δ.x[[1, end]] .= Δ.x[[2, end-1]]
         Δ.y[2:end-1]  .= diff(yv)
@@ -300,8 +299,10 @@ include("rheology_var.jl")
             p4 = heatmap(xc, yv, R.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="R.y", color=:vik)
             p2 = heatmap(xc, yc, R.p[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="R.p", color=:vik)
             #p2 = heatmap(xc, yc, 𝐷.c, aspect_ratio=1, xlim=extrema(xc), title="D.c", color=:vik)
+            println("symetrie R.p")
+            println(findmax(R.p[inx_c,iny_c]'.-R.p[inx_c,iny_c]))
             display(plot(p2,p3,p4,layout=(2,2)))
-            sleep(5)
+            sleep(6)
 
             err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
             err.y[iter] = norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
