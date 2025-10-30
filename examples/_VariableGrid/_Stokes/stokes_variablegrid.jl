@@ -219,13 +219,20 @@ function ResidualContinuity2D_var!(R, V, P, P0, ΔP, τ0, 𝐷, phases, material
     # loop on centroids
     for j in 2:size(R.p,2)-1, i in 2:size(R.p,1)-1
         if type.Pt[i,j] !== :constant 
-            Vx_loc     = SMatrix{2,3}(      V.x[ii,jj] for ii in i:i+1, jj in j:j+2)
-            Vy_loc     = SMatrix{3,2}(      V.y[ii,jj] for ii in i:i+2, jj in j:j+1)
+            #Vx_loc     = SMatrix{2,3}(      V.x[ii,jj] for ii in i:i+1, jj in j:j+2)
+            #Vy_loc     = SMatrix{3,2}(      V.y[ii,jj] for ii in i:i+2, jj in j:j+1)
+            Vx_loc     = SMatrix{3,2}(      V.x[ii,jj] for ii in i:i+2, jj in j:j+1)
+            Vy_loc     = SMatrix{2,3}(      V.y[ii,jj] for ii in i:i+1, jj in j:j+2)
 
-            Δx_Vx_loc     = SVector{2}(Δ.x[ii] for ii in i:i+1)
+            Δx_Vx_loc     = SVector{3}(Δ.x[ii] for ii in i:i+2)
+            Δy_Vx_loc     = SVector{2}(Δ.y[jj] for jj in j:j+1)
+            Δx_Vy_loc     = SVector{2}(Δ.x[ii] for ii in i:i+1)
+            Δy_Vy_loc     = SVector{3}(Δ.y[jj] for jj in j:j+2)
+
+            #=Δx_Vx_loc     = SVector{2}(Δ.x[ii] for ii in i:i+1)
             Δy_Vx_loc     = SVector{3}(Δ.y[jj] for jj in j:j+2)
             Δy_Vy_loc     = SVector{2}(Δ.y[jj] for jj in j:j+1)
-            Δx_Vy_loc     = SVector{3}(Δ.x[ii] for ii in i:i+2)
+            Δx_Vy_loc     = SVector{3}(Δ.x[ii] for ii in i:i+2)=#
 
             Δt_loc = Δ.t[1]
 
@@ -240,14 +247,35 @@ end
 
 
 function Continuity_var(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δx_Vx, Δy_Vx, Δy_Vy, Δx_Vy, Δt)
-    invAreaVx = 1 / ( Δx_Vx[2] * Δy_Vy[2] )
-    invAreaVy = 1 / ( Δx_Vx[2] * Δy_Vy[2] )
+    invΔx = 1 / Δx_Vx[1]
+    invΔy = 1 / Δx_Vy[1]
+    invArea = invΔx * invΔy
     invΔt = 1 / Δt
     β     = materials.β[phase]
     η     = materials.β[phase]
     comp  = materials.compressible
 
-    f     = (Vx[2,2] - Vx[1,2]) * Δx_Vx[2] * invAreaVx + (Vy[2,2] - Vy[2,1]) * Δy_Vy[2] * invAreaVy + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
+    f     = ((Vx[2,2] - Vx[1,2]) * invΔy + (Vy[2,2] - Vy[2,1]) * invΔx) + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
+    f    *= invArea
+    
+    #=invΔx_Vx = 1 / Δx_Vx[1] #2 / (Δx_Vx[1]+Δx_Vx[2])
+    invΔy_Vy = 1 / Δy_Vy[1] #2 / (Δy_Vy[1]+Δy_Vy[2])
+    #invΔy_Vx = 2 / (Δy_Vx[1]+Δy_Vx[2])
+    #invΔx_Vy = 2 / (Δx_Vy[1]+Δx_Vy[2])
+    invAreaVx = 2 / ( (Δy_Vx[1]+Δy_Vx[2]) * Δx_Vx[1] ) #1 / ( Δx_Vx[2] * Δy_Vy[2] ) # 2 / ( (Δy_Vx[1]+Δy_Vx[2]) * Δx_Vx[1] )
+    invAreaVy = 2 / ( (Δx_Vy[1]+Δx_Vy[2]) * Δy_Vy[1] ) #1 / ( Δx_Vx[2] * Δy_Vy[2] ) #2 / ( (Δx_Vy[1]+Δx_Vy[2]) * Δy_Vy[1] )
+    invArea = 1 / (Δx_Vx[2] * Δy_Vy[2])
+    invΔt = 1 / Δt
+    β     = materials.β[phase]
+    η     = materials.β[phase]
+    comp  = materials.compressible
+
+    f     = (Vx[2,2] - Vx[1,2]) * invΔx_Vx + (Vy[2,2] - Vy[2,1]) * invΔy_Vy + comp * β * (Pt[1] - Pt0) * invΔt
+    #f     = (Vx[2,2] - Vx[1,2]) * Δx_Vx[1] * ((Δy_Vx[1]+Δy_Vx[2]) / 2) + (Vy[2,2] - Vy[2,1]) * Δy_Vy[1] * ((Δx_Vy[1]+Δx_Vy[2]) / 2) + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
+    #f     = (Vx[2,2] - Vx[1,2]) * Δx_Vx[1] * invAreaVx + (Vy[2,2] - Vy[2,1]) * Δy_Vy[1] * invAreaVy + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
+    #f     = (((Vx[2,2] - Vx[1,2]) * invΔx_Vx) + ((Vy[2,2] - Vy[2,1]) * invΔy_Vy)) + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
+    #f     = ( (Vx[2,2] - Vx[1,2]) * invΔx_Vx * ( 1 / ( ( (Δy_Vx[1]+Δy_Vx[2]) / 2 ) * Δx_Vx[1] ) ) + (Vy[2,2] - Vy[2,1]) * invΔy_Vy * ( 1 / ( ( (Δx_Vy[1]+Δx_Vy[2]) / 2 ) * Δy_Vy[1]) ) ) + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
+    f    *= 1 / Δx_Vx[1] # * Δy_Vy[1])#max(invΔx_Vx, invΔy_Vy)=#
     return f
 end
 
@@ -293,16 +321,14 @@ end
 
 
 function SMomentum_x_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δx_Vx, Δy_Vx, Δx_Vy, Δy_Vy, Δt)
-    
-    #invΔx, invΔy = 1 / Δx_Vx[end-1], 1 / Δy_Vy[end-1]
 
     # BC
     Vx = SetBCVx1_var(Vx_loc, type.x, bcv.x, Δx_Vx, Δy_Vx)
     Vy = SetBCVy1_var(Vy_loc, type.y, bcv.y, Δx_Vy, Δy_Vy)
 
     # Velocity gradient
-    Dxx = ∂x(Vx) * (2/(Δx_Vx[3]+Δx_Vx[2])) #(1/Δx_Vx[2]) #(2/(Δx_Vx[3]+Δx_Vx[2]))
-    Dyy = ∂y_inn(Vy) * (2/(Δy_Vy[4]+Δy_Vy[3])) #(1/Δy_Vy[3]) # (2/(Δy_Vy[4]+Δy_Vy[3]))
+    Dxx = ∂x(Vx) * (1/Δx_Vx[2])
+    Dyy = ∂y_inn(Vy) * (1/Δy_Vy[3])
     Dxy = ∂y(Vx) * (2/(Δy_Vx[3]+Δy_Vx[2]))
     Dyx = ∂x_inn(Vy) * (2/(Δx_Vy[3]+Δx_Vy[2]))
 
@@ -347,10 +373,10 @@ function SMomentum_x_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
     end
 
     # Residual
-    fx  = ( τxx[2]  - τxx[1] ) * (2/(Δx_Vx[3]+Δx_Vx[2])) #(1/Δx_Vx[2]) #(2/(Δx_Vx[3]+Δx_Vx[2]))
+    fx  = ( τxx[2]  - τxx[1] ) * (1/Δx_Vx[2])
     fx += ( τxy[2]  - τxy[1] ) * (2/(Δy_Vx[3]+Δy_Vx[2]))
-    fx -= ( Ptc[2]  - Ptc[1] ) * (2/(Δx_Vx[3]+Δx_Vx[2])) #(1/Δx_Vx[2]) #(2/(Δx_Vx[3]+Δx_Vx[2]))
-    fx *= -1 * ((Δx_Vx[3]+Δx_Vx[2])/2) * ((Δy_Vx[3]+Δy_Vx[2])/2)  #-1 * Δx_Vx[2] * ((Δy_Vx[3]+Δy_Vx[2])/2)  #-1 * ((Δx_Vx[3]+Δx_Vx[2])/2) * ((Δy_Vx[3]+Δy_Vx[2])/2) 
+    fx -= ( Ptc[2]  - Ptc[1] ) * (1/Δx_Vx[2])
+    fx *= -1 * Δx_Vx[2] * ((Δy_Vx[3]+Δy_Vx[2])/2)
 
     return fx
 end
@@ -395,15 +421,13 @@ end
 
 function SMomentum_y_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δx_Vx, Δy_Vx, Δx_Vy, Δy_Vy, Δt)
     
-    #invΔx, invΔy = 1 / Δx_Vx[end-1], 1 / Δy_Vy[end-1]
-    
     # BC
     Vx = SetBCVx1_var(Vx_loc, type.x, bcv.x, Δx_Vx, Δy_Vx)
     Vy = SetBCVy1_var(Vy_loc, type.y, bcv.y, Δx_Vy, Δy_Vy)
 
     # Velocity gradient
-    Dxx = ∂x_inn(Vx) * (2/(Δx_Vx[4]+Δx_Vx[3])) #(1/Δx_Vx[3]) #(2/(Δx_Vx[4]+Δx_Vx[3]))
-    Dyy = ∂y(Vy) * (2/(Δy_Vy[2]+Δy_Vy[3])) #(1/Δy_Vy[2]) #(2/(Δy_Vy[2]+Δy_Vy[3]))
+    Dxx = ∂x_inn(Vx) * (1/Δx_Vx[3])
+    Dyy = ∂y(Vy) * (1/Δy_Vy[2])
     Dxy = ∂y_inn(Vx) * (2/(Δy_Vx[3]+Δy_Vx[2]))
     Dyx = ∂x(Vy) * (2/(Δx_Vy[3]+Δx_Vy[2]))
 
@@ -448,10 +472,10 @@ function SMomentum_y_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
     end
 
     # Residual
-    fy  = ( τyy[2]  -  τyy[1] ) * (2/(Δy_Vy[3]+Δy_Vy[2])) #(1/Δy_Vy[2]) #(2/(Δy_Vy[3]+Δy_Vy[2]))
+    fy  = ( τyy[2]  -  τyy[1] ) * (1/Δy_Vy[2])
     fy += ( τxy[2]  -  τxy[1] ) * (2/(Δx_Vy[3]+Δx_Vy[2]))
-    fy -= ( Ptc[2]  -  Ptc[1])  * (2/(Δy_Vy[1]+Δy_Vy[2])) #(1/Δy_Vy[2]) #(2/(Δy_Vy[1]+Δy_Vy[2]))
-    fy *= -1 * ((Δx_Vy[3]+Δx_Vy[2])/2) * ((Δy_Vy[3]+Δy_Vy[2])/2) #-1 * ((Δx_Vy[3]+Δx_Vy[2])/2) * Δy_Vy[2] #-1 * ((Δx_Vy[3]+Δx_Vy[2])/2) * ((Δy_Vy[3]+Δy_Vy[2])/2)
+    fy -= ( Ptc[2]  -  Ptc[1])  * (1/Δy_Vy[2])
+    fy *= -1 * ((Δx_Vy[3]+Δx_Vy[2])/2) * Δy_Vy[2]
     
     return fy
 end
