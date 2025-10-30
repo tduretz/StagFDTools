@@ -28,7 +28,9 @@ include("rheology_var.jl")
         compressible = false,
         plasticity   = :none,
         n    = [1.0    1.0  ],
-        η0   = [1e0    1e2  ],
+        # η0   = [1e0    1e2  ],
+                η0   = [1e0    1e0  ], # I have removed the inclusion for the time being
+
         G    = [1e20   1e20 ],
         #η0   = [1e0    1e5  ], 
         #G    = [1e6    1e6  ],
