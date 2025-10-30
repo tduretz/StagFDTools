@@ -220,10 +220,14 @@ function ResidualContinuity2D_var!(R, V, P, P0, ΔP, τ0, 𝐷, phases, material
             Vx_loc     = SMatrix{2,3}(      V.x[ii,jj] for ii in i:i+1, jj in j:j+2)
             Vy_loc     = SMatrix{3,2}(      V.y[ii,jj] for ii in i:i+2, jj in j:j+1)
 
-            Δx_loc     = SVector{1}(Δ.x[ii] for ii in i:i)
-            Δy_loc     = SVector{1}(Δ.y[jj] for jj in j:j)
+            Δx_loc     = SVector{1}(Δ.x[ii+1] for ii in i:i)
+            Δy_loc     = SVector{1}(Δ.y[jj+1] for jj in j:j)
 
             Δt_loc = Δ.t[1]
+
+            if j==2
+            @show Δx_loc
+            end
 
             bcv_loc    = (;)
             type_loc   = (;)

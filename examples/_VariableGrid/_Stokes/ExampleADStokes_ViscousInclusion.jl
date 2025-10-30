@@ -390,7 +390,8 @@ include("rheology_var.jl")
         display(plot(p1, p2, p3, p4, layout=(2,2)))
         # sleep(40)
 
-        @show Δ.x[1:end-1]
+        @show Δ.x[2:end-1]
+        @show nc.x
 
 
         # p = plot(aspect_ratio=:equal, xlabel="x", ylabel="y", title="grid", legend=false)
