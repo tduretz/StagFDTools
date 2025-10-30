@@ -20,6 +20,7 @@ end
 function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, T, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δ)
     
     invΔx, invΔy = 1 / Δ.x, 1 / Δ.y
+    OOP          = materials.OOP
 
     # BC
     Vx = SetBCVx1(Vx_loc, type.x, bcv.x, Δ)
@@ -32,7 +33,8 @@ function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, T, ΔP, τ0, 𝐷, phases, mate
     Dyx = ∂x_inn(Vy) * invΔx
 
     # Strain rate
-    ε̇kk = @. Dxx + Dyy
+    Dzz = 0.5*(Dxx .+ Dyy) * OOP
+    ε̇kk = @. Dxx + Dyy + Dzz
     ε̇xx = @. Dxx - 1/3*ε̇kk
     ε̇yy = @. Dyy - 1/3*ε̇kk
     ε̇xy = @. 1/2 * ( Dxy + Dyx )
@@ -83,6 +85,7 @@ end
 function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, T, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δ)
     
     invΔx, invΔy = 1 / Δ.x, 1 / Δ.y
+    OOP          = materials.OOP
 
     # BC
     Vx = SetBCVx1(Vx_loc, type.x, bcv.x, Δ)
@@ -95,7 +98,8 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, T, ΔP, τ0, 𝐷, phases, mate
     Dyx = ∂x(Vy) * invΔx
 
     # Strain rate
-    ε̇kk = @. Dxx + Dyy
+    Dzz = 0.5*(Dxx .+ Dyy) * OOP
+    ε̇kk = @. Dxx + Dyy + Dzz
     ε̇xx = @. Dxx - 1/3*ε̇kk      
     ε̇yy = @. Dyy - 1/3*ε̇kk      
     ε̇xy = @. 1/2 * (Dxy + Dyx)
@@ -147,25 +151,70 @@ function Continuity(Vx, Vy, Pt, Pt0, T, T0, phase, materials, type_loc, bcv_loc,
     invΔx    = 1 / Δ.x
     invΔy    = 1 / Δ.y
     Dzz      = materials.Dzz
-    ρr       = materials.ρr[phase]
-    α        = materials.α[phase]
-    β        = 1/(materials.K[phase])
-    ρ        = ρr* exp(β*Pt[1,1]  - α*T[2,2])
-    ρ0       = ρr* exp(β*Pt0      - α*T0)
+
+    ρ, ρ0 = 1.0, 1.0
+    try
+        ρ, _     = density_volume(Pt[1,1], T[2,2], materials.EoS_params[phase]; EoS=materials.EoS_model[phase])
+    catch e
+        @info "1"
+        println("An error occurred: $e")
+        @show materials.EoS_params[phase], Pt[1,1], T[2,2]
+        error()
+    end
+
+    try
+        ρ0, _    = density_volume(Pt0,     T0,     materials.EoS_params[phase]; EoS=materials.EoS_model[phase])
+    catch e
+        @info "2"
+        println("An error occurred: $e")
+        @show materials.EoS_params[phase], Pt0,     T0
+        error()
+    end
+    # α  = materials.α[phase] 
+    # K  = materials.K[phase] 
+    # ρr = materials.ρr[phase] 
+    # ρ  = ρr*exp(1/K*Pt[1,1] - α*T[2,2])
+    # ρ0 = ρr*exp(1/K*Pt0     - α*T0)
+
+    # if materials.EoS[phase] == 1
+    #     ρ        = DensityExponential(T[2,2], Pt[1,1], materials, phase )
+    #     ρ0       = DensityExponential(T0,     Pt0,     materials, phase )
+    # elseif materials.EOS[phase] == 2
+    #     ρ        = DensityBirchMurnaghanEinstein(T[2,2], Pt[1,1], materials, phase )
+    #     ρ0       = DensityBirchMurnaghanEinstein(T0,     Pt0,     materials, phase )
+    # end
     dlnρdt   = (log(ρ) - log(ρ0))/Δ.t
     f = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy + 0*Dzz  + dlnρdt 
-    f    *= max(invΔx, invΔy)
+    # f    *= max(invΔx, invΔy)
+    f    *= Δ.x*Δ.y
+
     return f
 end
 
 function HeatDiffusion(Vx, Vy, Pt, Pt0, T, T0, phase, materials, k, type_loc, bcv_loc, Δ)
     
-    α  = materials.α[phase] 
-    K  = materials.K[phase] 
-    ρr = materials.ρr[phase] 
-    c  = materials.cp[phase] 
-    TC = T[2,2]
-    ρ  = ρr*exp(1/K*Pt[1] - α*TC)
+    # TC = T[2,2]
+    # α  = materials.α[phase] 
+    # K  = materials.K[phase] 
+    # ρr = materials.ρr[phase] 
+    # c  = materials.cp[phase] 
+    # ρ  = ρr*exp(1/K*Pt[1] - α*TC)
+
+    c        = materials.cp[phase]
+    TC       = T[2,2]
+
+     ρ = 1.0
+    try
+        ρ, _     = density_volume(Pt[1], TC, materials.EoS_params[phase]; EoS=materials.EoS_model[phase])
+    catch e
+        @info "3"
+        println("An error occurred: $e")
+        @show materials.EoS_params[phase], Pt[1], TC
+        error()
+    end
+    α        = materials.EoS_params[phase].α
+
+    # @show ρ*100000.0, ρ1*100000.0
 
     if type_loc[1,2] === :Dirichlet
         TW = 2*bcv_loc[1,2] - TC
@@ -215,9 +264,10 @@ function HeatDiffusion(Vx, Vy, Pt, Pt0, T, T0, phase, materials, k, type_loc, bc
     # @show Pt[1]*1e6, Pt0*1e6, TC*1000, α/1000
     # @show  α*TC*(Pt[1]-Pt0)/Δ.t*1e6/1e7
 
-    F   = (qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y + ρ*c*(TC-T0)/Δ.t - α*TC*(Pt[1]-Pt0)/Δ.t
+    f   = (qxE - qxW)/Δ.x + (qyN - qyS)/Δ.y + ρ*c*(TC-T0)/Δ.t - α*TC*(Pt[1]-Pt0)/Δ.t
+    f    *= Δ.x*Δ.y
 
-    return F
+    return f
 end
 
 function Numbering!(N, type, nc)
@@ -770,7 +820,7 @@ function AssembleMomentum2D_y!(K, V, T, T0, P, P0, ΔP, τ0, 𝐷, phases, mater
     return nothing
 end
 
-function ResidualContinuity2D!(R, V, T, T0, P, P0, phases, materials, number, type, BC, nc, Δ) 
+function ResidualContinuity2D!(R, V, T, T0, P, P0, ρ, phases, materials, number, type, BC, nc, Δ) 
                 
     shift    = (x=1, y=1)
     # (; bc_val, type, pattern, num) = numbering
@@ -785,8 +835,10 @@ function ResidualContinuity2D!(R, V, T, T0, P, P0, phases, materials, number, ty
         typey_loc  = SMatrix{2,3}(  type.Vy[ii,jj] for ii in i:i+1, jj in j:j+2)
         bcv_loc    = (x=bcx_loc, y=bcy_loc)
         type_loc   = (x=typex_loc, y=typey_loc)
-        R.pt[i,j]   = Continuity(Vx_loc, Vy_loc, Pt_loc, P0.t[i,j], T_loc, T0.c[i,j], phases.c[i,j], materials, type_loc, bcv_loc, Δ)
-
+        R.pt[i,j] = Continuity(Vx_loc, Vy_loc, Pt_loc, P0.t[i,j], T_loc, T0.c[i,j], phases.c[i,j], materials, type_loc, bcv_loc, Δ)
+    
+        ρ.c[i,j], _     = density_volume(Pt_loc[1,1], T_loc[2,2], materials.EoS_params[phases.c[i,j]]; EoS=materials.EoS_model[phases.c[i,j]])
+    
     end
     return nothing
 end
@@ -988,4 +1040,39 @@ function SetBCVy1(Vy, typey, bcy, Δ)
         end
     end
     return SMatrix(MVy)
+end
+
+function LineSearch!(rvec, α, dx, R, V, Vi, T, Ti, T0, P, Pi, P0, ΔP, ρ, τ, τ0, ε̇, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+    
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, inx_v, iny_v, size_x, size_y, size_c, size_v = Ranges(nc)
+
+    Vi.x .= V.x 
+    Vi.y .= V.y 
+    Pi.t .= P.t
+    Ti.c .= T.c
+
+    for i in eachindex(α)
+        V.x .= Vi.x 
+        V.y .= Vi.y
+        P.t .= Pi.t
+        T.c .= Ti.c
+    
+        UpdateSolution!(V, T, P, α[i]*dx, number, type, nc)
+
+        P.t[P.t.<0.] .= 0.0
+
+        TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, T, P, ΔP, type, BC, materials, phases, Δ)
+        ResidualMomentum2D_x!(R, V, T, T0, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+        ResidualMomentum2D_y!(R, V, T, T0, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+        ResidualContinuity2D!(R, V, T, T0, P, P0, ρ, phases, materials, number, type, BC, nc, Δ) 
+        ResidualHeatDiffusion2D!(R, V, T, T0, P, P0, phases, materials, number, type, BC, nc, Δ)
+        rvec[i] = @views norm(R.x[inx_Vx,iny_Vx])/length(R.x[inx_Vx,iny_Vx]) + norm(R.y[inx_Vy,iny_Vy])/length(R.y[inx_Vy,iny_Vy]) + norm(R.pt[inx_c,iny_c])/length(R.pt[inx_c,iny_c]) + norm(R.T[inx_c,iny_c])/length(R.T[inx_c,iny_c])  
+    end
+    imin = argmin(rvec)
+    V.x .= Vi.x 
+    V.y .= Vi.y
+    P.t .= Pi.t
+    T.c .= Ti.c
+
+    return imin
 end

@@ -30,7 +30,7 @@ using TimerOutputs
         cosϕ = [0.0    0.0  ],
         sinϕ = [0.0    0.0  ],
         sinψ = [0.0    0.0  ],
-    )
+    )           # 1     # 2
     materials.B   .= (2*materials.η0).^(-materials.n)
 
     # Time steps
@@ -256,9 +256,12 @@ let
     # ]
 
     # Boundary deformation gradient matrix
+    er    = -1
+    # ∂𝐕∂𝐱 - velocity gradient tensor 
     D_BCs = [
         #  @SMatrix( [0 1; 0  0] ),
-        @SMatrix( [1 0; 0 -1] ),
+        @SMatrix( [er 0;        #    ∂Vx∂x ∂Vx∂y
+                   0 -er] ),    #    ∂Vy∂x ∂Vy∂y  div(V) = 0 = ∂Vx∂x + ∂Vy∂y --> ∂Vy∂y = - ∂Vx∂x
     ]
 
     # Run them all

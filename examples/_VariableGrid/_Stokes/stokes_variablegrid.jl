@@ -211,20 +211,22 @@ function ResidualContinuity2D_var!(R, V, P, P0, ΔP, τ0, 𝐷, phases, material
         if type.Pt[i,j] !== :constant 
             Vx_loc     = SMatrix{2,3}(      V.x[ii,jj] for ii in i:i+1, jj in j:j+2)
             Vy_loc     = SMatrix{3,2}(      V.y[ii,jj] for ii in i:i+2, jj in j:j+1)
+            Δx         = SVector{1}(        Δ.x[ii] for ii in i:i)
+            Δy         = SVector{1}(        Δ.y[jj] for jj in j:j)
             bcv_loc    = (;)
             type_loc   = (;)
             D          = (;)
             # I'm giving centroids numbering in order to know which delta I should take in the computations
-            R.p[i,j]   = Continuity_var(Vx_loc, Vy_loc, P[i,j], P0[i,j], D, phases.c[i,j], materials, type_loc, bcv_loc, Δ, i, j)
+            R.p[i,j]   = Continuity_var(Vx_loc, Vy_loc, P[i,j], P0[i,j], D, phases.c[i,j], materials, type_loc, bcv_loc, Δx, Δy, Δ.t[1])
         end
     end
     return nothing
 end
 
 
-function Continuity_var(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δ, i, j)
-    invΔx = 1 / Δ.x[i]
-    invΔy = 1 / Δ.y[j]
+function Continuity_var(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δx, Δy, Δt)
+    invΔx = 1 / Δx[1]
+    invΔy = 1 / Δy[1]
     invΔt = 1 / Δ.t[1]
     β     = materials.β[phase]
     η     = materials.β[phase]
@@ -262,15 +264,18 @@ function ResidualMomentum2D_x_var!(R, V, P, P0, ΔP, τ0, 𝐷, phases, material
             ph_loc     = (c=phc_loc, v=phv_loc)
             D          = (c=Dc, v=Dv)
             τ0_loc     = (xx=τxx0, yy=τyy0, xy=τxy0)
+
+            Δx         = SVector{2}(        Δ.x[ii] for ii in i-1:i)
+            Δy         = SVector{1}(        Δ.y[jj] for jj in j:j)
     
-            R.x[i,j]   = SMomentum_x_Generic_var(Vx_loc, Vy_loc, P_loc, ΔP_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δ, i, j)
+            R.x[i,j]   = SMomentum_x_Generic_var(Vx_loc, Vy_loc, P_loc, ΔP_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δx, Δy, Δ.t[1])
         end
     end
     return nothing
 end
 
 # I am giving centroids in order to take adapted grid spacing
-function SMomentum_x_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δ, ix, jy)
+function SMomentum_x_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δx, Δy, Δt)
     
     invΔx, invΔy = 1 / Δ.x[ix], 1 / Δ.y[jy] # j'ai fait une modif ici avec i et j
 
@@ -485,15 +490,15 @@ end
 
 
 
-function Continuity_var(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δ, i, j)
-    invΔx = 1 / Δ.x[i]
-    invΔy = 1 / Δ.y[j]
-    invΔt = 1 / Δ.t[1]
+function Continuity_var(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δx, Δy, Δt)
+    invΔx = 1 / Δx[1]
+    invΔy = 1 / Δy[1]
+    invΔt = 1 / Δt
     β     = materials.β[phase]
     η     = materials.β[phase]
     comp  = materials.compressible
     f     = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy) + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
-    f    *= max(invΔx, invΔy)
+    # f    *= max(invΔx, invΔy)
     return f
 end
 
@@ -717,9 +722,9 @@ end
 
 
 
-function Continuity_var_ghosts(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δ, i, j)
-    invΔx = 1 / Δ.x[i]
-    invΔy = 1 / Δ.y[j]
+function Continuity_var_ghosts(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δx, Δy, Δt)
+    invΔx = 1 / Δx[1]
+    invΔy = 1 / Δy[1]
     invΔt = 1 / Δ.t[1]
     β     = materials.β[phase]
     η     = materials.β[phase]

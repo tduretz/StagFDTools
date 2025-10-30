@@ -1,6 +1,6 @@
 module StagFDTools
 
-using StaticArrays, ExtendableSparse, StaticArrays, Printf, LinearAlgebra
+using StaticArrays, ExtendableSparse, StaticArrays, Printf, LinearAlgebra, Enzyme
 
 include("operators.jl")
 export inn, inn_x, inn_y, av, avx, avy, harm, ∂x, ∂y, ∂x_inn, ∂y_inn, ∂kk
@@ -10,6 +10,7 @@ export GenerateGrid, printxy, av2D
 
 include("Solvers.jl")
 export DecoupledSolver
+
 module Rheology
     using StaticArrays, Enzyme, StagFDTools, LinearAlgebra
     include("Rheology.jl")
@@ -69,13 +70,14 @@ module StokesFSG
 end
 
 module ThermoMechanics
-    using StagFDTools, StaticArrays, ExtendableSparse, StaticArrays, LinearAlgebra, Enzyme
+    using StagFDTools, StaticArrays, ExtendableSparse, StaticArrays, LinearAlgebra, Enzyme, MineralEoS
     include("ThermoMechanics/ThermoMechanics.jl")
     export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx1, SetBCVy1
     export AssembleHeatDiffusion2D!, ResidualHeatDiffusion2D!, HeatDiffusion
     export AssembleContinuity2D!, ResidualContinuity2D!, Continuity
     export AssembleMomentum2D_y!, ResidualMomentum2D_y!, Momentum_y
     export AssembleMomentum2D_x!, ResidualMomentum2D_x!, Momentum_x
+    export LineSearch!
     include("ThermoMechanics/ThermoMechanics_Rheology.jl")
     export LocalRheology, StressVector!, TangentOperator!
 end
