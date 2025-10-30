@@ -35,8 +35,8 @@ function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, �
             Vx     = SetBCVx1_var(Vx, typex, bcx, Δx_Vx, Δy_Vx)
             Vy     = SetBCVy1_var(Vy, typey, bcy, Δx_Vy, Δy_Vy)
 
-            Dxx = ∂x_inn(Vx) / ((Δx_Vx[1]+Δx_Vx[2])/2)
-            Dyy = ∂y_inn(Vy) / ((Δy_Vy[1]+Δy_Vy[2])/2)
+            Dxx = ∂x_inn(Vx) / ((Δx_Vx[1]+Δx_Vx[2])/2) #Δx_Vx[1] #((Δx_Vx[1]+Δx_Vx[2])/2)
+            Dyy = ∂y_inn(Vy) / ((Δy_Vy[1]+Δy_Vy[2])/2) #Δy_Vy[1] #((Δy_Vy[1]+Δy_Vy[2])/2)
             Dxy = ∂y(Vx) / ((Δy_Vx[1]+Δy_Vx[2])/2)
             Dyx = ∂x(Vy) / ((Δx_Vy[1]+Δx_Vy[2])/2)
 
@@ -95,8 +95,8 @@ function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, �
         Vx     = SetBCVx1_var(Vx, typex, bcx, Δx_Vx, Δy_Vx)
         Vy     = SetBCVy1_var(Vy, typey, bcy, Δx_Vy, Δy_Vy)
     
-        Dxx    = ∂x(Vx) /  ((Δx_Vx[2]+Δx_Vx[3])/2)
-        Dyy    = ∂y(Vy) /  ((Δy_Vx[2]+Δy_Vy[3])/2)
+        Dxx    = ∂x(Vx) /  ((Δx_Vx[2]+Δx_Vx[3])/2) #Δx_Vx[2] #Δx_Vx[2] #((Δx_Vx[2]+Δx_Vx[3])/2)
+        Dyy    = ∂y(Vy) /  ((Δy_Vy[2]+Δy_Vy[3])/2) #Δy_Vy[2] #((Δy_Vy[2]+Δy_Vy[3])/2)
         Dxy    = ∂y_inn(Vx) / ((Δy_Vx[1]+Δy_Vx[2])/2)
         Dyx    = ∂x_inn(Vy) / ((Δx_Vy[1]+Δx_Vy[2])/2)
 
@@ -162,8 +162,6 @@ function SetBCVx1_var(Vx, typex, bcx, Δx, Δy)
             MVx[ii,end] = fma(coeff, bcx[ii,end], Vx[ii,end-1])
         end
     end
-
-
     
     # E/W
     # Vx follows centers axes for East and West orientations
@@ -219,20 +217,20 @@ function ResidualContinuity2D_var!(R, V, P, P0, ΔP, τ0, 𝐷, phases, material
     # loop on centroids
     for j in 2:size(R.p,2)-1, i in 2:size(R.p,1)-1
         if type.Pt[i,j] !== :constant 
-            #Vx_loc     = SMatrix{2,3}(      V.x[ii,jj] for ii in i:i+1, jj in j:j+2)
-            #Vy_loc     = SMatrix{3,2}(      V.y[ii,jj] for ii in i:i+2, jj in j:j+1)
-            Vx_loc     = SMatrix{3,2}(      V.x[ii,jj] for ii in i:i+2, jj in j:j+1)
+            Vx_loc     = SMatrix{2,3}(      V.x[ii,jj] for ii in i:i+1, jj in j:j+2)
+            Vy_loc     = SMatrix{3,2}(      V.y[ii,jj] for ii in i:i+2, jj in j:j+1)
+            #=Vx_loc     = SMatrix{3,2}(      V.x[ii,jj] for ii in i:i+2, jj in j:j+1)
             Vy_loc     = SMatrix{2,3}(      V.y[ii,jj] for ii in i:i+1, jj in j:j+2)
 
             Δx_Vx_loc     = SVector{3}(Δ.x[ii] for ii in i:i+2)
             Δy_Vx_loc     = SVector{2}(Δ.y[jj] for jj in j:j+1)
             Δx_Vy_loc     = SVector{2}(Δ.x[ii] for ii in i:i+1)
-            Δy_Vy_loc     = SVector{3}(Δ.y[jj] for jj in j:j+2)
+            Δy_Vy_loc     = SVector{3}(Δ.y[jj] for jj in j:j+2)=#
 
-            #=Δx_Vx_loc     = SVector{2}(Δ.x[ii] for ii in i:i+1)
+            Δx_Vx_loc     = SVector{2}(Δ.x[ii] for ii in i:i+1)
             Δy_Vx_loc     = SVector{3}(Δ.y[jj] for jj in j:j+2)
             Δy_Vy_loc     = SVector{2}(Δ.y[jj] for jj in j:j+1)
-            Δx_Vy_loc     = SVector{3}(Δ.x[ii] for ii in i:i+2)=#
+            Δx_Vy_loc     = SVector{3}(Δ.x[ii] for ii in i:i+2)
 
             Δt_loc = Δ.t[1]
 
@@ -248,34 +246,14 @@ end
 
 function Continuity_var(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δx_Vx, Δy_Vx, Δy_Vy, Δx_Vy, Δt)
     invΔx = 1 / Δx_Vx[1]
-    invΔy = 1 / Δx_Vy[1]
-    invArea = invΔx * invΔy
+    invΔy = 1 / Δy_Vy[1]
+    #invArea = invΔx * invΔy
     invΔt = 1 / Δt
     β     = materials.β[phase]
     η     = materials.β[phase]
     comp  = materials.compressible
 
-    f     = ((Vx[2,2] - Vx[1,2]) * invΔy + (Vy[2,2] - Vy[2,1]) * invΔx) + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
-    f    *= invArea
-    
-    #=invΔx_Vx = 1 / Δx_Vx[1] #2 / (Δx_Vx[1]+Δx_Vx[2])
-    invΔy_Vy = 1 / Δy_Vy[1] #2 / (Δy_Vy[1]+Δy_Vy[2])
-    #invΔy_Vx = 2 / (Δy_Vx[1]+Δy_Vx[2])
-    #invΔx_Vy = 2 / (Δx_Vy[1]+Δx_Vy[2])
-    invAreaVx = 2 / ( (Δy_Vx[1]+Δy_Vx[2]) * Δx_Vx[1] ) #1 / ( Δx_Vx[2] * Δy_Vy[2] ) # 2 / ( (Δy_Vx[1]+Δy_Vx[2]) * Δx_Vx[1] )
-    invAreaVy = 2 / ( (Δx_Vy[1]+Δx_Vy[2]) * Δy_Vy[1] ) #1 / ( Δx_Vx[2] * Δy_Vy[2] ) #2 / ( (Δx_Vy[1]+Δx_Vy[2]) * Δy_Vy[1] )
-    invArea = 1 / (Δx_Vx[2] * Δy_Vy[2])
-    invΔt = 1 / Δt
-    β     = materials.β[phase]
-    η     = materials.β[phase]
-    comp  = materials.compressible
-
-    f     = (Vx[2,2] - Vx[1,2]) * invΔx_Vx + (Vy[2,2] - Vy[2,1]) * invΔy_Vy + comp * β * (Pt[1] - Pt0) * invΔt
-    #f     = (Vx[2,2] - Vx[1,2]) * Δx_Vx[1] * ((Δy_Vx[1]+Δy_Vx[2]) / 2) + (Vy[2,2] - Vy[2,1]) * Δy_Vy[1] * ((Δx_Vy[1]+Δx_Vy[2]) / 2) + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
-    #f     = (Vx[2,2] - Vx[1,2]) * Δx_Vx[1] * invAreaVx + (Vy[2,2] - Vy[2,1]) * Δy_Vy[1] * invAreaVy + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
-    #f     = (((Vx[2,2] - Vx[1,2]) * invΔx_Vx) + ((Vy[2,2] - Vy[2,1]) * invΔy_Vy)) + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
-    #f     = ( (Vx[2,2] - Vx[1,2]) * invΔx_Vx * ( 1 / ( ( (Δy_Vx[1]+Δy_Vx[2]) / 2 ) * Δx_Vx[1] ) ) + (Vy[2,2] - Vy[2,1]) * invΔy_Vy * ( 1 / ( ( (Δx_Vy[1]+Δx_Vy[2]) / 2 ) * Δy_Vy[1]) ) ) + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
-    f    *= 1 / Δx_Vx[1] # * Δy_Vy[1])#max(invΔx_Vx, invΔy_Vy)=#
+    f     = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy) + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
     return f
 end
 
