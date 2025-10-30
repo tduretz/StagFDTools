@@ -219,34 +219,25 @@ function ResidualContinuity2D_var!(R, V, P, P0, ΔP, τ0, 𝐷, phases, material
         if type.Pt[i,j] !== :constant 
             Vx_loc     = SMatrix{2,3}(      V.x[ii,jj] for ii in i:i+1, jj in j:j+2)
             Vy_loc     = SMatrix{3,2}(      V.y[ii,jj] for ii in i:i+2, jj in j:j+1)
-            #=Vx_loc     = SMatrix{3,2}(      V.x[ii,jj] for ii in i:i+2, jj in j:j+1)
-            Vy_loc     = SMatrix{2,3}(      V.y[ii,jj] for ii in i:i+1, jj in j:j+2)
 
-            Δx_Vx_loc     = SVector{3}(Δ.x[ii] for ii in i:i+2)
-            Δy_Vx_loc     = SVector{2}(Δ.y[jj] for jj in j:j+1)
-            Δx_Vy_loc     = SVector{2}(Δ.x[ii] for ii in i:i+1)
-            Δy_Vy_loc     = SVector{3}(Δ.y[jj] for jj in j:j+2)=#
-
-            Δx_Vx_loc     = SVector{2}(Δ.x[ii] for ii in i:i+1)
-            Δy_Vx_loc     = SVector{3}(Δ.y[jj] for jj in j:j+2)
-            Δy_Vy_loc     = SVector{2}(Δ.y[jj] for jj in j:j+1)
-            Δx_Vy_loc     = SVector{3}(Δ.x[ii] for ii in i:i+2)
+            Δx_loc     = SVector{1}(Δ.x[ii] for ii in i:i)
+            Δy_loc     = SVector{1}(Δ.y[jj] for jj in j:j)
 
             Δt_loc = Δ.t[1]
 
             bcv_loc    = (;)
             type_loc   = (;)
             D          = (;)
-            R.p[i,j]   = Continuity_var(Vx_loc, Vy_loc, P[i,j], P0[i,j], D, phases.c[i,j], materials, type_loc, bcv_loc, Δx_Vx_loc, Δy_Vx_loc, Δy_Vy_loc, Δx_Vy_loc, Δt_loc)
+            R.p[i,j]   = Continuity_var(Vx_loc, Vy_loc, P[i,j], P0[i,j], D, phases.c[i,j], materials, type_loc, bcv_loc, Δx_loc, Δy_loc, Δt_loc)
         end
     end
     return nothing
 end
 
 
-function Continuity_var(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δx_Vx, Δy_Vx, Δy_Vy, Δx_Vy, Δt)
-    invΔx = 1 / Δx_Vx[1]
-    invΔy = 1 / Δy_Vy[1]
+function Continuity_var(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δx, Δy, Δt)
+    invΔx = 1 / Δx[1]
+    invΔy = 1 / Δy[1]
     #invArea = invΔx * invΔy
     invΔt = 1 / Δt
     β     = materials.β[phase]
@@ -486,14 +477,12 @@ function AssembleContinuity2D_var!(K, V, P, Pt0, ΔP, τ0, 𝐷, phases, materia
         fill!(∂R∂Vy, 0e0)
         fill!(∂R∂P , 0e0)
         
-        Δx_Vx_loc     = SVector{2}(Δ.x[ii] for ii in i:i+1)
-        Δy_Vx_loc     = SVector{3}(Δ.y[jj] for jj in j:j+2)
-        Δy_Vy_loc     = SVector{2}(Δ.y[jj] for jj in j:j+1)
-        Δx_Vy_loc     = SVector{3}(Δ.x[ii] for ii in i:i+2)
+        Δx_loc     = SVector{1}(Δ.x[ii] for ii in i:i)
+        Δy_loc     = SVector{1}(Δ.y[jj] for jj in j:j)
 
         Δt_loc        = Δ.t[1]
 
-        autodiff(Enzyme.Reverse, Continuity_var, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂P), Const(Pt0[i,j]), Const(D), Const(phases.c[i,j]), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δx_Vx_loc), Const(Δy_Vx_loc), Const(Δy_Vy_loc), Const(Δx_Vy_loc), Const(Δt_loc))
+        autodiff(Enzyme.Reverse, Continuity_var, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂P), Const(Pt0[i,j]), Const(D), Const(phases.c[i,j]), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δx_loc), Const(Δy_loc), Const(Δt_loc))
 
         # Pt --- Vx
         Local = SMatrix{2,3}(num.Vx[ii,jj] for ii in i:i+1, jj in j:j+2)# .* pattern[3][1]        
