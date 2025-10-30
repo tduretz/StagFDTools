@@ -349,7 +349,7 @@ function SMomentum_x_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
     fx  = ( τxx[2]  - τxx[1] ) * (1/Δx_Vx[2])
     fx += ( τxy[2]  - τxy[1] ) * (2/(Δy_Vx[3]+Δy_Vx[2]))
     fx -= ( Ptc[2]  - Ptc[1] ) * (1/Δx_Vx[2])
-    fx *= -1 * Δx_Vx[2] * ((Δy_Vx[3]+Δy_Vx[2])/2)
+    # fx *= -1 * Δx_Vx[2] * ((Δy_Vx[3]+Δy_Vx[2])/2)
 
     return fx
 end
@@ -448,7 +448,7 @@ function SMomentum_y_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
     fy  = ( τyy[2]  -  τyy[1] ) * (1/Δy_Vy[2])
     fy += ( τxy[2]  -  τxy[1] ) * (2/(Δx_Vy[3]+Δx_Vy[2]))
     fy -= ( Ptc[2]  -  Ptc[1])  * (1/Δy_Vy[2])
-    fy *= -1 * ((Δx_Vy[3]+Δx_Vy[2])/2) * Δy_Vy[2]
+    # fy *= -1 * ((Δx_Vy[3]+Δx_Vy[2])/2) * Δy_Vy[2]
     
     return fy
 end
