@@ -96,7 +96,7 @@ function StrainRateTrial(τII, G, Δt, B, n)
     return ε̇II_trial
 end
 
-function LocalRheology_var(ε̇, materials, phases, Δ)
+function LocalRheology_var(ε̇, materials, phases, Δt)
 
     # Effective strain rate & pressure
     ε̇II  = sqrt.( (ε̇[1]^2 + ε̇[2]^2 + (-ε̇[1]-ε̇[2])^2)/2 + ε̇[3]^2 )
@@ -127,7 +127,7 @@ function LocalRheology_var(ε̇, materials, phases, Δ)
 
     # Initial guess
     η    = (η0 .* ε̇II.^(1 ./ n .- 1.0 ))[1]
-    ηvep = inv(1/η + 1/(G*Δ.t[1])) # ici j'ai ajouté l'indice
+    ηvep = inv(1/η + 1/(G*Δt))
     #display("avant avant")
     #display(isnan(ε̇II))
     τII  = 2*ηvep*ε̇II
@@ -136,10 +136,10 @@ function LocalRheology_var(ε̇, materials, phases, Δ)
     #display(isnan(τII))
     # Visco-elastic powerlaw
     for it=1:20
-        r      = ε̇II - StrainRateTrial(τII, G, Δ.t[1], B, n) # ici j'ai ajouté l'indice
+        r      = ε̇II - StrainRateTrial(τII, G, Δt, B, n) # ici j'ai ajouté l'indice
         # @show abs(r)
         (abs(r)<ϵ) && break
-        ∂ε̇II∂τII = Enzyme.jacobian(Enzyme.Forward, StrainRateTrial, τII, G, Δ.t[1], B, n) # ici j'ai ajouté l'indice
+        ∂ε̇II∂τII = Enzyme.jacobian(Enzyme.Forward, StrainRateTrial, τII, G, Δt, B, n) # ici j'ai ajouté l'indice
         ∂τII∂ε̇II = inv(∂ε̇II∂τII[1])
         τII     += ∂τII∂ε̇II*r
     end
@@ -149,11 +149,11 @@ function LocalRheology_var(ε̇, materials, phases, Δ)
     # # Viscoplastic return mapping
     λ̇ = 0.
     if materials.plasticity === :DruckerPrager
-        τII, P, λ̇ = DruckerPrager_var(τII, P, ηvep, comp, β, Δ.t[1], C, cosϕ, sinϕ, sinψ, ηvp) # idem
+        τII, P, λ̇ = DruckerPrager_var(τII, P, ηvep, comp, β, Δt, C, cosϕ, sinϕ, sinψ, ηvp) # idem
     elseif materials.plasticity === :tensile
-        τII, P, λ̇ = Tensile_var(τII, P, ηvep, comp, β, Δ.t[1], materials.σT[phases], ηvp) # idem
+        τII, P, λ̇ = Tensile_var(τII, P, ηvep, comp, β, Δt, materials.σT[phases], ηvp) # idem
     elseif materials.plasticity === :Kiss2023
-        τII, P, λ̇ = Kiss2023_var(τII, P, ηvep, comp, β, Δ.t[1], C, ϕ, ψ, ηvp, materials.σT[phases], materials.δσT[phases], materials.P1[phases], materials.τ1[phases], materials.P2[phases], materials.τ2[phases]) # idem
+        τII, P, λ̇ = Kiss2023_var(τII, P, ηvep, comp, β, Δt, C, ϕ, ψ, ηvp, materials.σT[phases], materials.δσT[phases], materials.P1[phases], materials.τ1[phases], materials.P2[phases], materials.τ2[phases]) # idem
     end
 
     # Effective viscosity
@@ -162,8 +162,8 @@ function LocalRheology_var(ε̇, materials, phases, Δ)
     return ηvep, λ̇, P
 end
 
-function StressVector_var!(ε̇, materials, phases, Δ) 
-    η, λ̇, P = LocalRheology_var(ε̇, materials, phases, Δ)
+function StressVector_var!(ε̇, materials, phases, Δt) 
+    η, λ̇, P = LocalRheology_var(ε̇, materials, phases, Δt)
     τ       = @SVector([2 * η * ε̇[1],
                         2 * η * ε̇[2],
                         2 * η * ε̇[3],
