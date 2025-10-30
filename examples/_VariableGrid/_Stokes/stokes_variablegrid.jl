@@ -96,7 +96,7 @@ function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, �
         Vy     = SetBCVy1_var(Vy, typey, bcy, Δx_Vy, Δy_Vy)
     
         Dxx    = ∂x(Vx) /  ((Δx_Vx[2]+Δx_Vx[3])/2)
-        Dyy    = ∂y(Vy) /  ((Δy_Vx[2]+Δy_Vy[3])/2)
+        Dyy    = ∂y(Vy) /  ((Δy_Vy[2]+Δy_Vy[3])/2)
         Dxy    = ∂y_inn(Vx) / ((Δy_Vx[1]+Δy_Vx[2])/2)
         Dyx    = ∂x_inn(Vy) / ((Δx_Vy[1]+Δx_Vy[2])/2)
 
