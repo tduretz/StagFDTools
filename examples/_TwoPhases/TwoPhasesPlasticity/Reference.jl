@@ -6,7 +6,7 @@ using Enzyme  # AD backends you want to use
 
     sc = (σ=1e7, t=1e10, L=1e3)
 
-    homo   = true
+    homo   = false
 
     # Time steps
     nt     = 30
@@ -175,22 +175,6 @@ using Enzyme  # AD backends you want to use
         @views phases.c[inx_c, iny_c][(X.c.x.^2 .+ (X.c.y').^2) .<= rad^2] .= 2
         @views phases.v[inx_v, iny_v][(X.v.x.^2 .+ (X.v.y').^2) .<= rad^2] .= 2
     end
-
-    # Xc = xc .+ 0*yc'
-    # Yc = 0*xc .+ yc'
-    # Xv = xv .+ 0*yv'
-    # Yv = 0*xv .+ yv'
-    # α  = 30.
-    # # ax = 2
-    # # ay = 1/2
-    # ax = 1
-    # ay = 1
-    # X_tilt = cosd(α).*Xc .- sind(α).*Yc
-    # Y_tilt = sind(α).*Xc .+ cosd(α).*Yc
-    # phases.c[inx_c, iny_c][(X_tilt.^2 ./ax.^2 .+ (Y_tilt).^2 ./ay^2) .< r^2 ] .= 2
-    # X_tilt = cosd(α).*Xv .- sind(α).*Yv
-    # Y_tilt = sind(α).*Xv .+ cosd(α).*Yv
-    # phases.v[inx_v, iny_v][(X_tilt.^2 ./ax.^2 .+ (Y_tilt).^2 ./ay^2) .< r^2 ] .= 2
 
     # Boundary condition values
     BC = ( Vx = zeros(size_x...), Vy = zeros(size_y...), Pt = zeros(size_c...), Pf = zeros(size_c...))
@@ -527,7 +511,7 @@ end
 
 function Run()
 
-    nc = (x=10, y=10)
+    nc = (x=150, y=100)
 
     # Mode 0   
     main(nc);

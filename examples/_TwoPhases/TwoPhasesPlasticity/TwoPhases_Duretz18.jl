@@ -40,7 +40,7 @@ using Enzyme  # AD backends you want to use
         compressible = true,
         plasticity   = :off,
         linearizeϕ   = false,        
-        single_phase = false,
+        single_phase = true,
         n     = [1.0    1.0  ],
         ηs0   = [1e20   1e20 ]/sc.σ/sc.t .* 1e6,  # achtung turn of viscous shear
         ηΦ    = [2e22   2e22 ]/sc.σ/sc.t .* 1e6,  # achtung turn of viscous volumetric

@@ -183,15 +183,14 @@ function Continuity(Vx, Vy, Pt, Pt0, Pf, Pf0, Φ0, phase, materials, type_loc, b
 
     divVs   = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy 
     
-    
     fp      = dlnρsdt - dΦdt/(1-Φ) +   divVs
 
+    # Solid mass / immobile solid mass
+    # ρim  = (1-phi)*ρs
+    # qx   = ρim*Vxs     # Brucite paper, Fowler (1985)
+    # qy   = ρim*Vys     # Brucite paper, Fowler (1985)    
+    # fp   = ∂ρim∂t  +  (∂qx∂x + ∂qy∂y)
     
-
-    # fp     *= ηΦ*(Δ.x+Δ.y)
-
-    # fp = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy + dPtdt/(KΦ))
-
     return fp
 end
 
@@ -231,11 +230,13 @@ function FluidContinuity(Vx, Vy, Pt, Pt0, Pf_loc, ΔPf_loc, Pf0, Φ0, phase, mat
     else
         fp = (Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD)
     end
-    
-    # fp     *= ηΦ*(Δ.x+Δ.y)
 
-    # fp   = (qxE - qxW) * invΔx + (qyN - qyS) * invΔy - (Pt[1]-Pf[2,2])/((1-Φ)*ηΦ)
-    
+    # Total mass
+    # ρt   = f(phi)
+    # qρx  = ρf*qxD   ρt*Vxs     # Brucite paper, Fowler (1985)
+    # qρy  = ρf*qyD   ρt*Vys     # Brucite paper, Fowler (1985)    
+    # fp   = ∂ρt∂t  +  (∂qρx∂x + ∂qρy∂y)
+
     return fp
 end
 
