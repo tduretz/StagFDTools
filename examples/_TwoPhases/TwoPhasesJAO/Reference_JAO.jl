@@ -4,9 +4,8 @@ using Enzyme  # AD backends you want to use
 
 @views function main(nc)
 
-    sc = (σ=1e7, t=1e10, L=1e3)
-
-    homo   = false
+    sc  = (σ=1e6, t=1e10, L=1e3)
+    cmy = 100*3600*25*365.25
 
     # Time steps
     nt     = 1
@@ -17,26 +16,22 @@ using Enzyme  # AD backends you want to use
     ϵ_nl  = 1e-8
     α     = LinRange(0.05, 1.0, 5)
 
-    rad     = 2e3/sc.L 
-    Pt_ini  = 1e6/sc.σ
-    Pf_ini  = 1e6/sc.σ
-    ε̇       = 2e-15.*sc.t
-    τ_ini   = 0*(sind(35)*(Pt_ini-Pf_ini) + 0*1e7/sc.σ*cosd(35))  
+    # Background strain rate
+    ε̇       = 1e-30.*sc.t
 
     # Velocity gradient matrix
     D_BC = @SMatrix( [ε̇ 0; 0 -ε̇] )
 
-    τxx_ini = τ_ini*D_BC[1,1]/ε̇
-    τyy_ini = τ_ini*D_BC[2,2]/ε̇
-
     # Geometries
-    L   = (x=20e3/sc.L, y=6e3/sc.L)
-    x = (min=-L.x/2, max=L.x/2)
-    y = (min=-L.y,   max=0.0)
-    crust = Rectangle((0.0, -750/sc.L), 100e3/sc.L, 1.5e3/sc.L; θ = 0.0)
-    mush  = Rectangle((0.0, 0.0), 3e3/sc.L, 100.e3/sc.L; θ = 0.0)
+    L    = (x=20e3/sc.L, y=6e3/sc.L)
+    x    = (min=-L.x/2, max=L.x/2)
+    y    = (min=-L.y,   max=0.0)
+    UC   = Rectangle((0.0, -750/sc.L), 100e3/sc.L, 1.5e3/sc.L; θ = 0.0)
+    mush = Rectangle((0.0, 0.0), 3e3/sc.L, 100.e3/sc.L; θ = 0.0)
 
     # Material parameters
+    kill_elasticity = 1e10 # set to 1 to activate elasticity, set to large value to kill it
+
     materials = ( 
         g     = [0. -9.81] / (sc.L/sc.t^2),
         oneway       = false,
@@ -44,17 +39,17 @@ using Enzyme  # AD backends you want to use
         plasticity   = :off,
         linearizeϕ   = false,              # !!!!!!!!!!!
         single_phase = false,
-        Φ0    = [1e-3   1e-3  1e-2 ],
+        #        UC     LC    mush
+        Φ0    = [1e-3   1e-3  1e-3 ],
         n     = [1.0    1.0   1.0  ],
-        ηs0   = [1e22   1e22  1e22 ]/sc.σ/sc.t, 
-        ηΦ    = [2e22   2e22  2e22 ]/sc.σ/sc.t,
-        G     = [3e10   3e10  3e10 ]./sc.σ, 
-        ρs    = [2800   2800  2800 ]/(sc.σ*sc.t^2/sc.L^2),
-        ρf    = [1000   1000  1000 ]/(sc.σ*sc.t^2/sc.L^2),
-        Kd    = [1e30   1e30  1e30 ]./sc.σ,  # not needed
-        Ks    = [1e11   1e11  1e11 ]./sc.σ,
-        KΦ    = [1e10   1e10  1e10 ]./sc.σ,
-        Kf    = [1e9    1e9   1e9  ]./sc.σ, 
+        ηs0   = [1e22   1e22  1e22 ]./sc.σ/sc.t, 
+        ηΦ    = [2e22   2e22  2e22 ]./sc.σ/sc.t,
+        G     = [3e10   3e10  3e10 ] .* kill_elasticity ./sc.σ, 
+        ρs    = [2900   2900  2900 ]/(sc.σ*sc.t^2/sc.L^2),
+        ρf    = [2600   2600  2600 ]/(sc.σ*sc.t^2/sc.L^2),
+        Ks    = [1e11   1e11  1e11 ] .* kill_elasticity ./sc.σ,
+        KΦ    = [1e10   1e10  1e10 ] .* kill_elasticity ./sc.σ,
+        Kf    = [1e9    1e9   1e9  ] .* kill_elasticity ./sc.σ, 
         k_ηf0 = [1e-15  1e-15 1e-15]./(sc.L^2/sc.σ/sc.t),
         ϕ     = [35.    35.   35.  ].*1,
         ψ     = [10.    10.   10.  ].*1,
@@ -111,13 +106,6 @@ using Enzyme  # AD backends you want to use
     )
     Numbering!(number, type, nc)
 
-    # printxy(number.Vx)
-    # printxy(number.Vy)
-    # printxy(number.Vy)
-    # printxy(type.Vy)
-    # error()
-
-
     # Stencil extent for each block matrix
     pattern = Fields(
         Fields(@SMatrix([1 1 1; 1 1 1; 1 1 1]),                 @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([1 1 1;  1 1 1]),        @SMatrix([1 1 1;  1 1 1])), 
@@ -149,8 +137,8 @@ using Enzyme  # AD backends you want to use
     Φ0  = (c=zeros(size_c...), v=zeros(size_v...) )
     εp  = zeros(size_c...)
     ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
-    τ0      = (xx = τxx_ini.*ones(size_c...), yy = τyy_ini.*ones(size_c...), xy = zeros(size_v...) )
-    τ       = (xx = τxx_ini.*ones(size_c...), yy = τyy_ini.*ones(size_c...), xy = zeros(size_v...), II = zeros(size_c...), f = zeros(size_c...) )
+    τ0      = (xx = ones(size_c...), yy = ones(size_c...), xy = zeros(size_v...) )
+    τ       = (xx = ones(size_c...), yy = ones(size_c...), xy = zeros(size_v...), II = zeros(size_c...), f = zeros(size_c...) )
     Dc      =  [@MMatrix(zeros(5,5)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)]
     Dv      =  [@MMatrix(zeros(5,5)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)]
     𝐷       = (c = Dc, v = Dv)
@@ -159,10 +147,11 @@ using Enzyme  # AD backends you want to use
     𝐷_ctl   = (c = D_ctl_c, v = D_ctl_v)
     λ̇       = (c  = zeros(size_c...), v  = zeros(size_v...) )
     phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...), x =ones(Int64, size_x...), y=ones(Int64, size_y...) )  # phase on velocity points
-    P       = (t = Pt_ini.*ones(size_c...), f = Pf_ini.*ones(size_c...))
-    Pi      = (t = Pt_ini.*ones(size_c...), f = Pf_ini.*ones(size_c...))
+    P       = (t = ones(size_c...), f = ones(size_c...))
+    Pi      = (t = ones(size_c...), f = ones(size_c...))
     P0      = (t = zeros(size_c...), f = zeros(size_c...))
     ΔP      = (t = zeros(size_c...), f = zeros(size_c...))
+    ρ       = (t = zeros(size_c...), f = zeros(size_c...))
 
     # Generate grid coordinates 
     X = GenerateGrid(x, y, Δ, nc)
@@ -171,16 +160,19 @@ using Enzyme  # AD backends you want to use
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*X.v.x .+ D_BC[1,2]*X.c.y' 
     V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*X.c.x .+ D_BC[2,2]*X.v.y'
 
-    for i in inx_c, j in iny_c   # loop on centroids
+    for i in inx_c, j in iny_c   # loop on inner centroids
         𝐱 = @SVector([X.c.x[i-1], X.c.y[j-1]])
         phases.c[i, j] = 2
         if  inside(𝐱, mush)
             phases.c[i, j] = 3
         end
-        if  inside(𝐱, crust)
+        if  inside(𝐱, UC)
             phases.c[i, j] = 1
         end
-        Φ.c[i, j] = materials.Φ0[phases.c[i, j]]
+        Φ_ini     = materials.Φ0[phases.c[i, j]]
+        Φ.c[i, j] = Φ_ini
+        ρ.f[i, j] = materials.ρf[phases.c[i, j]]
+        ρ.t[i, j] = Φ_ini * materials.ρf[phases.c[i, j]] + (1-Φ_ini) * materials.ρs[phases.c[i, j]]
     end
 
     for i in inx_v, j in iny_v   # loop on centroids
@@ -189,10 +181,24 @@ using Enzyme  # AD backends you want to use
         if  inside(𝐱, mush)
             phases.v[i, j] = 3
         end
-        if  inside(𝐱, crust)
+        if  inside(𝐱, UC)
             phases.v[i, j] = 1
         end
         Φ.v[i, j] = materials.Φ0[phases.v[i, j]]
+    end
+
+    # Initial pressure fields
+    P_seafloor = 0*20e6/sc.σ 
+    P.f       .= P_seafloor .- ρ.f * materials.g[2] .* Δ.y/2
+    P.t       .= P_seafloor .- ρ.t * materials.g[2] .* Δ.y/2
+
+    for i in inx_c, j in (nc.y+2-1):-1:2
+        # Interpolate densities at Vy points (midpoint)
+        ρ̄f = 1/2 * (ρ.f[i,j+1] + ρ.f[i,j])   
+        ρ̄t = 1/2 * (ρ.t[i,j+1] + ρ.t[i,j])  
+        # ∫ (-ρ̄ g) dz (g < 0)
+        P.f[i,j] = P.f[i,j+1] - ρ̄f * materials.g[2] .* Δ.y
+        P.t[i,j] = P.t[i,j+1] - ρ̄t * materials.g[2] .* Δ.y
     end
 
     # Boundary condition values
@@ -222,22 +228,22 @@ using Enzyme  # AD backends you want to use
 
     err  = (x = zeros(niter), y = zeros(niter), pt = zeros(niter), pf = zeros(niter))
 
+    fig   = Figure(size = (400,600))
+    ftsz  = 18
+    eps   = 1e-13
+    ax    = Axis(fig[1,1], aspect=DataAspect(), title=L"$$total pressure", xlabel=L"x", ylabel=L"y")
+    field = Float64.(P.t[inx_c, iny_c]*sc.σ)/1e6
+    hm    = heatmap!(ax, X.c.x.*sc.L/1e3, X.c.y.*sc.L/1e3, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
+    hidexdecorations!(ax)
+    Colorbar(fig[1, 2], hm, label = L"$$total pressure", width=20, height = 200, labelsize = ftsz, ticklabelsize = ftsz )
 
-    # fig   = Figure(size = (400,600))
-    # ftsz  = 18
-    # eps   = 1e-13
-    # ax    = Axis(fig[1,1], aspect=DataAspect(), title=L"$$phase centroids", xlabel=L"x", ylabel=L"y")
-    # field = Float64.(phases.c[inx_c, iny_c])
-    # hm    = heatmap!(ax, X.c.x.*sc.L/1e3, X.c.y.*sc.L/1e3, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
-    # hidexdecorations!(ax)
-    # Colorbar(fig[1, 2], hm, label = L"$$phase centroids", width=20, height = 200, labelsize = ftsz, ticklabelsize = ftsz )
-
-    # ax    = Axis(fig[2,1], aspect=DataAspect(), title=L"$$phase vertices", xlabel=L"x", ylabel=L"y")
-    # field = Float64.(phases.v[inx_c, iny_c])
-    # hm    = heatmap!(ax, X.v.x.*sc.L/1e3, X.v.y.*sc.L/1e3, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
-    # hidexdecorations!(ax)
-    # Colorbar(fig[2, 2], hm, label = L"$$phase vertices", width=20, height = 200, labelsize = ftsz, ticklabelsize = ftsz )
-    # display(fig)
+    ax    = Axis(fig[2,1], aspect=DataAspect(), title=L"$$fluid pressure", xlabel=L"x", ylabel=L"y")
+    field = Float64.(P.f[inx_c, iny_c]*sc.σ)/1e6
+    hm    = heatmap!(ax, X.c.x.*sc.L/1e3, X.c.y.*sc.L/1e3, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
+    hidexdecorations!(ax)
+    Colorbar(fig[2, 2], hm, label = L"$$fluid pressure", width=20, height = 200, labelsize = ftsz, ticklabelsize = ftsz )
+    display(fig)
+    DataInspector(fig)
     
     for it=1:nt
 
@@ -368,9 +374,6 @@ using Enzyme  # AD backends you want to use
         probes.t[it]    = it*Δ.t*sc.t
 
         #-------------------------------------------# 
-
-        @info τ_ini*sc.σ
-        @show τxx_ini*sc.σ, τyy_ini*sc.σ
       
         # Visualise
         function figure()
@@ -389,8 +392,8 @@ using Enzyme  # AD backends you want to use
             # Colorbar(fig[2, 1], hm, label = L"$\dot\lambda$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
             
 
-            ax   = Axis(fig[1,1], title=L"$$Surface velocity", xlabel=L"x", ylabel=L"y")
-            hm = scatterlines!(ax, X.c.x, V.y[inx_Vy,end-1] )
+            ax   = Axis(fig[1,1], title=L"$$Surface velocity (cm/y)", xlabel=L"x", ylabel=L"y")
+            hm = scatterlines!(ax, X.c.x, V.y[inx_Vy,end-1]*sc.L/sc.t*cmy )
             
             # arrows2d!(ax, X.c.x[1:step:end], X.c.y[1:step:end], Vxsc[1:step:end,1:step:end], Vysc[1:step:end,1:step:end], lengthscale=10000.4, color=:white)
 
@@ -408,7 +411,7 @@ using Enzyme  # AD backends you want to use
             # hidexdecorations!(ax)
             # Colorbar(fig[2, 2], hm, label = L"$P^t - P^f$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
             
-            ax    = Axis(fig[1,2], aspect=DataAspect(), title=L"$P^f$ [MPa]", xlabel=L"x", ylabel=L"y")
+            ax    = Axis(fig[1,2], aspect=DataAspect(), title=L"$P^f$ (MPa)", xlabel=L"x", ylabel=L"y")
             field = (P.f)[inx_c,iny_c].*sc.σ./1e6
             hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
             contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
@@ -416,7 +419,7 @@ using Enzyme  # AD backends you want to use
             Colorbar(fig[2, 2], hm, label = L"$P^f$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
             
 
-            ax    = Axis(fig[3,2], aspect=DataAspect(), title=L"$P^t$ [MPa]", xlabel=L"x", ylabel=L"y")
+            ax    = Axis(fig[3,2], aspect=DataAspect(), title=L"$P^t$ (MPa)", xlabel=L"x", ylabel=L"y")
             field = (P.t)[inx_c,iny_c].*sc.σ./1e6
             hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
             contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
