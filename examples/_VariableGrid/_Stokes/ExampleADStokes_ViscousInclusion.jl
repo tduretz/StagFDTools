@@ -17,7 +17,7 @@ include("rheology_var.jl")
     #--------------------------------------------#
 
     # Resolution
-    nc = (x = 5, y = 5)
+    nc = (x = 8, y = 8)
 
     # Boundary loading type
     config = BC_template
@@ -28,7 +28,7 @@ include("rheology_var.jl")
         compressible = false,
         plasticity   = :none,
         n    = [1.0    1.0  ],
-        # η0   = [1e0    1e2  ],
+        #η0   = [1e0    1e2  ],
                 η0   = [1e0    1e0  ], # I have removed the inclusion for the time being
 
         G    = [1e20   1e20 ],
@@ -235,7 +235,7 @@ include("rheology_var.jl")
     display(Ranges(nc))
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc'
     V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
-    Pt[inx_c, iny_c ]  .= 10.                 
+    Pt[inx_c, iny_c ]  .= 10.
     UpdateSolution!(V, Pt, dx, number, type, nc)
 
     # Boundary condition values
@@ -288,52 +288,44 @@ include("rheology_var.jl")
                 ResidualMomentum2D_y_var!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
             end
 
-            # p3 = heatmap(xv, yc, R.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="R.x", color=:vik)
-            # p4 = heatmap(xc, yv, R.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="R.y", color=:vik)
-            # p2 = heatmap(xc, yc, R.p[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="R.p", color=:vik)
-            # println("symetrie R.p")
-            # println(findmax(R.p[inx_c,iny_c]'.-R.p[inx_c,iny_c]))
-            # display(plot(p2,p3,p4,layout=(2,2)))
-            # # sleep(6)
+            #=err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
+            err.y[iter] = norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
+            err.p[iter] = norm(R.p[inx_c,iny_c])/sqrt(nPt)
+            max(err.x[iter], err.y[iter]) < ϵ_nl ? break : nothing
 
-            # err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
-            # err.y[iter] = norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-            # err.p[iter] = norm(R.p[inx_c,iny_c])/sqrt(nPt)
-            # max(err.x[iter], err.y[iter]) < ϵ_nl ? break : nothing
+            #--------------------------------------------#
+            # Set global residual vector
+            SetRHS!(r, R, number, type, nc)
 
-            # #--------------------------------------------#
-            # # Set global residual vector
-            # SetRHS!(r, R, number, type, nc)
+            #--------------------------------------------#
+            # Assembly
+            @timeit to "Assembly" begin
+                    AssembleContinuity2D_var!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+                    AssembleMomentum2D_x_var!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+                    AssembleMomentum2D_y_var!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+            end
 
-            # #--------------------------------------------#
-            # # Assembly
-            # @timeit to "Assembly" begin
-            #         AssembleContinuity2D_var!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-            #         AssembleMomentum2D_x_var!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-            #         AssembleMomentum2D_y_var!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-            # end
-
-            # #--------------------------------------------# 
-            # # Stokes operator as block matrices
-            # 𝐊  .= [M.Vx.Vx M.Vx.Vy; M.Vy.Vx M.Vy.Vy]
-            # 𝐐  .= [M.Vx.Pt; M.Vy.Pt]
-            # 𝐐ᵀ .= [M.Pt.Vx M.Pt.Vy]
-            # 𝐏  .= [M.Pt.Pt;]             
+            #--------------------------------------------# 
+            # Stokes operator as block matrices
+            𝐊  .= [M.Vx.Vx M.Vx.Vy; M.Vy.Vx M.Vy.Vy]
+            𝐐  .= [M.Vx.Pt; M.Vy.Pt]
+            𝐐ᵀ .= [M.Pt.Vx M.Pt.Vy]
+            𝐏  .= [M.Pt.Pt;]             
             
-            # #--------------------------------------------#
+            #--------------------------------------------#
      
-            # # Direct-iterative solver
-            # fu   = -r[1:size(𝐊,1)]
-            # fp   = -r[size(𝐊,1)+1:end]
-            # u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu,  ηb=1e3, niter_l=10, ϵ_l=1e-11)
-            # dx[1:size(𝐊,1)]     .= u
-            # dx[size(𝐊,1)+1:end] .= p
+            # Direct-iterative solver
+            fu   = -r[1:size(𝐊,1)]
+            fp   = -r[size(𝐊,1)+1:end]
+            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu,  ηb=1e3, niter_l=10, ϵ_l=1e-11)
+            dx[1:size(𝐊,1)]     .= u
+            dx[size(𝐊,1)+1:end] .= p
 
-            # #--------------------------------------------#
-            # # Line search & solution update
-            # @timeit to "Line search" imin = LineSearch_var!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
-            # UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
-            # TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
+            #--------------------------------------------#
+            # Line search & solution update
+            @timeit to "Line search" imin = LineSearch_var!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+            UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
+            TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)=#
         end
 
         # Update pressure
@@ -345,42 +337,43 @@ include("rheology_var.jl")
         p4 = heatmap(xc, yv, R.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Ry", color=:vik)
         p2 = heatmap(xc, yc,  R.p[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Rp'", color=:vik)
         p1 = heatmap(xc, yc,  R.p[inx_c,iny_c], aspect_ratio=1, xlim=extrema(xc), title="Rp'", color=:vik)
-        #p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt'", color=:vik)
-        #p1 = heatmap(xc, yc,  Pt[inx_c,iny_c], aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik)
+        #=p3 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Vx", color=:vik)
+        p4 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy", color=:vik)
+        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt'", color=:vik)
+        p1 = heatmap(xc, yc,  Pt[inx_c,iny_c], aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik)=#
 
         # Evaluate analytical solution
-        p_ana = zeros(nc.x, nc.y)
+        println(size(V.x))
+        println(size(V.y))
+        println(size(Pt))
+        p_ana = zeros(nc.x+2, nc.y+2)
         for i=1:nc.x, j=1:nc.y
             sol       = Stokes2D_Schmid2003( [xc[i]; yc[j]] )
-            p_ana[i,j]    = sol.p
+            p_ana[i+1,j+1]    = sol.p
         end
         println("Max diff of Pt")
-        println(findmax(p_ana .- Pt[inx_c,iny_c]))
-        Vy_ana = zeros(nc.x, nc.y+1)
+        println(findmax(p_ana[inx_c,iny_c] .- Pt[inx_c,iny_c]))
+        Vy_ana = zeros(nc.x+4, nc.y+3)
+        shift = (x = 1, y = 2)
         for i=1:nc.x, j=1:nc.y+1
-            sol       = Stokes2D_Schmid2003( [xv[i]; yv[j]] )
-            Vy_ana[i,j]   = sol.V[2]
+            sol       = Stokes2D_Schmid2003( [xv_delta[i]; yv_delta[j]] )
+            Vy_ana[i+shift.x,j+shift.y]   = sol.V[2]
         end
         println("Max diff of V.y")
-        println(findmax(Vy_ana .- V.y[inx_Vy,iny_Vy]))
-        Vx_ana = zeros(nc.x+1, nc.y)
+        println(findmax(Vy_ana[inx_Vy,iny_Vy] .- V.y[inx_Vy,iny_Vy]))
+        Vx_ana = zeros(nc.x+3, nc.y+4)
+        shift = (x = 2, y = 1)
+        #for i=1+shift.x:nc.x+1+shift.x, j=1+shift.y:nc.y+shift.y
         for i=1:nc.x+1, j=1:nc.y
-            sol       = Stokes2D_Schmid2003( [xv[i]; yv[j]] )
-            Vx_ana[i,j]   = sol.V[1]
+            sol       = Stokes2D_Schmid2003( [xv_delta[i]; yv_delta[j]] )
+            Vx_ana[i+shift.x,j+shift.y]   = sol.V[1]
         end
         println("Max diff of V.x")
-        println(findmax(Vx_ana .- V.x[inx_Vx,iny_Vx]))
+        println(findmax(Vx_ana[inx_Vx,iny_Vx] .- V.x[inx_Vx,iny_Vx]))
 
         # test symétrie
         println("Diff sym Pt")
-        println(Pt[inx_c,iny_c]')
-        println(Pt[inx_c,iny_c])
-        diffPt = zeros(nc.x,nc.y)
-        diffPt = Pt[inx_c,iny_c]'.-Pt[inx_c,iny_c]
-        println(diffPt)
-        println(findmax(diffPt'-diffPt))
         println(findmax(Pt[inx_c,iny_c]'.-Pt[inx_c,iny_c]))
-
 
         #=p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright, title=BC_template)
         p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
@@ -390,7 +383,7 @@ include("rheology_var.jl")
         #p2 = heatmap(xv, yc, η.v[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="eta v", color=:vik)
         
         display(plot(p1, p2, p3, p4, layout=(2,2)))
-        # sleep(40)
+        sleep(30)
 
         @show Δ.x[2:end-1]
         @show nc.x
@@ -433,7 +426,8 @@ let
     # Boundary deformation gradient matrix
     D_BCs = [
         #  @SMatrix( [0 1; 0  0] ),
-        @SMatrix( [-1 0; 0 1] ),
+         @SMatrix( [-1 0; 0 1] ),
+        # @SMatrix( [1 0; 0 -1] ),
     ]
 
     # Run them all
