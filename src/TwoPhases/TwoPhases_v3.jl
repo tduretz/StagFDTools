@@ -225,7 +225,7 @@ function Continuity(Vx, Vy, Pt, Pt0, Pf, Pf0, Φ0, phase, materials, type_loc, b
     return fp
 end
 
-function FluidContinuity(Vx, Vy, Pt, Pt0, Pf_loc, ΔPf_loc, Pf0, Φ0, phase, materials, kμ, type_loc, bcv_loc, Δ)
+function FluidContinuity(Vx, Vy, Pt, Pf_loc, ΔPf_loc, Pt0, Pf0, Φ0, phase, materials, kμ, type_loc, bcv_loc, Δ)
     
     invΔx   = 1 / Δ.x
     invΔy   = 1 / Δ.y
@@ -234,38 +234,59 @@ function FluidContinuity(Vx, Vy, Pt, Pt0, Pf_loc, ΔPf_loc, Pf0, Φ0, phase, mat
     KΦ      = materials.KΦ[phase[2,2]] 
     Kf      = materials.Kf[phase[2,2]]
 
-    Pf = SetBCPf1(Pf_loc, type_loc, bcv_loc, Δ)
-
-    dPtdt   = (Pt[1,1] - Pt0) / Δt
-    dPfdt   = (Pf[2,2] - Pf0) / Δt
-    dΦdt    = (dPfdt - dPtdt)/KΦ + (Pf[2,2] - Pt[1,1])/ηΦ
-    if materials.linearizeϕ
-        Φ       = Φ0 
-    else
-        Φ       = Φ0 + dΦdt*Δt
-    end
-    dlnρfdt = dPfdt / Kf
-
-    # Pf1 = SetBCPf1(Pf_loc.+ΔPf_loc, type_loc, bcv_loc, Δ)
-
     # Density
-    ρ0   = SMatrix{3,3, Float64}( materials.ρs[phase])
-    ρgS  = materials.g[2] * 0.5*(ρ0[2,2] + ρ0[2,1])
-    ρgN  = materials.g[2] * 0.5*(ρ0[2,2] + ρ0[2,3])
+    ρ0f  = SMatrix{3,3, Float64}( materials.ρf[phase])
+    ρgS  = materials.g[2] * 0.5*(ρ0f[2,2] + ρ0f[2,1])
+    ρgN  = materials.g[2] * 0.5*(ρ0f[2,2] + ρ0f[2,3])
+
+    Pf    = SetBCPf1(Pf_loc, type_loc, bcv_loc, Δ, ρgS)
+
+    dPtdt   = SMatrix{3,3, Float64}( (Pt .- Pt0) / Δt )
+    dPfdt   = SMatrix{3,3, Float64}( (Pf .- Pf0) / Δt )
+    dΦdt    = SMatrix{3,3, Float64}( (dPfdt .- dPtdt)/KΦ .+ (Pf .- Pt)/ηΦ )
+    if materials.linearizeϕ
+        Φ       = SMatrix{3,3, Float64}( Φ0 ) 
+    else
+        Φ       = SMatrix{3,3, Float64}( Φ0  .+ dΦdt*Δt )
+    end
+    dlnρfdt = dPfdt[2,2] / Kf
+
+    # Interpolate porosity to velocity nodes
+    ΦxW = 1/2*(Φ[1,2] + Φ[2,2])
+    ΦxE = 1/2*(Φ[3,2] + Φ[2,2])
+    ΦyS = 1/2*(Φ[2,1] + Φ[2,2])
+    ΦyN = 1/2*(Φ[2,3] + Φ[2,2])
+
+    # Carman-Kozeny
+    n   = materials.n_CK[phase[2,2]]
+
+    # Pf1 = SetBCPf1(Pf_loc.+ΔPf_loc, type_loc, bcv_loc, Δ, ρgS)
 
     # Darcy flux
-    qxW = -kμ.xx[1]*(Pf[2,2] - Pf[1,2]) * invΔx
-    qxE = -kμ.xx[2]*(Pf[3,2] - Pf[2,2]) * invΔx
-    qyS = -kμ.yy[1]*((Pf[2,2] - Pf[2,1]) * invΔy - ρgS) 
-    qyN = -kμ.yy[2]*((Pf[2,3] - Pf[2,2]) * invΔy - ρgN) 
+    # printxy(Φ)
+    # @show (dPfdt .- dPtdt)/KΦ
+    # @show (Pf .- Pt)/ηΦ
+    # @show dΦdt
+    # @show Δt
+    qxW = -kμ.xx[1]* ΦxW^n * ((Pf[2,2] - Pf[1,2]) * invΔx      )
+    qxE = -kμ.xx[2]* ΦxE^n * ((Pf[3,2] - Pf[2,2]) * invΔx      )
+    qyS = -kμ.yy[1]* ΦyS^n * ((Pf[2,2] - Pf[2,1]) * invΔy - ρgS) 
+    qyN = -kμ.yy[2]* ΦyN^n * ((Pf[2,3] - Pf[2,2]) * invΔy - ρgN) 
 
     divqD = (    qxE -     qxW) * invΔx + (    qyN -     qyS) * invΔy
     divVs = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy 
 
+    # if type_loc[2,1] ==:Dirichlet
+    #     printxy(type_loc)
+    #     printxy(Pf)
+    #     printxy(1/2*(Pf[:,1:end-1] .+ Pf[:,2:end]))
+    
+    # end
+
     if materials.oneway
         fp   = divqD
     else
-        fp = (Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD)
+        fp = (Φ[2,2]*dlnρfdt + dΦdt[2,2]       + Φ[2,2]*divVs + divqD)
     end
 
     # Total mass
@@ -596,10 +617,12 @@ function ResidualFluidContinuity2D!(R, V, P, ΔP, P0, ϕ0, phases, materials, nu
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
         if type.Pf[i,j] !== :constant 
             phase      = SMatrix{3,3}( phases.c[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-            Pt_loc     = SMatrix{1,1}(      P.t[ii,jj] for ii in i:i, jj in j:j)
+            Pt_loc     = SMatrix{3,3}(      P.t[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             Pf_loc     = SMatrix{3,3}(      P.f[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             ΔPf_loc    = SMatrix{3,3}(     ΔP.f[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-            # Pf0        = SMatrix{1,1}(     P0.f[ii,jj] for ii in i:i, jj in j:j)
+            Pt0        = SMatrix{3,3}(     P0.t[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            Pf0        = SMatrix{3,3}(     P0.f[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            Φ0         = SMatrix{3,3}(     ϕ0.c[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             type_loc   = SMatrix{3,3}(  type.Pf[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             bcv_loc    = SMatrix{3,3}(    BC.Pf[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             Vx_loc     = SMatrix{2,3}(      V.x[ii,jj] for ii in i:i+1, jj in j:j+2)
@@ -610,7 +633,7 @@ function ResidualFluidContinuity2D!(R, V, P, ΔP, P0, ϕ0, phases, materials, nu
             k_loc_yy   = @SVector [materials.k_ηf0[phases.y[i+1,j]], materials.k_ηf0[phases.y[i+1,j+1]]]
             k_loc      = (xx = k_loc_xx,    xy = 0.,
                           yx = 0.,          yy = k_loc_yy)
-            R.pf[i,j]  = FluidContinuity(Vx_loc, Vy_loc, Pt_loc, P0.t[i,j], Pf_loc, ΔPf_loc, P0.f[i,j], ϕ0.c[i,j], phase, materials, k_loc, type_loc, bcv_loc, Δ)
+            R.pf[i,j]  = FluidContinuity(Vx_loc, Vy_loc, Pt_loc, Pf_loc, ΔPf_loc, Pt0, Pf0, Φ0, phase, materials, k_loc, type_loc, bcv_loc, Δ)
 
         end
     end
@@ -622,15 +645,17 @@ function AssembleFluidContinuity2D!(K, V, P, ΔP, P0, ϕ0, phases, materials, nu
     shift    = (x=1, y=1)
     ∂R∂Vx = @MMatrix zeros(2,3)
     ∂R∂Vy = @MMatrix zeros(3,2)
-    ∂R∂Pt = @MMatrix zeros(1,1)
+    ∂R∂Pt = @MMatrix zeros(3,3)
     ∂R∂Pf = @MMatrix zeros(3,3)
 
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
         phase      = SMatrix{3,3}( phases.c[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        Pt_loc     = MMatrix{1,1}(      P.t[ii,jj] for ii in i:i, jj in j:j)
+        Pt_loc     = MMatrix{3,3}(      P.t[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         Pf_loc     = MMatrix{3,3}(      P.f[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         ΔPf_loc    = MMatrix{3,3}(     ΔP.f[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        # Pf0        = MMatrix{1,1}(     P0.f[ii,jj] for ii in i:i, jj in j:j)
+        Pt0        = SMatrix{3,3}(     P0.t[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+        Pf0        = SMatrix{3,3}(     P0.f[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+        Φ0         = SMatrix{3,3}(     ϕ0.c[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)        
         type_loc   = SMatrix{3,3}(  type.Pf[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         bcv_loc    = SMatrix{3,3}(    BC.Pf[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         Vx_loc     = MMatrix{2,3}(      V.x[ii,jj] for ii in i:i+1, jj in j:j+2)
@@ -644,7 +669,7 @@ function AssembleFluidContinuity2D!(K, V, P, ΔP, P0, ϕ0, phases, materials, nu
         ∂R∂Vy .= 0.
         ∂R∂Pt .= 0.
         ∂R∂Pf .= 0.
-        autodiff(Enzyme.Reverse, FluidContinuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(Pt_loc, ∂R∂Pt), Const(P0.t[i,j]), Duplicated(Pf_loc, ∂R∂Pf), Const(ΔPf_loc), Const(P0.f[i,j]), Const(ϕ0.c[i,j]), Const(phase), Const(materials), Const(k_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
+        autodiff(Enzyme.Reverse, FluidContinuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(Pt_loc, ∂R∂Pt), Duplicated(Pf_loc, ∂R∂Pf), Const(ΔPf_loc), Const(Pt0), Const(Pf0), Const(Φ0), Const(phase), Const(materials), Const(k_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
              
         # Pf --- Vx
         Local = num.Vx[i:i+1,j:j+2] .* pattern[4][1]
@@ -661,7 +686,10 @@ function AssembleFluidContinuity2D!(K, V, P, ΔP, P0, ϕ0, phases, materials, nu
             end
         end
         # Pf --- Pt
-        Local = num.Pt[i,j] .* pattern[4][3]
+        Local = num.Pt[i-1:i+1,j-1:j+1] .* pattern[4][3]
+        # printxy(∂R∂Pt)
+        # printxy(Local)
+        # error()
         for jj in axes(Local,2), ii in axes(Local,1)
             if (Local[ii,jj]>0) && num.Pf[i,j]>0
                 K[4][3][num.Pf[i,j], Local[ii,jj]] = ∂R∂Pt[ii,jj]  
@@ -711,7 +739,7 @@ function ResidualPorosity2D!(R, V, P, P0, Φ, Φ0, phases, materials, number, ty
     return nothing
 end
 
-function SetBCPf1(Pf, type, bc, Δ)
+function SetBCPf1(Pf, type, bc, Δ, ρfg)
 
     MPf =  MMatrix(Pf)
 
@@ -720,8 +748,10 @@ function SetBCPf1(Pf, type, bc, Δ)
         # South
         if type[ii,1] === :Dirichlet
             MPf[ii,1] = fma(2, bc[ii,1], -Pf[ii,2])
-        elseif type[ii,1] === :Neumann
+        elseif type[ii,1] === :Neumann 
             MPf[ii,1] = fma(Δ.y, bc[ii,1], Pf[ii,2])
+        elseif type[ii,1] === :no_flux
+            MPf[ii,1] = Pf[ii,2] - ρfg*Δ.y
         elseif type[ii,1] === :periodic || type[ii,1] === :in || type[ii,1] === :constant
             MPf[ii,1] = Pf[ii,1]
         else
@@ -733,6 +763,8 @@ function SetBCPf1(Pf, type, bc, Δ)
             MPf[ii,end] = fma(2, bc[ii,end], -Pf[ii,end-1])
         elseif type[ii,end] === :Neumann
             MPf[ii,end] = fma(-Δ.y, bc[ii,end], Pf[ii,end-1])
+        elseif type[ii,end] === :no_flux
+            MPf[ii,end] = Pf[ii,end-1] + ρfg*Δ.y
         elseif type[ii,end] === :periodic || type[ii,end] === :in || type[ii,end] === :constant
             MPf[ii,end] = Pf[ii,end]
         else

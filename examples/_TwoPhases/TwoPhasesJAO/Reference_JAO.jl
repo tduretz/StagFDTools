@@ -8,8 +8,8 @@ using Enzyme  # AD backends you want to use
     cmy = 100*3600*25*365.25
 
     # Time steps
-    nt     = 1
-    Δt0    = 1e10/sc.t 
+    nt     = 200
+    Δt0    = 1*3e5/sc.t 
 
     # Newton solver
     niter = 25
@@ -18,6 +18,7 @@ using Enzyme  # AD backends you want to use
 
     # Background strain rate
     ε̇       = 1e-30.*sc.t
+    Pf_bot  = 160e6 /sc.σ
 
     # Velocity gradient matrix
     D_BC = @SMatrix( [ε̇ 0; 0 -ε̇] )
@@ -30,7 +31,7 @@ using Enzyme  # AD backends you want to use
     mush = Rectangle((0.0, 0.0), 3e3/sc.L, 100.e3/sc.L; θ = 0.0)
 
     # Material parameters
-    kill_elasticity = 1e10 # set to 1 to activate elasticity, set to large value to kill it
+    kill_elasticity = 1.0 # set to 1 to activate elasticity, set to large value to kill it
 
     materials = ( 
         g     = [0. -9.81] / (sc.L/sc.t^2),
@@ -40,17 +41,18 @@ using Enzyme  # AD backends you want to use
         linearizeϕ   = false,              # !!!!!!!!!!!
         single_phase = false,
         #        UC     LC    mush
-        Φ0    = [1e-3   1e-3  1e-3 ],
+        Φ0    = [1e-4   1e-4  1e-2 ],
         n     = [1.0    1.0   1.0  ],
-        ηs0   = [1e22   1e22  1e22 ]./sc.σ/sc.t, 
-        ηΦ    = [2e22   2e22  2e22 ]./sc.σ/sc.t,
+        n_CK  = [1.0    1.0   1.0  ] .* 2.6,
+        ηs0   = [1e25   1e19  1e16 ]./sc.σ/sc.t, 
+        ηΦ    = [2e25   2e19  2e19 ]./sc.σ/sc.t,
         G     = [3e10   3e10  3e10 ] .* kill_elasticity ./sc.σ, 
         ρs    = [2900   2900  2900 ]/(sc.σ*sc.t^2/sc.L^2),
         ρf    = [2600   2600  2600 ]/(sc.σ*sc.t^2/sc.L^2),
         Ks    = [1e11   1e11  1e11 ] .* kill_elasticity ./sc.σ,
         KΦ    = [1e10   1e10  1e10 ] .* kill_elasticity ./sc.σ,
         Kf    = [1e9    1e9   1e9  ] .* kill_elasticity ./sc.σ, 
-        k_ηf0 = [1e-15  1e-15 1e-15]./(sc.L^2/sc.σ/sc.t),
+        k_ηf0 = [0.1    0.1   1.0  ] .* 4.3103448275862073e-7 ./(sc.L^2/sc.σ/sc.t),
         ϕ     = [35.    35.   35.  ].*1,
         ψ     = [10.    10.   10.  ].*1,
         C     = 1e20*[1e7    1e7   1e7  ]./sc.σ,
@@ -94,8 +96,8 @@ using Enzyme  # AD backends you want to use
     type.Pf[2:end-1,2:end-1] .= :in
     type.Pf[1,:]             .= :Neumann 
     type.Pf[end,:]           .= :Neumann 
-    type.Pf[:,1]             .= :Neumann
-    type.Pf[:,end]           .= :Neumann
+    type.Pf[:,1]             .= :Dirichlet
+    type.Pf[:,end]           .= :no_flux
     
     # Equation Fields
     number = Fields(
@@ -110,8 +112,8 @@ using Enzyme  # AD backends you want to use
     pattern = Fields(
         Fields(@SMatrix([1 1 1; 1 1 1; 1 1 1]),                 @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([1 1 1;  1 1 1]),        @SMatrix([1 1 1;  1 1 1])), 
         Fields(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]),  @SMatrix([1 1 1; 1 1 1; 1 1 1]),                @SMatrix([1 1; 1 1; 1 1]),        @SMatrix([1 1; 1 1; 1 1])),
-        Fields(@SMatrix([0 1 0;  0 1 0]),                       @SMatrix([0 0; 1 1; 0 0]),                       @SMatrix([1]),                   @SMatrix([1])),
-        Fields(@SMatrix([0 1 0;  0 1 0]),                       @SMatrix([0 0; 1 1; 0 0]),                       @SMatrix([1]),                   @SMatrix([1 1 1; 1 1 1; 1 1 1])),
+        Fields(@SMatrix([0 1 0;  0 1 0]),                       @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]),                    @SMatrix([1])),
+        Fields(@SMatrix([0 1 0;  0 1 0]),                       @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1 1 1; 1 1 1; 1 1 1]),  @SMatrix([1 1 1; 1 1 1; 1 1 1])),
     )
 
     # Sparse matrix assembly
@@ -211,7 +213,7 @@ using Enzyme  # AD backends you want to use
     BC.Vy[inx_Vy, end-1 ] .= (type.Vy[inx_Vy,   end ] .== :Neumann_normal) .* D_BC[2,2]
     BC.Vy[     2, iny_Vy] .= (type.Vy[     2, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[    2, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*X.v.x[1]   .+ D_BC[2,2]*X.v.y)
     BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*X.v.x[end] .+ D_BC[2,2]*X.v.y)
-    
+    BC.Pf[     :,     1 ] .= Pf_bot
     #--------------------------------------------#
 
     rvec   = zeros(length(α))
@@ -392,39 +394,51 @@ using Enzyme  # AD backends you want to use
             # Colorbar(fig[2, 1], hm, label = L"$\dot\lambda$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
             
 
+        
+
             ax   = Axis(fig[1,1], title=L"$$Surface velocity (cm/y)", xlabel=L"x", ylabel=L"y")
             hm = scatterlines!(ax, X.c.x, V.y[inx_Vy,end-1]*sc.L/sc.t*cmy )
             
             # arrows2d!(ax, X.c.x[1:step:end], X.c.y[1:step:end], Vxsc[1:step:end,1:step:end], Vysc[1:step:end,1:step:end], lengthscale=10000.4, color=:white)
 
-            ax    = Axis(fig[3,1], aspect=DataAspect(), title=L"$$Porosity", xlabel=L"x", ylabel=L"y")
-            field = log10.(Φ0.c[inx_c,iny_c])
-            hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
-            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
-            hidexdecorations!(ax)
-            Colorbar(fig[4, 1], hm, label = L"$\dot\lambda$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
-            
-            # ax    = Axis(fig[1,2], aspect=DataAspect(), title=L"$P^t - P^f$ [MPa]", xlabel=L"x", ylabel=L"y")
-            # field = (P.t .- P.f)[inx_c,iny_c].*sc.σ./1e6
+
+            ax = Axis(fig[3,1])
+            i_mid_x = Int64(round(nc.x/2))
+            i_qua_x = Int64(round(nc.x/4))
+
+            # lines!( mean(P.f, dims=1)[:][2:end-1]  ,  X.c.y)
+            # lines!( mean(P.t, dims=1)[:][2:end-1]  ,  X.c.y)
+            lines!( log10.( Φ.c[i_mid_x,2:end-1] )  ,  X.c.y)
+            lines!( log10.( Φ.c[i_qua_x,2:end-1] )  ,  X.c.y)
+
+            # ax    = Axis(fig[3,1], aspect=DataAspect(), title=L"$$Porosity", xlabel=L"x", ylabel=L"y")
+            # field = log10.(Φ0.c[inx_c,iny_c])
             # hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
             # contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
             # hidexdecorations!(ax)
-            # Colorbar(fig[2, 2], hm, label = L"$P^t - P^f$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+            # Colorbar(fig[4, 1], hm, label = L"$\Phi$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
             
-            ax    = Axis(fig[1,2], aspect=DataAspect(), title=L"$P^f$ (MPa)", xlabel=L"x", ylabel=L"y")
+            ax    = Axis(fig[1,2], aspect=DataAspect(), title=L"$P^t - P^f$ (MPa)", xlabel=L"x", ylabel=L"y")
+            field = (P.t .- P.f)[inx_c,iny_c].*sc.σ./1e6
+            hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
+            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
+            hidexdecorations!(ax)
+            Colorbar(fig[2, 2], hm, label = L"$P^t - P^f$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+            
+            ax    = Axis(fig[3,2], aspect=DataAspect(), title=L"$P^f$ (MPa)", xlabel=L"x", ylabel=L"y")
             field = (P.f)[inx_c,iny_c].*sc.σ./1e6
             hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
             contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
             hidexdecorations!(ax)
-            Colorbar(fig[2, 2], hm, label = L"$P^f$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+            Colorbar(fig[4, 2], hm, label = L"$P^f$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
             
 
-            ax    = Axis(fig[3,2], aspect=DataAspect(), title=L"$P^t$ (MPa)", xlabel=L"x", ylabel=L"y")
-            field = (P.t)[inx_c,iny_c].*sc.σ./1e6
-            hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
-            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
-            hidexdecorations!(ax)
-            Colorbar(fig[4, 2], hm, label = L"$P^t$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+            # ax    = Axis(fig[3,2], aspect=DataAspect(), title=L"$P^t$ (MPa)", xlabel=L"x", ylabel=L"y")
+            # field = (P.t)[inx_c,iny_c].*sc.σ./1e6
+            # hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
+            # contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
+            # hidexdecorations!(ax)
+            # Colorbar(fig[4, 2], hm, label = L"$P^t$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
             
 
             # arrows2d!(ax, X.c.x[1:step:end], X.c.y[1:step:end], Vxsc[1:step:end,1:step:end], Vysc[1:step:end,1:step:end], lengthscale=10000.4, color=:white)
@@ -466,6 +480,7 @@ using Enzyme  # AD backends you want to use
             # Colorbar(fig[4, 2], hm, label = L"$P^f$", height=20, width = 200, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
             
             display(fig) 
+            DataInspector(fig)
         end
         with_theme(figure, theme_latexfonts())
 
