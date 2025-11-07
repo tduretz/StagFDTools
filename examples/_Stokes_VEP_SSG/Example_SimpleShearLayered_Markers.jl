@@ -88,7 +88,6 @@ function MarkerWeight(xm, x, Δx)
     # compute marker-grid distance and weight
     dst = abs(xm - x)
     w = 1.0 - 2 * dst / Δx
-    @show w
     return w
 end
 
@@ -98,28 +97,24 @@ function MarkerWeight_phase!(phase_ratio, phase_weight, x, y, xm, ym, Δ, materi
     w_y = MarkerWeight(ym, y, Δ.y)
     w = w_x * w_y
     for k = 1:nphases
-        phase_ratio[k] += (k == phase) * w
+        phase_ratio[k]  += (k === phase) * w
+        phase_weight[k] += w
     end
-    phase_weight += w
 end
-function PhaseRatios!(phase_ratios, phase_weights, materials, inx_c, iny_c, inx_v, iny_v)
+function PhaseRatios!(phase_ratios, phase_weights, materials)
     nphases = length(materials.n)
     # centroids
-    for i in inx_c, j in iny_c
+    for i in axes(phase_ratios.center,1), j in axes(phase_ratios.center,2)
         #  normalize weights and assign to phase ratios
         for k = 1:nphases
-            if phase_weights.c[i,j] != 0
-                phase_ratios.center[i,j][k] /= phase_weights.c[i,j]
-            end
+            phase_ratios.center[i,j][k] = phase_ratios.center[i,j][k] / (phase_weights.center[i,j][k] == 0.0 ? 1 : phase_weights.center[i,j][k])
         end
     end
     # vertices
-    for i in inx_v, j in iny_v
+    for i in axes(phase_ratios.vertex,1), j in axes(phase_ratios.vertex,2)
         #  normalize weights and assign to phase ratios
         for k = 1:nphases
-            if phase_weights.v[i,j] != 0
-                phase_ratios.vertex[i,j][k] /= phase_weights.v[i,j]
-            end
+            phase_ratios.vertex[i,j][k] = phase_ratios.vertex[i,j][k] / (phase_weights.vertex[i,j][k] == 0.0 ? 1 : phase_weights.vertex[i,j][k])
         end
     end
 end
@@ -509,7 +504,8 @@ end
     phases       = (c= ones(Int64, size_c...), v= ones(Int64, size_v...), m= ones(Int64, nmark.x, nmark.y))  # phase on velocity points
     phase_ratios = (center = [@MVector(zeros(3)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)],
                     vertex = [@MVector(zeros(3)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)])
-    phase_w      = (c = zeros(size_c...), v = zeros(size_v...))
+    phase_w      = (center = [@MVector(zeros(3)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)],
+                    vertex = [@MVector(zeros(3)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)])
     mp           = (c = zeros(size_c...), v = zeros(size_v...))
     # Only account for the subdomain
     imin_x = argmin(abs.(xce .+ 0.3))
@@ -545,20 +541,21 @@ end
                 phases.m[k, l] = 2
             end
 
-            i = Int64(ceil((xm[k]-xce[1]) / Δ.x))
-            j = Int64(ceil((ym[l]-yce[1]) / Δ.y))
+            i = Int64(ceil((xm[k]-xce[1]) / Δ.x + 0.5))
+            j = Int64(ceil((ym[l]-yce[1]) / Δ.y + 0.5))
             mp.c[i,j] += 1
 
             # determine indices of grid vertex
-            iv = Int64(ceil((xm[k]-xce[1]) / Δ.x + 0.5))
-            jv = Int64(ceil((ym[l]-yce[1]) / Δ.y + 0.5))
+            iv = Int64(ceil((xm[k]-xce[1]) / Δ.x + 1.0))
+            jv = Int64(ceil((ym[l]-yce[1]) / Δ.y + 1.0))
             mp.v[iv,jv] += 1
 
-            
-            MarkerWeight_phase!(phase_ratios.center[i,j], phase_w.c[i,j], xce[i], yce[j], xm[k], ym[l], Δ, materials, phases.m[k,l])
-            MarkerWeight_phase!(phase_ratios.vertex[iv,jv], phase_w.v[iv,jv], xv[iv], yv[jv], xm[k], ym[l], Δ, materials, phases.m[k,l])
+
+            MarkerWeight_phase!(phase_ratios.center[i,j], phase_w.center[i,j], xce[i], yce[j], xm[k], ym[l], Δ, materials, phases.m[k,l])
+            # MarkerWeight_phase!(phase_ratios.vertex[iv,jv], phase_w.vertex[iv,jv], xv[iv], yv[jv], xm[k], ym[l], Δ, materials, phases.m[k,l])
         end
-        PhaseRatios!(phase_ratios, phase_w, materials, inx_c, iny_c, inx_v, iny_v)
+        PhaseRatios!(phase_ratios, phase_w, materials)
+        @show phase_ratios
     else
         for i in inx_c, j in iny_c   # loop on centroids
             𝐱 = @SVector([xc[i-1], yc[j-1]])
@@ -690,13 +687,12 @@ end
     fig = cm.Figure()
     ax  = cm.Axis(fig[1,1], aspect=cm.DataAspect())
     hm  = cm.heatmap!(ax, xce, yce,  mp.c, colormap=:bluesreds)
-    # # hm  = cm.heatmap!(ax, xv, yv, η.v[inx_v, iny_v], colormap=:bluesreds)
+    # hm  = cm.heatmap!(ax, xv, yv, mp.v, colormap=:bluesreds)
     # # cm.poly!(ax, cm.Rect(xce[imin_x], yce[imin_y], xce[imax_x]-xce[imin_x], yce[imax_y]-yce[imin_y]), strokecolor=:white, strokewidth=2, color=:transparent)
     # # st = 15
     # # cm.arrows2d!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], tiplength = 0, lengthscale=0.02, tipwidth=1, color=:white)
     cm.Colorbar(fig[1,2], hm)
     display(fig)
-    @show phase_ratios
 
     return mean(τII[inner_x, inner_y])
 
