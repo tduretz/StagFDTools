@@ -28,11 +28,11 @@ include("rheology_var.jl")
         compressible = false,
         plasticity   = :none,
         n    = [1.0    1.0  ],
-        #η0   = [1e0    1e2  ],
-                η0   = [1e0    1e0  ], # I have removed the inclusion for the time being
+        η0   = [1e0    1e2  ],
+        #        η0   = [1e0    1e0  ], # I have removed the inclusion for the time being
 
         G    = [1e20   1e20 ],
-        #η0   = [1e0    1e5  ], 
+        #η0   = [1e0    1e5  ],
         #G    = [1e6    1e6  ],
         C    = [150    150  ],
         ϕ    = [30.    30.  ],
@@ -166,11 +166,6 @@ include("rheology_var.jl")
 
         # spaces between nodes
         Δ = (x = zeros(nc.x+4), y = zeros(nc.y+4), t=fill(Δt0,1)) # nb cells
-        #=Δ.x[2:end-1]  .= diff(xv)
-        Δ.x[[1, end]] .= Δ.x[[2, end-1]]
-        Δ.y[2:end-1]  .= diff(yv)
-        Δ.y[[1, end]] .= Δ.y[[2, end-1]]=#
-
             
         Δ.x[3:end-2]   .= diff(xv)
         Δ.x[[1, end]] .= Δ.x[[3, end-2]]
@@ -183,47 +178,6 @@ include("rheology_var.jl")
             
         xc = 0.5*(xv[2:endv] + xv[1:endv-1])
         yc = 0.5*(yv[2:endv] + yv[1:endv-1])
-        
-        xv_delta = zeros(nc.x+5)
-        yv_delta = zeros(nc.y+5)
-        xv_delta[3:end-2] = xv
-        xv_delta[2] = xv_delta[3]-Δ.x[2]
-        xv_delta[1] = xv_delta[2]-Δ.x[1]
-        xv_delta[end-1] = xv_delta[end-2]+Δ.x[end-1]
-        xv_delta[end] = xv_delta[end-1]+Δ.x[end]
-        yv_delta[3:end-2] = yv
-        yv_delta[2] = yv_delta[3]-Δ.y[2]
-        yv_delta[1] = yv_delta[2]-Δ.y[1]
-        yv_delta[end-1] = yv_delta[end-2]+Δ.y[end-1]
-        yv_delta[end] = yv_delta[end-1]+Δ.y[end]
-
-        #=volCell = zeros(nc.x+4,nc.y+4)
-        for i=1:nc.x+4
-            for j=1:nc.y+4
-                volCell[i,j] = Δ.x[i]*Δ.y[j]
-            end
-        end
-        p1 = heatmap(xv_delta, yv_delta, volCell, aspect_ratio=1, xlim=extrema(xc), title="Volume Cellules", color=:vik)
-        volVertices = zeros(endv-2,endv-2)
-        for i=1:endv-2
-            for j=1:endv-2
-                volVertices[i,j] = (xc[i+1]-xc[i])*(yc[j+1]-yc[j])
-            end
-        end
-        p2 = heatmap(xv[2:end-1], yv[2:end-1], volVertices, aspect_ratio=1, xlim=xv[end-1], title="Volume Vertices", color=:vik)
-
-        p3 = plot(aspect_ratio=:equal, xlabel="x", ylabel="y", title="grid", legend=false)
-        for x in xv
-            plot!(p3, [x, x], [minimum(yv), maximum(yv)], color=:black, linewidth=0.5)
-        end
-        for y in yv
-            plot!(p3, [minimum(xv), maximum(xv)], [y, y], color=:black, linewidth=0.5)
-        end
-        scatter!(p3, repeat(xc, outer=length(yc)), repeat(yc, inner=length(xc)), markersize=4, markercolor=:red, markerstrokewidth=0, label="Cell centers")
-                        
-        display(plot(p2, p1, layout=(1,2)))
-
-        sleep(10)=#
 
     end
 
@@ -288,7 +242,7 @@ include("rheology_var.jl")
                 ResidualMomentum2D_y_var!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
             end
 
-            #=err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
+            err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
             err.y[iter] = norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
             err.p[iter] = norm(R.p[inx_c,iny_c])/sqrt(nPt)
             max(err.x[iter], err.y[iter]) < ϵ_nl ? break : nothing
@@ -325,7 +279,7 @@ include("rheology_var.jl")
             # Line search & solution update
             @timeit to "Line search" imin = LineSearch_var!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
             UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
-            TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)=#
+            TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
         end
 
         # Update pressure
@@ -333,73 +287,46 @@ include("rheology_var.jl")
 
         #--------------------------------------------#
 
-        p3 = heatmap(xv, yc, R.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Rx", color=:vik)
+        #=p3 = heatmap(xv, yc, R.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Rx", color=:vik)
         p4 = heatmap(xc, yv, R.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Ry", color=:vik)
         p2 = heatmap(xc, yc,  R.p[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Rp'", color=:vik)
-        p1 = heatmap(xc, yc,  R.p[inx_c,iny_c], aspect_ratio=1, xlim=extrema(xc), title="Rp'", color=:vik)
-        #=p3 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Vx", color=:vik)
+        p1 = heatmap(xc, yc,  R.p[inx_c,iny_c], aspect_ratio=1, xlim=extrema(xc), title="Rp'", color=:vik)=#
+        p3 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Vx", color=:vik)
         p4 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy", color=:vik)
         p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt'", color=:vik)
-        p1 = heatmap(xc, yc,  Pt[inx_c,iny_c], aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik)=#
+        p1 = heatmap(xc, yc,  Pt[inx_c,iny_c], aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik)
 
         # Evaluate analytical solution
-        println(size(V.x))
-        println(size(V.y))
-        println(size(Pt))
-        p_ana = zeros(nc.x+2, nc.y+2)
+        p_ana = zeros(nc.x, nc.y)
         for i=1:nc.x, j=1:nc.y
             sol       = Stokes2D_Schmid2003( [xc[i]; yc[j]] )
-            p_ana[i+1,j+1]    = sol.p
+            p_ana[i,j]    = sol.p
         end
         println("Max diff of Pt")
-        println(findmax(p_ana[inx_c,iny_c] .- Pt[inx_c,iny_c]))
-        Vy_ana = zeros(nc.x+4, nc.y+3)
-        shift = (x = 1, y = 2)
+        println(findmax(p_ana .- Pt[inx_c,iny_c]))
+
+        Vy_ana = zeros(nc.x, nc.y+1)
         for i=1:nc.x, j=1:nc.y+1
-            sol       = Stokes2D_Schmid2003( [xv_delta[i]; yv_delta[j]] )
-            Vy_ana[i+shift.x,j+shift.y]   = sol.V[2]
+            sol       = Stokes2D_Schmid2003( [xv[i]; yv[j]] )
+            Vy_ana[i,j]   = sol.V[2]
         end
         println("Max diff of V.y")
-        println(findmax(Vy_ana[inx_Vy,iny_Vy] .- V.y[inx_Vy,iny_Vy]))
-        Vx_ana = zeros(nc.x+3, nc.y+4)
-        shift = (x = 2, y = 1)
-        #for i=1+shift.x:nc.x+1+shift.x, j=1+shift.y:nc.y+shift.y
+        println(findmax(Vy_ana .- V.y[inx_Vy,iny_Vy]))
+
+        Vx_ana = zeros(nc.x+1, nc.y)
         for i=1:nc.x+1, j=1:nc.y
-            sol       = Stokes2D_Schmid2003( [xv_delta[i]; yv_delta[j]] )
-            Vx_ana[i+shift.x,j+shift.y]   = sol.V[1]
+            sol       = Stokes2D_Schmid2003( [xv[i]; yv[j]] )
+            Vx_ana[i,j]   = sol.V[1]
         end
         println("Max diff of V.x")
-        println(findmax(Vx_ana[inx_Vx,iny_Vx] .- V.x[inx_Vx,iny_Vx]))
+        println(findmax(Vx_ana .- V.x[inx_Vx,iny_Vx]))
 
         # test symétrie
         println("Diff sym Pt")
         println(findmax(Pt[inx_c,iny_c]'.-Pt[inx_c,iny_c]))
-
-        #=p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright, title=BC_template)
-        p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
-        p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
-        p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")=#
-        #p1 = heatmap(xv, yc, η.c[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="eta c", color=:vik)
-        #p2 = heatmap(xv, yc, η.v[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="eta v", color=:vik)
         
         display(plot(p1, p2, p3, p4, layout=(2,2)))
         sleep(30)
-
-        @show Δ.x[2:end-1]
-        @show nc.x
-
-
-        # p = plot(aspect_ratio=:equal, xlabel="x", ylabel="y", title="grid", legend=false)
-        # for x in xv
-        #     plot!(p, [x, x], [minimum(yv), maximum(yv)], color=:black, linewidth=0.5)
-        # end
-        # for y in yv
-        #     plot!(p, [minimum(xv), maximum(xv)], [y, y], color=:black, linewidth=0.5)
-        # end
-        # scatter!(p, repeat(xc, outer=length(yc)), repeat(yc, inner=length(xc)), markersize=4, markercolor=:red, markerstrokewidth=0, label="Cell centers")
-        
-        # display(p)
-        # sleep(10)
     end
 
     display(to)

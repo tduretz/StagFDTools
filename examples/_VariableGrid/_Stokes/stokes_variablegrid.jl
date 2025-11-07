@@ -146,11 +146,11 @@ function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, �
         end
         Dxy = zeros(size_stencil_Vx_X-2,size_stencil_Vx_Y-1)
         for i in 1:size_stencil_Vx_X-2, j in 1:size_stencil_Vx_Y-1
-            Dxy[i,j] = (Vx[i, j+1] - Vx[i, j]) / Δy[j]
+            Dxy[i,j] = (Vx[i+1, j+1] - Vx[i+1, j]) / Δy[j]
         end
         Dyx = zeros(size_stencil_Vy_X-1,size_stencil_Vy_Y-2)
         for i in 1:size_stencil_Vy_X-1, j in 1:size_stencil_Vy_Y-2
-            Dyx[i,j] = (Vy[i+1, j] - Vy[i, j]) / Δx[i]
+            Dyx[i,j] = (Vy[i+1, j+1] - Vy[i, j+1]) / Δx[i]
         end
 
         #=Dxx    = ∂x(Vx) /  Δx_loc[2] #((Δx_loc[2]+Δx_loc[1])/2) #Δx_Vx[2] #Δx_Vx[2] #((Δx_Vx[2]+Δx_Vx[3])/2)
@@ -290,8 +290,6 @@ function ResidualContinuity2D_var!(R, V, P, P0, ΔP, τ0, 𝐷, phases, material
     # loop on centroids
     for j in 2:size(R.p,2)-1, i in 2:size(R.p,1)-1
         if type.Pt[i,j] !== :constant 
-            #Vx_loc     = SMatrix{2,3}(      V.x[ii,jj] for ii in i:i+1, jj in j:j+2)
-            #Vy_loc     = SMatrix{3,2}(      V.y[ii,jj] for ii in i:i+2, jj in j:j+1)
             Vx_loc     = SMatrix{2,2}(      V.x[ii,jj] for ii in i:i+1, jj in j:j+1)
             Vy_loc     = SMatrix{2,2}(      V.y[ii,jj] for ii in i:i+1, jj in j:j+1)
 
@@ -299,10 +297,6 @@ function ResidualContinuity2D_var!(R, V, P, P0, ΔP, τ0, 𝐷, phases, material
             Δy_loc     = SVector{1}(Δ.y[jj+1] for jj in j:j)
 
             Δt_loc = Δ.t[1]
-
-            if j==2
-            @show Δx_loc
-            end
 
             bcv_loc    = (;)
             type_loc   = (;)
@@ -317,7 +311,7 @@ end
 function Continuity_var(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δx, Δy, Δt)
     invΔx = 1 / Δx[1]
     invΔy = 1 / Δy[1]
-    #invArea = invΔx * invΔy
+
     invΔt = 1 / Δt
     β     = materials.β[phase]
     η     = materials.β[phase]
@@ -332,7 +326,7 @@ end
 function ResidualMomentum2D_x_var!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
                 
     shift    = (x=1, y=2)
-    for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x+1 # i,j est une coordonnée sur la grille de Vx
+    for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x+1
         if type.Vx[i,j] == :in
             Vx_loc     = SMatrix{3,3}(      V.x[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             Vy_loc     = SMatrix{4,4}(      V.y[ii,jj] for ii in i-1:i+2, jj in j-2:j+1)
@@ -356,15 +350,8 @@ function ResidualMomentum2D_x_var!(R, V, P, P0, ΔP, τ0, 𝐷, phases, material
             D          = (c=Dc, v=Dv)
             τ0_loc     = (xx=τxx0, yy=τyy0, xy=τxy0)
 
-            #Δx_loc     = SVector{2}(Δ.x[ii] for ii in i:i+1)
-            #Δy_loc     = SVector{2}(Δ.y[jj] for jj in j:j+1)
-
-            # dx relatifs aux centres, autour du noeud Vx, dans la direction x
             Δx_Vx_loc     = SVector{3}(Δ.x[ii+1] for ii in i-1:i+1)
-            # dx relatifs aux centres, autour du noeud Vx, dans la direction y
             Δy_Vx_loc     = SVector{3}(Δ.y[jj+1] for jj in j-1:j+1)
-            #Δx_Vy_loc     = SVector{4}(Δ.x[ii+1] for ii in i-1:i+2)
-            #Δy_Vy_loc     = SVector{4}(Δ.y[jj+1] for jj in j-2:j+1)
 
             R.x[i,j]   = SMomentum_x_Generic_var(Vx_loc, Vy_loc, P_loc, ΔP_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δx_Vx_loc, Δy_Vx_loc, Δ.t[1])
         end
@@ -396,7 +383,7 @@ function SMomentum_x_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
     end
     Dyy = zeros(size_stencil_Y-2,size_stencil_Y-1)
     for i in 1:size_stencil_Y-2, j in 1:size_stencil_Y-1
-        Dyy[i,j] = (Vy[i, j+1] - Vy[i, j]) / Δy[j]
+        Dyy[i,j] = (Vy[i+1, j+1] - Vy[i+1, j]) / Δy[j]
     end
     Dxy = zeros(size_stencil_X,size_stencil_X-1)
     for i in 1:size_stencil_X, j in 1:size_stencil_X-1
@@ -404,18 +391,11 @@ function SMomentum_x_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
     end
     Dyx = zeros(size_stencil_Y-1,size_stencil_Y-2)
     for i in 1:size_stencil_Y-1, j in 1:size_stencil_Y-2
-        Dyx[i,j] = (Vy[i+1, j] - Vy[i, j]) / Δx[i]
+        Dyx[i,j] = (Vy[i+1, j+1] - Vy[i, j+1]) / Δx[i]
     end
 
-    #println("calculs")
-    #println(Dxx)
-    #println(Dyy)
-    #println(Dxy)
-    #println(Dyx)
     # Strain rate
     ε̇kk = @. Dxx + Dyy
-    #println("ε̇kk")
-    #println(ε̇kk)
     # normal strain rate xx
     ε̇xx = @. Dxx - 1/3*ε̇kk
     # normal strain rate yy
@@ -484,13 +464,9 @@ function SMomentum_x_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
     end
 
     # Residual
-    #println("τxx")
-    #println(τxx)
-    #println("τxy")
-    #println(τxy)
     fx  = ( τxx[2]  - τxx[1] ) * (1 / Δx[2])
     fx += ( τxy[2]  - τxy[1] ) * (2 / (Δy[2]+Δy[1]))
-    fx -= ( Ptc[2]  - Ptc[1] ) * (1 / Δx[2])
+    fx -= ( Ptc[2]  - Ptc[1] ) #* (1 / Δx[2])
 
     # fx *= -1 * Δx_Vx[2] * ((Δy_Vx[3]+Δy_Vx[2])/2)
 
@@ -553,7 +529,7 @@ function SMomentum_y_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
     
     Dxx = zeros(size_stencil_X-1,size_stencil_X-2)
     for i in 1:size_stencil_X-1, j in 1:size_stencil_X-2
-        Dxx[i,j] = (Vx[i+1, j] - Vx[i, j]) / Δx[i]
+        Dxx[i,j] = (Vx[i+1, j+1] - Vx[i, j+1]) / Δx[i]
     end
     Dyy = zeros(size_stencil_Y,size_stencil_Y-1)
     for i in 1:size_stencil_Y, j in 1:size_stencil_Y-1
@@ -561,7 +537,7 @@ function SMomentum_y_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
     end
     Dxy = zeros(size_stencil_X-2,size_stencil_X-1)
     for i in 1:size_stencil_X-2, j in 1:size_stencil_X-1
-        Dxy[i,j] = (Vx[i, j+1] - Vx[i, j]) / Δy[j]
+        Dxy[i,j] = (Vx[i+1, j+1] - Vx[i+1, j]) / Δy[j]
     end
     Dyx = zeros(size_stencil_Y-1,size_stencil_Y)
     for i in 1:size_stencil_Y-1, j in 1:size_stencil_Y
@@ -628,13 +604,9 @@ function SMomentum_y_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
     end
 
     # Residual
-    #println("τyy")
-    #println(τyy)
-    #println("τxy")
-    #println(τxy)
     fy  = ( τyy[2]  -  τyy[1] ) * (1/Δy_loc[2])
     fy += ( τxy[2]  -  τxy[1] ) * (2/(Δx_loc[1]+Δx_loc[2]))
-    fy -= ( Ptc[2]  -  Ptc[1])  * (1/Δy_loc[2])
+    fy -= ( Ptc[2]  -  Ptc[1])  #* (1/Δy_loc[2])
     # fy *= -1 * ((Δx_Vy[3]+Δx_Vy[2])/2) * Δy_Vy[2]
     
     return fy
@@ -668,8 +640,8 @@ function AssembleContinuity2D_var!(K, V, P, Pt0, ΔP, τ0, 𝐷, phases, materia
         fill!(∂R∂Vy, 0e0)
         fill!(∂R∂P , 0e0)
         
-        Δx_loc     = SVector{1}(Δ.x[ii] for ii in i:i)
-        Δy_loc     = SVector{1}(Δ.y[jj] for jj in j:j)
+        Δx_loc     = SVector{1}(Δ.x[ii+1] for ii in i:i)
+        Δy_loc     = SVector{1}(Δ.y[jj+1] for jj in j:j)
 
         Δt_loc        = Δ.t[1]
 
@@ -741,8 +713,8 @@ function AssembleMomentum2D_x_var!(K, V, P, P0, ΔP, τ0, 𝐷, phases, material
             D          = (c=Dc, v=Dv)
             τ0_loc     = (xx=τxx0, yy=τyy0, xy=τxy0)
 
-            Δx_loc     = SVector{3}(Δ.x[ii] for ii in i-1:i+1)
-            Δy_loc     = SVector{3}(Δ.y[jj] for jj in j-1:j+1)
+            Δx_loc     = SVector{3}(Δ.x[ii+1] for ii in i-1:i+1)
+            Δy_loc     = SVector{3}(Δ.y[jj+1] for jj in j-1:j+1)
 
             Δt_loc        = Δ.t[1]
 
@@ -820,8 +792,8 @@ function AssembleMomentum2D_y_var!(K, V, P, P0, ΔP, τ0, 𝐷, phases, material
             D          = (c=Dc, v=Dv)
             τ0_loc     = (xx=τxx0, yy=τyy0, xy=τxy0)
 
-            Δx_loc     = SVector{3}(Δ.x[ii] for ii in i-1:i+1)
-            Δy_loc     = SVector{3}(Δ.y[jj] for jj in j-1:j+1)
+            Δx_loc     = SVector{3}(Δ.x[ii+1] for ii in i-1:i+1)
+            Δy_loc     = SVector{3}(Δ.y[jj+1] for jj in j-1:j+1)
 
             Δt_loc        = Δ.t[1]
 
