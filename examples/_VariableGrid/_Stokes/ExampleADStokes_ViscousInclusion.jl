@@ -17,7 +17,7 @@ include("rheology_var.jl")
     #--------------------------------------------#
 
     # Resolution
-    nc = (x = 8, y = 8)
+    nc = (x = 20, y = 20)
 
     # Boundary loading type
     config = BC_template
@@ -242,7 +242,7 @@ include("rheology_var.jl")
                 ResidualMomentum2D_y_var!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
             end
 
-            err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
+            #=err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
             err.y[iter] = norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
             err.p[iter] = norm(R.p[inx_c,iny_c])/sqrt(nPt)
             max(err.x[iter], err.y[iter]) < ϵ_nl ? break : nothing
@@ -279,7 +279,7 @@ include("rheology_var.jl")
             # Line search & solution update
             @timeit to "Line search" imin = LineSearch_var!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
             UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
-            TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
+            TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)=#
         end
 
         # Update pressure
@@ -287,14 +287,14 @@ include("rheology_var.jl")
 
         #--------------------------------------------#
 
-        #=p3 = heatmap(xv, yc, R.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Rx", color=:vik)
+        p3 = heatmap(xv, yc, R.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Rx", color=:vik)
         p4 = heatmap(xc, yv, R.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Ry", color=:vik)
         p2 = heatmap(xc, yc,  R.p[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Rp'", color=:vik)
-        p1 = heatmap(xc, yc,  R.p[inx_c,iny_c], aspect_ratio=1, xlim=extrema(xc), title="Rp'", color=:vik)=#
-        p3 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Vx", color=:vik)
+        p1 = heatmap(xc, yc,  R.p[inx_c,iny_c], aspect_ratio=1, xlim=extrema(xc), title="Rp'", color=:vik)
+        #=p3 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Vx", color=:vik)
         p4 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy", color=:vik)
         p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt'", color=:vik)
-        p1 = heatmap(xc, yc,  Pt[inx_c,iny_c], aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik)
+        p1 = heatmap(xc, yc,  Pt[inx_c,iny_c], aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik)=#
 
         # Evaluate analytical solution
         p_ana = zeros(nc.x, nc.y)
@@ -322,8 +322,8 @@ include("rheology_var.jl")
         println(findmax(Vx_ana .- V.x[inx_Vx,iny_Vx]))
 
         # test symétrie
-        println("Diff sym Pt")
-        println(findmax(Pt[inx_c,iny_c]'.-Pt[inx_c,iny_c]))
+        println("Diff sym R.p")
+        println(findmax(R.p[inx_c,iny_c]'.-R.p[inx_c,iny_c]))
         
         display(plot(p1, p2, p3, p4, layout=(2,2)))
         sleep(30)
