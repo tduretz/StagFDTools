@@ -52,7 +52,7 @@ hours = 3600
     ϵ_nl         = 1e-10
     Δt0          = ηi/Gi/4.0/100
     ε̇            = 0*1e-6   / (1/sc.t)
-    L            =  2e-3     / sc.L
+    L            = 2e-3     / sc.L
     T_ini        = 300.0  / sc.T
     T_fin        = 1100.0 / sc.T
     dTdt         = (T_fin - T_ini) / (nt*Δt0)
@@ -96,7 +96,8 @@ hours = 3600
         ηs0          = [ηi  ηinc  ηrim ], 
         G            = [Gi  Ginc  Grim ], 
         EoS_params   = (Dia, Ol, Ol),
-        EoS_model    = (:BM3, :BM3, :BM3), 
+        # EoS_model    = (:BM3, :BM3, :BM3), 
+        EoS_model    = (:exp, :exp, :exp), 
         K            = [Ki  Kinc  Krim ],
         α            = [αi  αinc  αrim ],
         k            = [ki  kinc  krim ],
@@ -401,6 +402,8 @@ hours = 3600
         Vxsc = 0.5*(V.x[1:end-1,2:end-1] + V.x[2:end,2:end-1])
         Vysc = 0.5*(V.y[2:end-1,1:end-1] + V.y[2:end-1,2:end])
         Vs   = sqrt.( Vxsc.^2 .+ Vysc.^2)
+
+        jldsave("runs2D_step$(it).jld2"; xc=xc, yc=yc, P=P.t[inx_c,iny_c], Vx=Vxsc, Vy=Vysc, dt=Δ.t)
 
         # Visualise
         function figure()
