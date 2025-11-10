@@ -1,4 +1,4 @@
-using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, GLMakie, LinearAlgebra, SparseArrays, Printf
+using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, GLMakie, LinearAlgebra, SparseArrays, Printf, JLD2
 using GridGeometryUtils
 import Statistics:mean
 using DifferentiationInterface
@@ -273,6 +273,9 @@ using TimerOutputs
         heatmap!(ax, xc, yc,  Pt[inx_c,iny_c].-mean( Pt[inx_c,iny_c]), colormap=:turbo, colorrange=(-5,5))                
         # heatmap!(ax, xc, yc,  Pt[inx_c,iny_c].-mean( Pt[inx_c,iny_c]), colormap=:bluesreds, colorrange=(-10,10))
         display(fig)
+
+        # Psave = Pt[inx_c,iny_c].-mean( Pt[inx_c,iny_c])
+        # @save "MultiInclusions_StagFD.jld2" P=Psave
 
         # p3 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Vx", color=:vik)
         # p4 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy", color=:vik)
