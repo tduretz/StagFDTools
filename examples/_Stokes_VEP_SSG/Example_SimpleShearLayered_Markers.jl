@@ -499,6 +499,8 @@ end
     yc  = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
     xce = LinRange(-L.x/2-Δ.x/2, L.x/2+Δ.x/2, nc.x+2)
     yce = LinRange(-L.y/2-Δ.y/2, L.y/2+Δ.y/2, nc.y+2)
+    xve  = LinRange(-L.x/2-Δ.x, L.x/2+Δ.x, nc.x+3)
+    yve  = LinRange(-L.y/2-Δ.y, L.y/2+Δ.y, nc.y+3)
     xm  = LinRange(-L.x/2+Δm.x/2, L.x/2-Δm.x/2, nmark.x)
     ym  = LinRange(-L.y/2+Δm.y/2, L.y/2-Δm.y/2, nmark.y)
     phases       = (c= ones(Int64, size_c...), v= ones(Int64, size_v...), m= ones(Int64, nmark.x, nmark.y))  # phase on velocity points
@@ -550,9 +552,8 @@ end
             jv = Int64(ceil((ym[l]-yce[1]) / Δ.y + 1.0))
             mp.v[iv,jv] += 1
 
-
-            MarkerWeight_phase!(phase_ratios.center[i,j], phase_w.center[i,j], xce[i], yce[j], xm[k], ym[l], Δ, materials, phases.m[k,l])
-            # MarkerWeight_phase!(phase_ratios.vertex[iv,jv], phase_w.vertex[iv,jv], xv[iv], yv[jv], xm[k], ym[l], Δ, materials, phases.m[k,l])
+            MarkerWeight_phase!(phase_ratios.center[i,j],   phase_w.center[i,j],   xce[i],  yce[j], xm[k],  ym[l], Δ, materials, phases.m[k,l])
+            MarkerWeight_phase!(phase_ratios.vertex[iv,jv], phase_w.vertex[iv,jv], xve[iv], yve[jv], xm[k], ym[l], Δ, materials, phases.m[k,l])
         end
         PhaseRatios!(phase_ratios, phase_w, materials)
         @show phase_ratios
@@ -687,11 +688,11 @@ end
     fig = cm.Figure()
     ax  = cm.Axis(fig[1,1], aspect=cm.DataAspect())
     hm  = cm.heatmap!(ax, xce, yce,  mp.c, colormap=:bluesreds)
-    # hm  = cm.heatmap!(ax, xv, yv, mp.v, colormap=:bluesreds)
-    # # cm.poly!(ax, cm.Rect(xce[imin_x], yce[imin_y], xce[imax_x]-xce[imin_x], yce[imax_y]-yce[imin_y]), strokecolor=:white, strokewidth=2, color=:transparent)
-    # # st = 15
-    # # cm.arrows2d!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], tiplength = 0, lengthscale=0.02, tipwidth=1, color=:white)
     cm.Colorbar(fig[1,2], hm)
+    
+    ax  = cm.Axis(fig[2,1], aspect=cm.DataAspect())
+    hm  = cm.heatmap!(ax, xv, yv, mp.v, colormap=:bluesreds)
+    cm.Colorbar(fig[2,2], hm)
     display(fig)
 
     return mean(τII[inner_x, inner_y])
