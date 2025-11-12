@@ -1,4 +1,4 @@
-using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf
+using StagFDTools, StagFDTools.StokesJustPIC, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
@@ -475,20 +475,25 @@ end
     V       = (x  = zeros(size_x...), y  = zeros(size_y...))
     Vi      = (x  = zeros(size_x...), y  = zeros(size_y...))
     η       = (c  =  ones(size_c...), v  =  ones(size_v...), m = ones(nmark.x, nmark.y))
+    G       = (c  =  ones(size_c...), v  =  ones(size_v...) )
+    β       = (c  =  ones(size_c...),)
     λ̇       = (c  = zeros(size_c...), v  = zeros(size_v...) )
-    ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
+    ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
-    τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
+    τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
+    
     Pt      = zeros(size_c...)
     Pti     = zeros(size_c...)
     Pt0     = zeros(size_c...)
-    ΔPt     = zeros(size_c...)
+    ΔPt     = (c=zeros(size_c...), Vx = zeros(size_x...), Vy = zeros(size_y...))
+
     Dc      =  [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)]
     Dv      =  [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)]
     𝐷       = (c = Dc, v = Dv)
     D_ctl_c =  [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)]
     D_ctl_v =  [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)]
     𝐷_ctl   = (c = D_ctl_c, v = D_ctl_v)
+
     τII     = ones(size_c...)
     ε̇II     = ones(size_c...)
     
@@ -509,6 +514,7 @@ end
     phase_w      = (center = [@MVector(zeros(3)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)],
                     vertex = [@MVector(zeros(3)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)])
     mp           = (c = zeros(size_c...), v = zeros(size_v...))
+
     # Only account for the subdomain
     imin_x = argmin(abs.(xce .+ 0.3))
     imax_x = argmin(abs.(xce .- 0.3))
@@ -556,7 +562,6 @@ end
             MarkerWeight_phase!(phase_ratios.vertex[iv,jv], phase_w.vertex[iv,jv], xve[iv], yve[jv], xm[k], ym[l], Δ, materials, phases.m[k,l])
         end
         PhaseRatios!(phase_ratios, phase_w, materials)
-        @show phase_ratios
     else
         for i in inx_c, j in iny_c   # loop on centroids
             𝐱 = @SVector([xc[i-1], yc[j-1]])
@@ -574,116 +579,120 @@ end
             end  
         end
     end
+    # Set bulk and shear moduli
+    G.c .= materials.G[1]
+    G.v .= materials.G[1]
+    β.c .= materials.β[1]
 
-    # #--------------------------------------------#
+    #--------------------------------------------#
 
-    # rvec = zeros(length(α))
-    # err  = (x = zeros(niter), y = zeros(niter), p = zeros(niter))
-    # to   = TimerOutput()
+    rvec = zeros(length(α))
+    err  = (x = zeros(niter), y = zeros(niter), p = zeros(niter))
+    to   = TimerOutput()
 
-    # #--------------------------------------------#
+    #--------------------------------------------#
 
-    # for it=1:nt
+    for it=1:nt
 
-    #     @printf("Step %04d\n", it)
-    #     err.x .= 0.
-    #     err.y .= 0.
-    #     err.p .= 0.
+        @printf("Step %04d\n", it)
+        err.x .= 0.
+        err.y .= 0.
+        err.p .= 0.
         
-    #     # Swap old values 
-    #     τ0.xx .= τ.xx
-    #     τ0.yy .= τ.yy
-    #     τ0.xy .= τ.xy
-    #     Pt0   .= Pt
+        # Swap old values 
+        τ0.xx .= τ.xx
+        τ0.yy .= τ.yy
+        τ0.xy .= τ.xy
+        Pt0   .= Pt
 
-    #     for iter=1:niter
+        for iter=1:niter
 
-    #         @printf("Iteration %04d\n", iter)
+            @printf("Iteration %04d\n", iter)
 
-    #         #--------------------------------------------#
-    #         # Residual check        
-    #         @timeit to "Residual" begin
-    #             TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
-    #             ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
-    #             ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-    #             ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-    #         end
+            #--------------------------------------------#
+            # Residual check        
+            @timeit to "Residual" begin
+                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, G, β, V, Pt, Pt0, ΔPt, type, BC, materials, phase_ratios, Δ)
+                ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, β, materials, number, type, BC, nc, Δ) 
+                ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, G, materials, number, type, BC, nc, Δ)
+                ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, G, materials, number, type, BC, nc, Δ)
+            end
 
-    #         err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
-    #         err.y[iter] = norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-    #         err.p[iter] = norm(R.p[inx_c,iny_c])/sqrt(nPt)
-    #         max(err.x[iter], err.y[iter]) < ϵ_nl ? break : nothing
+            err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
+            err.y[iter] = norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
+            err.p[iter] = norm(R.p[inx_c,iny_c])/sqrt(nPt)
+            max(err.x[iter], err.y[iter]) < ϵ_nl ? break : nothing
 
-    #         #--------------------------------------------#
-    #         # Set global residual vector
-    #         SetRHS!(r, R, number, type, nc)
+            #--------------------------------------------#
+            # Set global residual vector
+            SetRHS!(r, R, number, type, nc)
 
-    #         #--------------------------------------------#
-    #         # Assembly
-    #         @timeit to "Assembly" begin
-    #             AssembleContinuity2D!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-    #             AssembleMomentum2D_x!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-    #             AssembleMomentum2D_y!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-    #         end
+            #--------------------------------------------#
+            # Assembly
+            @timeit to "Assembly" begin
+                AssembleContinuity2D!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, β, materials, number, pattern, type, BC, nc, Δ)
+                AssembleMomentum2D_x!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, G, materials, number, pattern, type, BC, nc, Δ)
+                AssembleMomentum2D_y!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, G, materials, number, pattern, type, BC, nc, Δ)
+            end
 
-    #         #--------------------------------------------# 
-    #         # Stokes operator as block matrices
-    #         𝐊  .= [M.Vx.Vx M.Vx.Vy; M.Vy.Vx M.Vy.Vy]
-    #         𝐐  .= [M.Vx.Pt; M.Vy.Pt]
-    #         𝐐ᵀ .= [M.Pt.Vx M.Pt.Vy]
-    #         𝐏  .= [M.Pt.Pt;]             
+            #--------------------------------------------# 
+            # Stokes operator as block matrices
+            𝐊  .= [M.Vx.Vx M.Vx.Vy; M.Vy.Vx M.Vy.Vy]
+            𝐐  .= [M.Vx.Pt; M.Vy.Pt]
+            𝐐ᵀ .= [M.Pt.Vx M.Pt.Vy]
+            𝐏  .= [M.Pt.Pt;]             
             
-    #         #--------------------------------------------#
+            #--------------------------------------------#
      
-    #         # Direct-iterative solver
-    #         fu   = -r[1:size(𝐊,1)]
-    #         fp   = -r[size(𝐊,1)+1:end]
-    #         u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=factorization,  ηb=1e3, niter_l=10, ϵ_l=1e-9)
-    #         dx[1:size(𝐊,1)]     .= u
-    #         dx[size(𝐊,1)+1:end] .= p
+            # Direct-iterative solver
+            fu   = -r[1:size(𝐊,1)]
+            fp   = -r[size(𝐊,1)+1:end]
+            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:chol,  ηb=1e4, niter_l=10, ϵ_l=1e-10)
+            dx[1:size(𝐊,1)]     .= u
+            dx[size(𝐊,1)+1:end] .= p
 
-    #         #--------------------------------------------#
-    #         # Line search & solution update
-    #         @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
-    #         UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
-    #         TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
+            #--------------------------------------------#
+            # Line search & solution update
+            @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, G, β, 𝐷, 𝐷_ctl, number, type, BC, materials, phase_ratios, nc, Δ)
+            UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
+            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, G, β, V, Pt, Pt0, ΔPt, type, BC, materials, phase_ratios, Δ)
 
-    #     end
+        end
 
-    #     # Update pressure
-    #     Pt .+= ΔPt 
+        # Update pressure
+        Pt .+= ΔPt.c 
 
-    #     #--------------------------------------------#
+        #--------------------------------------------#
 
-    #     # Principal stress
-    #     σ1 = (x = zeros(size(Pt)), y = zeros(size(Pt)), v = zeros(size(Pt)))
+        # Principal stress
+        σ1 = (x = zeros(size(Pt)), y = zeros(size(Pt)), v = zeros(size(Pt)))
 
-    #     τxyc = av2D(τ.xy)
-    #     ε̇xyc = av2D(ε̇.xy)
-    #     τII[inx_c,iny_c]  .= sqrt.( 0.5.*(τ.xx[inx_c,iny_c].^2 + τ.yy[inx_c,iny_c].^2 + 0*(-τ.xx[inx_c,iny_c]-τ.yy[inx_c,iny_c]).^2) .+ τxyc[inx_c,iny_c].^2 )
-    #     ε̇II[inx_c,iny_c]  .= sqrt.( 0.5.*(ε̇.xx[inx_c,iny_c].^2 + ε̇.yy[inx_c,iny_c].^2 + 0*(-ε̇.xx[inx_c,iny_c]-ε̇.yy[inx_c,iny_c]).^2) .+ ε̇xyc[inx_c,iny_c].^2 )
+        τxyc = av2D(τ.xy)
+        ε̇xyc = av2D(ε̇.xy)
+        τII[inx_c,iny_c]  .= sqrt.( 0.5.*(τ.xx[inx_c,iny_c].^2 + τ.yy[inx_c,iny_c].^2 + 0*(-τ.xx[inx_c,iny_c]-τ.yy[inx_c,iny_c]).^2) .+ τxyc[inx_c,iny_c].^2 )
+        ε̇II[inx_c,iny_c]  .= sqrt.( 0.5.*(ε̇.xx[inx_c,iny_c].^2 + ε̇.yy[inx_c,iny_c].^2 + 0*(-ε̇.xx[inx_c,iny_c]-ε̇.yy[inx_c,iny_c]).^2) .+ ε̇xyc[inx_c,iny_c].^2 )
 
-    #     for i in inx_c, j in iny_c
-    #         σ         = @SMatrix[-Pt[i,j]+τ.xx[i,j] τxyc[i,j] 0.; τxyc[i,j] -Pt[i,j]+τ.yy[i,j] 0.; 0. 0. -Pt[i,j]+(-τ.xx[i,j]-τ.yy[i,j])]
-    #         v         = eigvecs(σ)
-    #         σp        = eigvals(σ)
-    #         scale     = sqrt(v[1,1]^2 + v[2,1]^2)
-    #         σ1.x[i,j] = v[1,1]/scale
-    #         σ1.y[i,j] = v[2,1]/scale
-    #         σ1.v[i]   = σp[1]
-    #     end
+        for i in inx_c, j in iny_c
+            σ         = @SMatrix[-Pt[i,j]+τ.xx[i,j] τxyc[i,j] 0.; τxyc[i,j] -Pt[i,j]+τ.yy[i,j] 0.; 0. 0. -Pt[i,j]+(-τ.xx[i,j]-τ.yy[i,j])]
+            v         = eigvecs(σ)
+            σp        = eigvals(σ)
+            scale     = sqrt(v[1,1]^2 + v[2,1]^2)
+            σ1.x[i,j] = v[1,1]/scale
+            σ1.y[i,j] = v[2,1]/scale
+            σ1.v[i]   = σp[1]
+        end
 
-    #     fig = cm.Figure()
-    #     ax  = cm.Axis(fig[1,1], aspect=cm.DataAspect())
-    #     hm  = cm.heatmap!(ax, xc, yc,  τII[inx_c,iny_c], colormap=:bluesreds)
-    #     cm.poly!(ax, cm.Rect(xce[imin_x], yce[imin_y], xce[imax_x]-xce[imin_x], yce[imax_y]-yce[imin_y]), strokecolor=:white, strokewidth=2, color=:transparent)
-    #     st = 15
-    #     cm.arrows2d!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], tiplength = 0, lengthscale=0.02, tipwidth=1, color=:white)
-    #     cm.Colorbar(fig[1,2], hm, label="τII [Pa]")
-    #     display(fig)
-    # end
+        # fig = cm.Figure()
+        # ax  = cm.Axis(fig[1,1], aspect=cm.DataAspect())
+        # hm  = cm.heatmap!(ax, xc, yc,  τII[inx_c,iny_c], colormap=:bluesreds)
+        # cm.poly!(ax, cm.Rect(xce[imin_x], yce[imin_y], xce[imax_x]-xce[imin_x], yce[imax_y]-yce[imin_y]), strokecolor=:white, strokewidth=2, color=:transparent)
+        # st = 15
+        # cm.arrows2d!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], tiplength = 0, lengthscale=0.02, tipwidth=1, color=:white)
+        # cm.Colorbar(fig[1,2], hm, label="τII [Pa]")
+        # display(fig)
+    end
 
-    # display(to)
+    display(to)
 
     fig = cm.Figure()
     ax  = cm.Axis(fig[1,1], aspect=cm.DataAspect())
@@ -768,17 +777,18 @@ let
 
     τ_cart .= τstrong * sqrt.(((δ^2 - 1) * cos.(2 .* θ).^2 .+ 1) / (δ^2))
 
-    # st = 5
-    # fig   = cm.Figure()
-    # ax    = cm.Axis(fig[1,1], xlabel= "θ [°]", ylabel="τII [-]")
-    # cm.lines!(ax, θ*180/π, τ_cart_lay, label="Layering 2D")
+    # cm.with_theme(cm.theme_latexfonts()) do
+    # fig   = cm.Figure(fontsize=15)
+    # ax    = cm.Axis(fig[1,1], xlabel= cm.L"$\theta$ [$^{\circ}$]", ylabel=cm.L"$\tau_{II}$ [-]")
+    # cm.lines!(ax, θ*180/π, τ_cart_lay, label="Layering")
     # cm.lines!(ax, θ*180/π, τ_cart_trf2d, label="Transformation 2D")
-    # cm.lines!(ax, θ*180/π, τ_cart_trf0d, label="Transformation 0D")
-    # cm.scatter!(ax, θ[1:st:end]*180/π, τ_cart[1:st:end], label="Expression", markersize=15)
-    # cm.scatter!(ax, θ[3:st:end]*180/π, τ_cart_ana[3:st:end], label="Analytical 0D", marker=:utriangle, markersize=15)
     # cm.lines!(ax, θ*180/π, τstrong*ones(size(θ)), color=:gray, linestyle=:dash, label="End-Member (Biot et al., 1965)")
-    # cm.lines!(ax, θ*180/π, τweak*ones(size(θ)), color=:gray, linestyle=:dash)
-    # # cm.Legend(fig[2,1], framevisible=false, "τII (δ ≈ $(round(δ, digits=1)))", orientation=:horizontal)
+    # cm.lines!(ax, θ*180/π, τweak*ones(size(θ)), color=:gray, linestyle=:dash, label="End-Member (Biot et al., 1965)")
+    # cm.scatter!(ax, θ[1:6:end]*180/π, τ_cart[1:6:end], label="Expression", markersize=10)
+    # cm.scatter!(ax, θ[1:10:end]*180/π, τ_cart_trf0d[1:10:end], label="Transformation 0D",  markersize=10, color=cm.Cycled(2))
+    # cm.scatter!(ax, θ[1:8:end]*180/π, τ_cart_ana[1:8:end], label="Analytical", marker=:utriangle, markersize=10, color=cm.Cycled(3))
+    # cm.Legend(fig[2,1], ax, framevisible=false, orientation=:horizontal, unique=true, nbanks=3, cm.L"$\tau_{II}$    ($δ \approx$ %$(round(Int,δ)))")
     # display(fig)
+    # end
 
 end
