@@ -461,12 +461,35 @@ function StressVector_div!(ε̇, Dkk, P0, materials, phases, Δ)
     return τ, η, λ̇, τII
 end
 
-function StressVector_phase_ratios!(ε̇, Dkk, P0, materials, phases, Δ) 
-    η, λ̇, P, τII = LocalRheology_phase_ratios(ε̇, Dkk, P0, materials, phases, Δ)
-    τ       = @SVector([2 * η * ε̇[1],
-                        2 * η * ε̇[2],
-                        2 * η * ε̇[3],
-                                  P])
+function StressVector_phase_ratios!(ε̇, Dkk, P0, materials, phase_ratios, Δ) 
+    η, λ̇, P, τII = LocalRheology_phase_ratios(ε̇, Dkk, P0, materials, phase_ratios, Δ)
+
+    nphases = length(materials.n)
+    θ, δ = 0.0, 0.0
+    for phase = 1:nphases
+        θp = materials.θ[phase]
+        δp = materials.δ[phase]
+        θ += phase_ratios[phase] * θp
+        δ += phase_ratios[phase] * δp
+    end
+    
+    # Transformation from cartesian to material coordinates
+    Q         = @SMatrix([cos(θ) sin(θ); -sin(θ) cos(θ)])
+    ε̇_tensor  = @SMatrix([ε̇[1] ε̇[3]; ε̇[3] ε̇[2]])
+    ε̇_mat     = Q * ε̇_tensor * Q'
+
+    # calculate stress in material coordinates
+    τ_mat_vec = @SVector([2 * η   * ε̇_mat[1,1],
+                    2 * η   * ε̇_mat[2,2],
+                    2 * η/δ * ε̇_mat[1,2]])
+
+    # convert stress to cartesian coordinates
+    τ_mat  = @SMatrix([τ_mat_vec[1] τ_mat_vec[3]; τ_mat_vec[3] τ_mat_vec[2]])
+    τ_cart = Q' * τ_mat * Q
+    τ      = @SVector([τ_cart[1,1], 
+                       τ_cart[2,2],
+                       τ_cart[1,2],
+                                P])
     return τ, η, λ̇, τII
 end
 

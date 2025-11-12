@@ -213,20 +213,25 @@ end
     V       = (x  = zeros(size_x...), y  = zeros(size_y...))
     Vi      = (x  = zeros(size_x...), y  = zeros(size_y...))
     η       = (c  =  ones(size_c...), v  =  ones(size_v...) )
+    G       = (c  =  ones(size_c...), v  =  ones(size_v...) )
+    β       = (c  =  ones(size_c...),)
     λ̇       = (c  = zeros(size_c...), v  = zeros(size_v...) )
-    ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
+    ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
-    τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
+    τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
+    
     Pt      = zeros(size_c...)
     Pti     = zeros(size_c...)
     Pt0     = zeros(size_c...)
-    ΔPt     = zeros(size_c...)
+    ΔPt     = (c=zeros(size_c...), Vx = zeros(size_x...), Vy = zeros(size_y...))
+
     Dc      =  [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)]
     Dv      =  [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)]
     𝐷       = (c = Dc, v = Dv)
     D_ctl_c =  [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)]
     D_ctl_v =  [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)]
     𝐷_ctl   = (c = D_ctl_c, v = D_ctl_v)
+
     τII     = ones(size_c...)
     ε̇II     = ones(size_c...)
 
@@ -238,6 +243,8 @@ end
     xce = LinRange(-L.x/2-Δ.x/2, L.x/2+Δ.x/2, nc.x+2)
     yce = LinRange(-L.y/2-Δ.y/2, L.y/2+Δ.y/2, nc.y+2)
     phases = (c= ones(Int64, size_c...), v= ones(Int64, size_v...))  # phase on velocity points
+    phase_ratios = (center = [@MVector(zeros(3)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)],
+                    vertex = [@MVector(zeros(3)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)])
 
     # Only account for the subdomain
     imin_x = argmin(abs.(xce .+ 0.3))
@@ -263,6 +270,19 @@ end
     BC.Vy[inx_Vy, end-1 ] .= (type.Vy[inx_Vy,   end ] .== :Neumann_normal) .* D_BC[2,2]
     BC.Vy[     2, iny_Vy] .= (type.Vy[     2, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[    2, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[1]   .+ D_BC[2,2]*yv)
     BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
+
+    # Set material geometry 
+    for i in axes(phase_ratios.center,1), j in axes(phase_ratios.center,2)
+        phase_ratios.center[i,j][1] = 1.0
+    end
+    for i in axes(phase_ratios.vertex,1), j in axes(phase_ratios.vertex,2)
+        phase_ratios.vertex[i,j][1] = 1.0
+    end
+
+    # Set bulk and shear moduli
+    G.c .= materials.G[1]
+    G.v .= materials.G[1]
+    β.c .= materials.β[1]
 
     #--------------------------------------------#
 
@@ -292,10 +312,10 @@ end
             #--------------------------------------------#
             # Residual check        
             @timeit to "Residual" begin
-                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
-                ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
-                ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-                ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, G, β, V, Pt, Pt0, ΔPt, type, BC, materials, phase_ratios, Δ)
+                ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, β, materials, number, type, BC, nc, Δ) 
+                ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, G, materials, number, type, BC, nc, Δ)
+                ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, G, materials, number, type, BC, nc, Δ)
             end
 
             err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
@@ -310,9 +330,9 @@ end
             #--------------------------------------------#
             # Assembly
             @timeit to "Assembly" begin
-                AssembleContinuity2D!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-                AssembleMomentum2D_x!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-                AssembleMomentum2D_y!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+                AssembleContinuity2D!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, β, materials, number, pattern, type, BC, nc, Δ)
+                AssembleMomentum2D_x!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, G, materials, number, pattern, type, BC, nc, Δ)
+                AssembleMomentum2D_y!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, G, materials, number, pattern, type, BC, nc, Δ)
             end
 
             #--------------------------------------------# 
@@ -333,14 +353,14 @@ end
 
             #--------------------------------------------#
             # Line search & solution update
-            @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+            @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, G, β, 𝐷, 𝐷_ctl, number, type, BC, materials, phase_ratios, nc, Δ)
             UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
-            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
+            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, G, β, V, Pt, Pt0, ΔPt, type, BC, materials, phase_ratios, Δ)
 
         end
 
         # Update pressure
-        Pt .+= ΔPt 
+        Pt .+= ΔPt.c 
 
         #--------------------------------------------#
 
@@ -464,7 +484,7 @@ end
 
     #--------------------------------------------#
     # Intialise field
-    nmark = (x = nmpc.x * nc.x, y = nmpc.y * nc.y)
+    nmark = (x = nmpc.x * (nc.x+2), y = nmpc.y * (nc.y+2))
     L     = (x=1.0, y=1.0)
     Δ     = (x=L.x/nc.x, y=L.y/nc.y, t = Δt0)
     Δm    = (x=L.x/nmark.x, y=L.y/nmark.y)
@@ -474,7 +494,7 @@ end
     R       = (x  = zeros(size_x...), y  = zeros(size_y...), p  = zeros(size_c...))
     V       = (x  = zeros(size_x...), y  = zeros(size_y...))
     Vi      = (x  = zeros(size_x...), y  = zeros(size_y...))
-    η       = (c  =  ones(size_c...), v  =  ones(size_v...), m = ones(nmark.x, nmark.y))
+    η       = (c  =  ones(size_c...), v  =  ones(size_v...) )
     G       = (c  =  ones(size_c...), v  =  ones(size_v...) )
     β       = (c  =  ones(size_c...),)
     λ̇       = (c  = zeros(size_c...), v  = zeros(size_v...) )
@@ -506,8 +526,8 @@ end
     yce = LinRange(-L.y/2-Δ.y/2, L.y/2+Δ.y/2, nc.y+2)
     xve  = LinRange(-L.x/2-Δ.x, L.x/2+Δ.x, nc.x+3)
     yve  = LinRange(-L.y/2-Δ.y, L.y/2+Δ.y, nc.y+3)
-    xm  = LinRange(-L.x/2+Δm.x/2, L.x/2-Δm.x/2, nmark.x)
-    ym  = LinRange(-L.y/2+Δm.y/2, L.y/2-Δm.y/2, nmark.y)
+    xm  = LinRange(-L.x/2-Δ.x+Δm.x/2, L.x/2+Δ.x-Δm.x/2, nmark.x)
+    ym  = LinRange(-L.y/2-Δ.y+Δm.y/2, L.y/2+Δ.y-Δm.y/2, nmark.y)
     phases       = (c= ones(Int64, size_c...), v= ones(Int64, size_v...), m= ones(Int64, nmark.x, nmark.y))  # phase on velocity points
     phase_ratios = (center = [@MVector(zeros(3)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)],
                     vertex = [@MVector(zeros(3)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)])
@@ -549,13 +569,13 @@ end
                 phases.m[k, l] = 2
             end
 
-            i = Int64(ceil((xm[k]-xce[1]) / Δ.x + 0.5))
-            j = Int64(ceil((ym[l]-yce[1]) / Δ.y + 0.5))
+            i = Int64(ceil((xm[k]-xve[1]) / Δ.x))
+            j = Int64(ceil((ym[l]-yve[1]) / Δ.y))
             mp.c[i,j] += 1
 
             # determine indices of grid vertex
-            iv = Int64(ceil((xm[k]-xce[1]) / Δ.x + 1.0))
-            jv = Int64(ceil((ym[l]-yce[1]) / Δ.y + 1.0))
+            iv = Int64(ceil((xm[k]-xve[1]) / Δ.x + 0.5))
+            jv = Int64(ceil((ym[l]-yve[1]) / Δ.y + 0.5))
             mp.v[iv,jv] += 1
 
             MarkerWeight_phase!(phase_ratios.center[i,j],   phase_w.center[i,j],   xce[i],  yce[j], xm[k],  ym[l], Δ, materials, phases.m[k,l])
@@ -563,20 +583,29 @@ end
         end
         PhaseRatios!(phase_ratios, phase_w, materials)
     else
+        for i in axes(phase_ratios.center,1), j in axes(phase_ratios.center,2)
+            phase_ratios.center[i,j][1] = 1.0
+        end
+        for i in axes(phase_ratios.vertex,1), j in axes(phase_ratios.vertex,2)
+            phase_ratios.vertex[i,j][1] = 1.0
+        end
+
         for i in inx_c, j in iny_c   # loop on centroids
             𝐱 = @SVector([xc[i-1], yc[j-1]])
             isin = inside(𝐱, layering)
             if isin 
-                phases.c[i, j] = 2
-            end 
+                phase_ratios.center[i,j][1] = 0.0
+                phase_ratios.center[i,j][2] = 1.0
+            end
         end
 
         for i in inx_v, j in iny_v  # loop on vertices
             𝐱 = @SVector([xv[i-1], yv[j-1]])
             isin = inside(𝐱, layering)
             if isin 
-                phases.v[i, j] = 2
-            end  
+                phase_ratios.vertex[i,j][1] = 0.0
+                phase_ratios.vertex[i,j][2] = 1.0
+            end
         end
     end
     # Set bulk and shear moduli
@@ -647,7 +676,7 @@ end
             # Direct-iterative solver
             fu   = -r[1:size(𝐊,1)]
             fp   = -r[size(𝐊,1)+1:end]
-            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:chol,  ηb=1e4, niter_l=10, ϵ_l=1e-10)
+            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=factorization,  ηb=1e3, niter_l=10, ϵ_l=1e-9)
             dx[1:size(𝐊,1)]     .= u
             dx[size(𝐊,1)+1:end] .= p
 
@@ -682,27 +711,27 @@ end
             σ1.v[i]   = σp[1]
         end
 
-        # fig = cm.Figure()
-        # ax  = cm.Axis(fig[1,1], aspect=cm.DataAspect())
-        # hm  = cm.heatmap!(ax, xc, yc,  τII[inx_c,iny_c], colormap=:bluesreds)
-        # cm.poly!(ax, cm.Rect(xce[imin_x], yce[imin_y], xce[imax_x]-xce[imin_x], yce[imax_y]-yce[imin_y]), strokecolor=:white, strokewidth=2, color=:transparent)
-        # st = 15
-        # cm.arrows2d!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], tiplength = 0, lengthscale=0.02, tipwidth=1, color=:white)
-        # cm.Colorbar(fig[1,2], hm, label="τII [Pa]")
-        # display(fig)
+        fig = cm.Figure()
+        ax  = cm.Axis(fig[1,1], aspect=cm.DataAspect())
+        hm  = cm.heatmap!(ax, xc, yc,  τII[inx_c,iny_c], colormap=:bluesreds)
+        cm.poly!(ax, cm.Rect(xce[imin_x], yce[imin_y], xce[imax_x]-xce[imin_x], yce[imax_y]-yce[imin_y]), strokecolor=:white, strokewidth=2, color=:transparent)
+        st = 15
+        cm.arrows2d!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], tiplength = 0, lengthscale=0.02, tipwidth=1, color=:white)
+        cm.Colorbar(fig[1,2], hm, label="τII [Pa]")
+        display(fig)
     end
 
     display(to)
 
-    fig = cm.Figure()
-    ax  = cm.Axis(fig[1,1], aspect=cm.DataAspect())
-    hm  = cm.heatmap!(ax, xce, yce,  mp.c, colormap=:bluesreds)
-    cm.Colorbar(fig[1,2], hm)
+    # fig = cm.Figure()
+    # ax  = cm.Axis(fig[1,1], aspect=cm.DataAspect())
+    # hm  = cm.heatmap!(ax, xce, yce,  mp.c, colormap=:bluesreds)
+    # cm.Colorbar(fig[1,2], hm)
     
-    ax  = cm.Axis(fig[2,1], aspect=cm.DataAspect())
-    hm  = cm.heatmap!(ax, xv, yv, mp.v, colormap=:bluesreds)
-    cm.Colorbar(fig[2,2], hm)
-    display(fig)
+    # ax  = cm.Axis(fig[2,1], aspect=cm.DataAspect())
+    # hm  = cm.heatmap!(ax, xv, yv, mp.v, colormap=:bluesreds)
+    # cm.Colorbar(fig[2,2], hm)
+    # display(fig)
 
     return mean(τII[inner_x, inner_y])
 
@@ -722,15 +751,15 @@ let
          @SMatrix( [1 0; 0 -1] ),
     ]
 
-    nc = (x = 5, y = 5)
-    nmpc = (x = 4, y = 4)
+    nc = (x = 200, y = 200)
+    nmpc = (x = 8, y = 8)
 
     # Discretise angle of layer 
-    nθ         = 1
-    # θ          = LinRange(0, π, nθ)
-    θ = 30
+    nθ         = 30
+    θ          = LinRange(0, π, nθ)
     τ_cart     = zeros(nθ)
     τ_cart_lay = zeros(nθ)
+    τ_cart_laym = zeros(nθ)
     τ_cart_trf0d = zeros(nθ)
     τ_cart_trf2d = zeros(nθ)
     τ_cart_ana = zeros(nθ)
@@ -758,10 +787,11 @@ let
             perturb_width=1.0
         )
 
-        τ_cart_lay[iθ] = main( nc, layering, BCs[1], D_BCs[1], :chol, η1, η2; useMarkers=true, nmpc=nmpc)
+        τ_cart_lay[iθ]   = main( nc, layering, BCs[1], D_BCs[1], :chol, η1, η2; useMarkers=false, nmpc)
+        τ_cart_laym[iθ]  = main( nc, layering, BCs[1], D_BCs[1], :chol, η1, η2; useMarkers=true, nmpc)
         τ_cart_trf0d[iθ] = ViscousRheology(θ[iθ], ηn, δ, D_BCs[1])
-        # τ_cart_trf2d[iθ] = anisotropic(nc, BCs[1], D_BCs[1], :chol, ηn, δ, θ[iθ])
-        τ_cart_ana[iθ] = Analytical(θ[iθ], ηn, δ, D_BCs[1])
+        τ_cart_trf2d[iθ] = anisotropic(nc, BCs[1], D_BCs[1], :chol, ηn, δ, θ[iθ])
+        τ_cart_ana[iθ]   = Analytical(θ[iθ], ηn, δ, D_BCs[1])
 
     end
 
@@ -777,18 +807,19 @@ let
 
     τ_cart .= τstrong * sqrt.(((δ^2 - 1) * cos.(2 .* θ).^2 .+ 1) / (δ^2))
 
-    # cm.with_theme(cm.theme_latexfonts()) do
-    # fig   = cm.Figure(fontsize=15)
-    # ax    = cm.Axis(fig[1,1], xlabel= cm.L"$\theta$ [$^{\circ}$]", ylabel=cm.L"$\tau_{II}$ [-]")
-    # cm.lines!(ax, θ*180/π, τ_cart_lay, label="Layering")
-    # cm.lines!(ax, θ*180/π, τ_cart_trf2d, label="Transformation 2D")
-    # cm.lines!(ax, θ*180/π, τstrong*ones(size(θ)), color=:gray, linestyle=:dash, label="End-Member (Biot et al., 1965)")
-    # cm.lines!(ax, θ*180/π, τweak*ones(size(θ)), color=:gray, linestyle=:dash, label="End-Member (Biot et al., 1965)")
-    # cm.scatter!(ax, θ[1:6:end]*180/π, τ_cart[1:6:end], label="Expression", markersize=10)
-    # cm.scatter!(ax, θ[1:10:end]*180/π, τ_cart_trf0d[1:10:end], label="Transformation 0D",  markersize=10, color=cm.Cycled(2))
-    # cm.scatter!(ax, θ[1:8:end]*180/π, τ_cart_ana[1:8:end], label="Analytical", marker=:utriangle, markersize=10, color=cm.Cycled(3))
-    # cm.Legend(fig[2,1], ax, framevisible=false, orientation=:horizontal, unique=true, nbanks=3, cm.L"$\tau_{II}$    ($δ \approx$ %$(round(Int,δ)))")
-    # display(fig)
-    # end
+    cm.with_theme(cm.theme_latexfonts()) do
+    fig   = cm.Figure(fontsize=15)
+    ax    = cm.Axis(fig[1,1], xlabel= cm.L"$\theta$ [$^{\circ}$]", ylabel=cm.L"$\tau_{II}$ [-]")
+    cm.lines!(ax, θ*180/π, τ_cart_trf2d, label="Transformation 2D", color=cm.Cycled(2))
+    cm.lines!(ax, θ*180/π, τ_cart_lay, label="Layering", color=cm.Cycled(1))
+    cm.lines!(ax, θ*180/π, τ_cart_laym, label="Layering (Markers)", color=cm.Cycled(3))
+    cm.lines!(ax, θ*180/π, τstrong*ones(size(θ)), color=:gray, linestyle=:dash, label="End-Member (Biot et al., 1965)")
+    cm.lines!(ax, θ*180/π, τweak*ones(size(θ)), color=:gray, linestyle=:dash, label="End-Member (Biot et al., 1965)")
+    cm.scatter!(ax, θ[1:10:end]*180/π, τ_cart_trf0d[1:10:end], label="Transformation 0D",  markersize=10, color=cm.Cycled(2))
+    cm.scatter!(ax, θ[1:6:end]*180/π, τ_cart[1:6:end], label="Expression", markersize=10)
+    cm.scatter!(ax, θ[1:8:end]*180/π, τ_cart_ana[1:8:end], label="Analytical", marker=:utriangle, markersize=10, color=cm.Cycled(3))
+    cm.Legend(fig[2,1], ax, framevisible=false, orientation=:horizontal, unique=true, nbanks=4, cm.L"$\tau_{II}$    ($δ \approx$ %$(round(Int,δ)))")
+    display(fig)
+    end
 
 end
