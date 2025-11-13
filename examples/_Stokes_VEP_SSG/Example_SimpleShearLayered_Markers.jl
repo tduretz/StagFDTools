@@ -130,6 +130,7 @@ end
     materials = ( 
         compressible = false,
         plasticity   = :none,
+        phase_avg    = :none,
         n    = [1.0    1.0  1.0  ],
         η0   = [ηn     1e-1 1e-1 ], 
         G    = [1e6    1e6  1e6  ],
@@ -409,6 +410,7 @@ end
     materials = ( 
         compressible = false,
         plasticity   = :none,
+        phase_avg    = :geometric,
         n    = [1.0    1.0  1.0  ],
         η0   = [η1     η2   1e-1 ], 
         G    = [1e6    1e6  1e6  ],
@@ -752,7 +754,7 @@ let
     ]
 
     nc = (x = 200, y = 200)
-    nmpc = (x = 8, y = 8)
+    nmpc = (x = 4, y = 4)
 
     # Discretise angle of layer 
     nθ         = 30
@@ -766,7 +768,7 @@ let
 
     #  Anisotropy parameters
     η2 = 2.0
-    m  = 10
+    m  = 100
     η1 = η2 / m
 
     α2 = 0.5
@@ -780,7 +782,7 @@ let
 
         layering = Layering(
             (0*0.25, 0.025), 
-            0.1, 
+            0.15, 
             α2; 
             θ = θ[iθ],  
             perturb_amp=0*1.0, 
@@ -822,4 +824,8 @@ let
     display(fig)
     end
 
+    # Calculate sum of relative error over all angles
+    ϵτ_lay  = mean(abs.(τ_cart_lay  .- τ_cart_trf0d) ./ τ_cart_trf0d) * 100
+    ϵτ_laym = mean(abs.(τ_cart_laym .- τ_cart_trf0d) ./ τ_cart_trf0d) * 100
+    @show ϵτ_lay, ϵτ_laym
 end

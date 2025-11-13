@@ -226,6 +226,40 @@ function StrainRateTrial(τII, G, Δt, B, n)
     return ε̇II_trial
 end
 
+function PhaseAverage_summand(a, phase_ratio, averaging)
+    # summand of phase j for phase averaging
+    if averaging === :harmonic && a != 0.0
+        # Hⱼ = w′ᵢ * aᵢ⁻¹
+        a_j = phase_ratio / a
+    elseif averaging === :geometric && a > 0.0
+        # Gⱼ = w′ᵢ * ln(aᵢ)
+        a_j = phase_ratio * log(a)
+    else # arithmetic
+        # Aⱼ =w′ᵢ * aᵢ
+        a_j = phase_ratio * a
+
+        # error("Unsupported phase averaging type: $averaging_type. Supported types are :arithmetic, :harmonic, :geometric.")
+    end
+    return a_j
+end
+
+function PhaseAverage(a_average, averaging)
+    # finalize phase averaging
+    if averaging === :harmonic && a_average != 0.0
+        # H = (Σⁿᵢ₌₁ w′ᵢ * aᵢ⁻¹)⁻¹ = (Σⁿᵢ₌₁ Hⱼ)⁻¹
+        a_avg = 1 / a_average
+    elseif averaging === :geometric
+        # G = exp(Σⁿᵢ₌₁ w′ᵢ * ln(aᵢ)) = exp(Σⁿᵢ₌₁ Gⱼ)
+        a_avg = exp(a_average)
+    else # arithmetic
+        # A = Σⁿᵢ₌₁ w′ᵢ * aᵢ = Σⁿᵢ₌₁ Aⱼ
+        a_avg = a_average
+
+        # error("Unsupported phase averaging type: $averaging_type. Supported types are :arithmetic, :harmonic, :geometric.")
+    end
+    return a_avg
+end
+
 function LocalRheology(ε̇, Dkk, P0, materials, phases, Δ)
 
     eps0 = 0.0*1e-17
@@ -358,6 +392,7 @@ end
 function LocalRheology_phase_ratios(ε̇, Dkk, P0, materials, phase_ratios, Δ)
 
     nphases = length(materials.n)
+    phase_avg = materials.phase_avg
 
     eps0 = 1e-17
 
@@ -418,11 +453,16 @@ function LocalRheology_phase_ratios(ε̇, Dkk, P0, materials, phase_ratios, Δ)
         ηvep = τII/(2*ε̇II)
 
         # Phase averaging
-        η_average += phase_ratios[phases] * ηvep
-        P_average += phase_ratios[phases] * P
-        λ̇_average += phase_ratios[phases] * λ̇
-        τ_average += phase_ratios[phases] * τII
+        η_average += PhaseAverage_summand(ηvep, phase_ratios[phases], phase_avg)
+        P_average += PhaseAverage_summand(P   , phase_ratios[phases], phase_avg)
+        λ̇_average += PhaseAverage_summand(λ̇   , phase_ratios[phases], phase_avg)
+        τ_average += PhaseAverage_summand(τII , phase_ratios[phases], phase_avg)
     end
+
+    η_average = PhaseAverage(η_average, phase_avg)
+    P_average = PhaseAverage(P_average, phase_avg)
+    λ̇_average = PhaseAverage(λ̇_average, phase_avg)
+    τ_average = PhaseAverage(τ_average, phase_avg)
 
     return η_average, λ̇_average, P_average, τ_average
 end
@@ -469,9 +509,13 @@ function StressVector_phase_ratios!(ε̇, Dkk, P0, materials, phase_ratios, Δ)
     for phase = 1:nphases
         θp = materials.θ[phase]
         δp = materials.δ[phase]
-        θ += phase_ratios[phase] * θp
-        δ += phase_ratios[phase] * δp
+
+        θ += PhaseAverage_summand(θp, phase_ratios[phase], materials.phase_avg)
+        δ += PhaseAverage_summand(δp, phase_ratios[phase], materials.phase_avg)
     end
+
+    θ = PhaseAverage(θ, materials.phase_avg)
+    δ = PhaseAverage(δ, materials.phase_avg)
     
     # Transformation from cartesian to material coordinates
     Q         = @SMatrix([cos(θ) sin(θ); -sin(θ) cos(θ)])
