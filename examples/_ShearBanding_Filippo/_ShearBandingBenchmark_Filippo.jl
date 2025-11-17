@@ -4,11 +4,8 @@ using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 using TimerOutputs
 
-@views function main(nc, resolution, curr_res)
+@views function main(nc)
     #--------------------------------------------#
-
-    # Resolution
-    max_res = maximum(resolution)
 
     # Boundary loading type
     config = :free_slip
@@ -24,7 +21,7 @@ using TimerOutputs
         G    = [1.0    0.25  ],
         C    = [1.74e-4    1.74e-4  ],
         ϕ    = [30.    30.  ],
-        ηvp  = [2.5e2    0.  ],
+        ηvp  = [2.5e2    2.5e2  ],
         β    = [0.5   0.5 ],
         ψ    = [10.0    10.0  ],
         B    = [0.0    0.0  ],
@@ -53,6 +50,7 @@ using TimerOutputs
     inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, inx_v, iny_v, size_x, size_y, size_c, size_v = Ranges(nc)
 
     #--------------------------------------------#
+    
     # Boundary conditions
 
     # Define node types and set BC flags
@@ -64,6 +62,7 @@ using TimerOutputs
     set_boundaries_template!(type, config, nc)
 
     #--------------------------------------------#
+
     # Equation numbering
     number = Fields(
         fill(0, size_x),
@@ -73,6 +72,7 @@ using TimerOutputs
     Numbering!(number, type, nc)
 
     #--------------------------------------------#
+
     # Stencil extent for each block matrix
     pattern = Fields(
         Fields(@SMatrix([1 1 1; 1 1 1; 1 1 1]),                 @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([1 1 1; 1 1 1])), 
@@ -97,6 +97,7 @@ using TimerOutputs
     r  = zeros(nVx + nVy + nPt)
 
     #--------------------------------------------#
+
     # Intialise field
     L   = (x=1.0, y=0.7)
     Δ   = (x=L.x/nc.x, y=L.y/nc.y, t = Δt0)
@@ -150,23 +151,26 @@ using TimerOutputs
     end
 
     # Set material geometry 
-    #@views phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
-    #@views phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= 0.1^2] .= 2
-
-        # Set material geometry 
     ccord = (x=-L.x/2, y=-L.y/2)
     @views phases.c[inx_c, iny_c][((xc.-ccord.x).^2 .+ ((yc').-ccord.y).^2) .<= (25e-4)] .= 2
     @views phases.v[inx_v, iny_v][((xv.-ccord.x).^2 .+ ((yv').-ccord.y).^2) .<= (25e-4)] .= 2
 
     #--------------------------------------------#
 
+    # Post-processing initialisation
     rvec = zeros(length(α))
     err  = (x = zeros(niter), y = zeros(niter), p = zeros(niter))
+    ε0 = zeros(nc.x,nc.y)
+    ε_acc = zeros(nc.x,nc.y)
     to   = TimerOutput()
+    strain_evo = true
+    if strain_evo
+       z7 = plot(xlabel = "x", ylabel = "εᵢᵢ[x 10⁻⁹]", title = "Accumulated strain")
+    end
 
     #--------------------------------------------#
 
-    anim = @animate for it=1:nt
+    for it=1:nt
 
         @printf("Step %04d\n", it)
         fill!(err.x, 0e0)
@@ -178,6 +182,7 @@ using TimerOutputs
         τ0.yy .= τ.yy
         τ0.xy .= τ.xy
         Pt0   .= Pt
+        ε0    .= ε_acc
 
         for iter=1:niter
 
@@ -257,19 +262,60 @@ using TimerOutputs
 
         @show (3/materials.β[1] - 2*materials.G[1])/(2*(3/materials.β[1] + 2*materials.G[1]))
 
+        if strain_evo 
+            ## Accumulated strain 
+        ε1 = ε̇II./Δ.t
+        ε_acc = ε1 + ε0
+
+        # Angle of the section: Roscoe angle
+        θ = 45. - (materials.ϕ[1] + materials.ψ[1])/4
+        θrad = deg2rad(θ)
+
+        # Section initialisation
+        lenght = Δ.y*nc.y
+        C = zeros(2,Int64(round(lenght/Δ.y)))
+        ind′ = zeros(Int,2,Int64(round(lenght/Δ.y)))
+        C[1,:] .= L.x*0.5 - L.x*0.5 
+        C[2,:]  = LinRange(-lenght*0.5, lenght*0.5,Int64(round(lenght/Δ.y)))
+
+        # Rotation matrix
+        Rot = [cos(θrad) -sin(θrad); cos(θrad) sin(θrad)]
+    
+        # Rotate the section to be normal to shear band angle
+        C′ = Rot *C
+
+        # Find indices of the line points
+        for i = 1 : Int64(round(lenght/Δ.y))
+            ind′[1,i] = Int64(round(C′[1,i]/Δ.x + nc.x*0.5 + 0.5))
+            ind′[2,i] = Int64(round(C′[1,i]/Δ.y + nc.y*0.5 + 0.5))
+        end
+
+        cross_sec = map(CartesianIndex, ind′[2,:], ind′[1,:])
+        ε_prof = ε_acc[cross_sec]
+
+        # Plot time evolution
+        plot!(z7,C[2,:],(ε_prof).*10e9, label = "$(it*Δ.t*10e-5) s [x 10⁵]")
+        display(z7)
+        end
+
     end
     
     # -----------------------------------------------------------------
-    # Strain rate profile across the shear band
-    
-    ε̇xyc = av2D(ε̇.xy)
-    ε̇II  = sqrt.( 0.5.*(ε̇.xx[inx_c,iny_c].^2 + ε̇.yy[inx_c,iny_c].^2 + (-ε̇.xx[inx_c,iny_c]-ε̇.yy[inx_c,iny_c]).^2) .+ ε̇xyc[inx_c,iny_c].^2 )
+    # Profiles across the shear band
+        
+    ## Strain rate
+    ε̇xyc  = av2D(ε̇.xy)
+    ε̇II   = sqrt.( 0.5.*(ε̇.xx[inx_c,iny_c].^2 + ε̇.yy[inx_c,iny_c].^2 + (-ε̇.xx[inx_c,iny_c]-ε̇.yy[inx_c,iny_c]).^2) .+ ε̇xyc[inx_c,iny_c].^2 )
 
-    # Roscoe angle
+    ## Accumulated strain 
+    ε1 = ε̇II./Δ.t
+    ε_acc = ε1 + ε0
+
+    # Angle of the section: Roscoe angle
     θ = 45. - (materials.ϕ[1] + materials.ψ[1])/4
     θrad = deg2rad(θ)
 
-    #Initialisation
+    # Section initialisation
     lenght = Δ.y*nc.y
     C = zeros(2,Int64(round(lenght/Δ.y)))
     ind′ = zeros(Int,2,Int64(round(lenght/Δ.y)))
@@ -289,10 +335,9 @@ using TimerOutputs
     end
 
     cross_sec = map(CartesianIndex, ind′[2,:], ind′[1,:])
-    ε_prof = ε̇II[cross_sec]
-    # @show ε_prof
+    ε_prof = ε_acc[cross_sec]
 
-    # see the section:
+    # # To see the section:
     # z6 = plot!(z3, C′[1,:], C′[2,:], color=:white, linewidth=2, legend=false)
     # -------------------------------------------------------------------
 
@@ -300,19 +345,23 @@ using TimerOutputs
     return ε_prof, C
 end
 
-# Main ---------------------------------------------------------------------
+# _____________________________________________________________________
+# ---------------------------------------------------------------------
+# Main
 
-resolution = [50,100,200,400]
-z5 = plot(xlabel="x", ylabel="log₁₀(ε_{II})", size = (700,300), title = "ε profiles across shear bands" )
+resolution = [100]
+z5 = plot(xlabel="x", ylabel="ε_{II} [x 10⁻⁹]", size = (700,300), title = "Accumulated ε across shear bands" )
 
-for i = 1:length(resolution)
+for i in eachindex(resolution)
 
-    curr_res = i
     res = resolution[i]
 
-    (ε_prof, C) = main((x = resolution[i], y = resolution[i]), resolution,curr_res)
-    plot!(z5,C[2,:],log10.(ε_prof), label="$(res)²")
+    (ε_prof, C) = main((x = resolution[i], y = resolution[i]))
+    plot!(z5,C[2,:],(ε_prof).*10e9, label="$(res)²")
 
 end
 
 display(z5)
+
+# ---------------------------------------------------------------------
+# _____________________________________________________________________
