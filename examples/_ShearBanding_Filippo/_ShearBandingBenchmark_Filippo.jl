@@ -4,7 +4,49 @@ using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 using TimerOutputs
 
-@views function main(nc)
+function section(εII, Δ, nc, materials,L)
+
+    # Angle of the section: Roscoe angle
+    θ = 45. - (materials.ϕ[1] + materials.ψ[1])/4
+    θrad = deg2rad(θ)
+
+    # Section initialisation
+    line = Δ.y*nc.y*0.5
+    C = zeros(2,Int64(round(line/Δ.y)))
+    C[1,:] .= L.x*0.5 - L.x*0.5 
+    C[2,:]  = LinRange(-line*0.5, line*0.5,Int64(round(line/Δ.y)))
+
+    # Rotation matrix
+    Rot = [cos(θrad) -sin(θrad); sin(θrad) cos(θrad)]
+
+    # Find mean for a smooth line
+    n_elem = 2
+    ε_sum  = zeros(Int64(round(line/Δ.y)))
+    for k = -n_elem:n_elem
+
+        D = C
+        D[1,:] .+= k*Δ.x
+        D′ = Rot * D
+
+        indx′ = Int64.(round.(D′[1,:]./Δ.x .+ nc.x*0.5 .+ 0.5))
+        indy′ = Int64.(round.(D′[2,:]./Δ.y .+ nc.y*0.5 .+ 0.5))
+
+        for m = 1 : Int64(round(line/Δ.y))
+            i = indx′[m]
+            j = indy′[m]
+
+            ε_sum[m] += εII[i,j]
+        end
+    end
+
+    n_val = n_elem*2+1
+    ε_prof = ε_sum./n_val
+    
+    return ε_prof, C
+
+end
+
+@views function main(nc, strain_evo)
     #--------------------------------------------#
 
     # Boundary loading type
@@ -160,12 +202,10 @@ using TimerOutputs
     # Post-processing initialisation
     rvec = zeros(length(α))
     err  = (x = zeros(niter), y = zeros(niter), p = zeros(niter))
-    ε0 = zeros(nc.x,nc.y)
-    ε_acc = zeros(nc.x,nc.y)
     to   = TimerOutput()
-    strain_evo = true
+    εII  = zeros(nc.x,nc.y)
     if strain_evo
-       z7 = plot(xlabel = "x", ylabel = "εᵢᵢ[x 10⁻⁹]", title = "Accumulated strain")
+       z7 = plot(xlabel = "x", ylabel = "εᵢᵢ", title = "Time evolution of accumulated strain")
     end
 
     #--------------------------------------------#
@@ -182,7 +222,6 @@ using TimerOutputs
         τ0.yy .= τ.yy
         τ0.xy .= τ.xy
         Pt0   .= Pt
-        ε0    .= ε_acc
 
         for iter=1:niter
 
@@ -262,106 +301,40 @@ using TimerOutputs
 
         @show (3/materials.β[1] - 2*materials.G[1])/(2*(3/materials.β[1] + 2*materials.G[1]))
 
-        if strain_evo 
-            ## Accumulated strain 
-        ε1 = ε̇II./Δ.t
-        ε_acc = ε1 + ε0
-
-        # Angle of the section: Roscoe angle
-        θ = 45. - (materials.ϕ[1] + materials.ψ[1])/4
-        θrad = deg2rad(θ)
-
-        # Section initialisation
-        lenght = Δ.y*nc.y
-        C = zeros(2,Int64(round(lenght/Δ.y)))
-        ind′ = zeros(Int,2,Int64(round(lenght/Δ.y)))
-        C[1,:] .= L.x*0.5 - L.x*0.5 
-        C[2,:]  = LinRange(-lenght*0.5, lenght*0.5,Int64(round(lenght/Δ.y)))
-
-        # Rotation matrix
-        Rot = [cos(θrad) -sin(θrad); cos(θrad) sin(θrad)]
-    
-        # Rotate the section to be normal to shear band angle
-        C′ = Rot *C
-
-        # Find indices of the line points
-        for i = 1 : Int64(round(lenght/Δ.y))
-            ind′[1,i] = Int64(round(C′[1,i]/Δ.x + nc.x*0.5 + 0.5))
-            ind′[2,i] = Int64(round(C′[1,i]/Δ.y + nc.y*0.5 + 0.5))
+        if strain_evo
+            εII .+= ε̇II.*Δ.t
+            (ε_prof, C) = section(εII, Δ, nc,materials,L)
+            plot!(z7,C[2,:],(ε_prof), label = "$(it*Δ.t*10e-5) s [x 10⁵]")
+            display(z7)
         end
-
-        cross_sec = map(CartesianIndex, ind′[2,:], ind′[1,:])
-        ε_prof = ε_acc[cross_sec]
-
-        # Plot time evolution
-        plot!(z7,C[2,:],(ε_prof).*10e9, label = "$(it*Δ.t*10e-5) s [x 10⁵]")
-        display(z7)
-        end
-
     end
-    
-    # -----------------------------------------------------------------
-    # Profiles across the shear band
-        
-    ## Strain rate
-    ε̇xyc  = av2D(ε̇.xy)
-    ε̇II   = sqrt.( 0.5.*(ε̇.xx[inx_c,iny_c].^2 + ε̇.yy[inx_c,iny_c].^2 + (-ε̇.xx[inx_c,iny_c]-ε̇.yy[inx_c,iny_c]).^2) .+ ε̇xyc[inx_c,iny_c].^2 )
 
     ## Accumulated strain 
-    ε1 = ε̇II./Δ.t
-    ε_acc = ε1 + ε0
+    ε̇xyc = av2D(ε̇.xy)
+    ε̇II  = sqrt.( 0.5.*(ε̇.xx[inx_c,iny_c].^2 + ε̇.yy[inx_c,iny_c].^2 + (-ε̇.xx[inx_c,iny_c]-ε̇.yy[inx_c,iny_c]).^2) .+ ε̇xyc[inx_c,iny_c].^2 )
+    εII .+= ε̇II.*Δ.t
 
-    # Angle of the section: Roscoe angle
-    θ = 45. - (materials.ϕ[1] + materials.ψ[1])/4
-    θrad = deg2rad(θ)
-
-    # Section initialisation
-    lenght = Δ.y*nc.y
-    C = zeros(2,Int64(round(lenght/Δ.y)))
-    ind′ = zeros(Int,2,Int64(round(lenght/Δ.y)))
-    C[1,:] .= L.x*0.5 - L.x*0.5 
-    C[2,:]  = LinRange(-lenght*0.5, lenght*0.5,Int64(round(lenght/Δ.y)))
-
-    # Rotation matrix
-    Rot = [cos(θrad) -sin(θrad); cos(θrad) sin(θrad)]
-    
-    # Rotate the section to be normal to shear band angle
-    C′ = Rot *C
-
-    # Find indices of the line points
-    for i = 1 : Int64(round(lenght/Δ.y))
-        ind′[1,i] = Int64(round(C′[1,i]/Δ.x + nc.x*0.5 + 0.5))
-        ind′[2,i] = Int64(round(C′[1,i]/Δ.y + nc.y*0.5 + 0.5))
-    end
-
-    cross_sec = map(CartesianIndex, ind′[2,:], ind′[1,:])
-    ε_prof = ε_acc[cross_sec]
-
-    # # To see the section:
-    # z6 = plot!(z3, C′[1,:], C′[2,:], color=:white, linewidth=2, legend=false)
-    # -------------------------------------------------------------------
-
+    # Obtain section normal to shear band angle
+    (ε_prof, C) = section(εII, Δ, nc, materials,L)
     display(to)
     return ε_prof, C
 end
 
 # _____________________________________________________________________
-# ---------------------------------------------------------------------
 # Main
 
-resolution = [100]
-z5 = plot(xlabel="x", ylabel="ε_{II} [x 10⁻⁹]", size = (700,300), title = "Accumulated ε across shear bands" )
+resolution = [50, 100, 150, 250]
+z5 = plot(xlabel="x", ylabel="εᵢᵢ", size = (700,300), title = "Accumulated strain across shear bands" )
 
 for i in eachindex(resolution)
 
     res = resolution[i]
+    flag = false
 
-    (ε_prof, C) = main((x = resolution[i], y = resolution[i]))
-    plot!(z5,C[2,:],(ε_prof).*10e9, label="$(res)²")
+    (ε_prof, C) = main((x = resolution[i], y = resolution[i]), flag)
+    plot!(z5,C[2,:],(ε_prof), label="$(res)²")
 
 end
 
 display(z5)
-
-# ---------------------------------------------------------------------
 # _____________________________________________________________________
