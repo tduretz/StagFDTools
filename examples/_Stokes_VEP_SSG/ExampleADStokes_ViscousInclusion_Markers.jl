@@ -4,46 +4,62 @@ using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 using TimerOutputs
 
-# function MarkerWeight(xm, x, Δx)
-#     # compute marker-grid distance and weight
-#     dst = abs(xm - x)
-#     w = 1.0 - 2 * dst / Δx
-#     return w
-# end
+function InitialiseMarkerField(nc, nmpc, L, Δ) #,noise)
+    nmark = (x = nmpc.x * (nc.x + 2), y = nmpc.y * (nc.y +2))
+    mΔ = (x = L.x/nmark.x, y = L.y/nmark.y)
+    xm = LinRange(-L.x/2-Δ.x+mΔ.x/2, L.x/2+Δ.x-mΔ.x, nmark.x)
+    ym = LinRange(-L.y/2-Δ.y+mΔ.y/2, L.y/2+Δ.y-mΔ.y, nmark.y)
+#if noise
+    #for i in eachindex(xm)
+    #    xm[i] 
+    return xm, ym
+end
 
-# function MarkerWeight_phase!(phase_ratio, phase_weight, x, y, xm, ym, Δ, materials, phase)
-#     nphases = length(materials.n)
-#     w_x = MarkerWeight(xm, x, Δ.x)
-#     w_y = MarkerWeight(ym, y, Δ.y)
-#     w = w_x * w_y
-#     for k = 1:nphases
-#         phase_ratio[k]  += (k === phase) * w
-#         phase_weight[k] += w
-#     end
-# end
-# function PhaseRatios!(phase_ratios, phase_weights, materials)
-#     nphases = length(materials.n)
-#     # centroids
-#     for i in axes(phase_ratios.center,1), j in axes(phase_ratios.center,2)
-#         #  normalize weights and assign to phase ratios
-#         for k = 1:nphases
-#             phase_ratios.center[i,j][k] = phase_ratios.center[i,j][k] / (phase_weights.center[i,j][k] == 0.0 ? 1 : phase_weights.center[i,j][k])
-#         end
-#     end
-#     # vertices
-#     for i in axes(phase_ratios.vertex,1), j in axes(phase_ratios.vertex,2)
-#         #  normalize weights and assign to phase ratios
-#         for k = 1:nphases
-#             phase_ratios.vertex[i,j][k] = phase_ratios.vertex[i,j][k] / (phase_weights.vertex[i,j][k] == 0.0 ? 1 : phase_weights.vertex[i,j][k])
-#         end
-#     end
-# end
+function MarkerWeight(xm, x, Δx)
+    # compute marker-grid distance and weight
+    dst = abs(xm - x)
+    w = 1.0 - 2 * dst / Δx
+    return w
+end
+
+function MarkerWeight_phase!(phase_ratio, phase_weight, x, y, xm, ym, Δ, materials, phase)
+    nphases = length(materials.n)
+    w_x = MarkerWeight(xm, x, Δ.x)
+    w_y = MarkerWeight(ym, y, Δ.y)
+    w = w_x * w_y
+    for k = 1:nphases
+        phase_ratio[k]  += (k === phase) * w
+        phase_weight[k] += w
+    end
+end
+function PhaseRatios!(phase_ratios, phase_weights, materials)
+    nphases = length(materials.n)
+    # centroids
+    for i in axes(phase_ratios.center,1), j in axes(phase_ratios.center,2)
+        #  normalize weights and assign to phase ratios
+        for k = 1:nphases
+            phase_ratios.center[i,j][k] = phase_ratios.center[i,j][k] / (phase_weights.center[i,j][k] == 0.0 ? 1 : phase_weights.center[i,j][k])
+        end
+    end
+    # vertices
+    for i in axes(phase_ratios.vertex,1), j in axes(phase_ratios.vertex,2)
+        #  normalize weights and assign to phase ratios
+        for k = 1:nphases
+            phase_ratios.vertex[i,j][k] = phase_ratios.vertex[i,j][k] / (phase_weights.vertex[i,j][k] == 0.0 ? 1 : phase_weights.vertex[i,j][k])
+        end
+    end
+end
 
 @views function main(BC_template, D_template)
     #--------------------------------------------#
 
+    # Intialise field
+    L   = (x=1.0, y=1.0)
+    # we need Δ.x and Δ.y
+
     # Resolution
     nc = (x = 50, y = 50)
+    nmpc = (x = 3, y =3)
 
     # Boundary loading type
     config = BC_template
@@ -126,7 +142,6 @@ using TimerOutputs
 
     #--------------------------------------------#
     # Intialise field
-    L   = (x=1.0, y=1.0)
     Δ   = (x=L.x/nc.x, y=L.y/nc.y, t = Δt0)
 
     # Allocations
@@ -173,6 +188,8 @@ using TimerOutputs
     BC.Vy[inx_Vy, end-1 ] .= (type.Vy[inx_Vy,   end ] .== :Neumann_normal) .* D_BC[2,2]
     BC.Vy[     2, iny_Vy] .= (type.Vy[     2, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[    2, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[1]   .+ D_BC[2,2]*yv)
     BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
+
+    xm, ym = InitialiseMarkerField(nc, nmpc, L, Δ)
 
     # Set material geometry 
     rad = 0.1 + 1e-13
