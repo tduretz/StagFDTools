@@ -70,13 +70,16 @@ function MatlabCheck(materials, res, nt)
     
     # 1) Import Variables
     # path = @__DIR__
-    path= "/Users/filippozarabara/Documents/HARD DISK BACKUP/PHD/Packages/StagFDTools/examples/_Stokes_VEP_SSG/_ShearBanding_Filippo/r51_vp"
+    # path= "/Users/filippozarabara/Documents/HARD DISK BACKUP/PHD/Packages/StagFDTools/examples/_Stokes_VEP_SSG/_ShearBanding_Filippo/r51_vp"
+    path= "/Users/tduretz/Downloads/"
+
     @show path
     m_res = res + 1
     tstep = nt
     name = @sprintf("TimeEvol%04d_Res%d.mat", tstep, m_res)
     filename = joinpath(path, name)
     @show filename
+    @show keys(matopen(filename))
 
     if isfile(filename)
         var = matread(filename)
@@ -90,7 +93,7 @@ function MatlabCheck(materials, res, nt)
 
         # 3) Build section across shear band 
         (m_ε_prof, m_C) = section(m_εII, m_Δ, m_nc, materials,m_L)
-        outp = (m_ε_prof, m_C, m_incr, m_Δ)
+        outp = (ε_prof=m_ε_prof, C=m_C, incr=m_incr, εII=m_εII, Δ=m_Δ)
         return outp
     else
         return nothing
@@ -103,7 +106,7 @@ end
     # Boundary loading type
     config = :free_slip
     D_BC   = @SMatrix( [ -5e-11 0.;
-                          0  5e-11 ])
+                          0  5e-11 ]) 
     bulk_rate = D_BC[4]
 
     # Material parameters
@@ -133,15 +136,15 @@ end
 
     # Time steps and bulk strain intervals
     Δt0    = 1e5
-    nt     = 100
+    nt     = 1
     if flag.strain_int
         ε_bulk = LinRange(1e-4,3e-4,5)
         d = 1
     end
 
     # Newton solver
-    niter = 1
-    ϵ_nl  = 1e-8
+    niter = 2
+    ϵ_nl  = 1e-10
     α     = LinRange(0.05, 1.0, 10)
 
     # Grid bounds
@@ -300,6 +303,9 @@ end
             err.x[iter] = @views norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
             err.y[iter] = @views norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
             err.p[iter] = @views norm(R.p[inx_c,iny_c])/sqrt(nPt)
+
+            @show  max(err.x[iter], err.y[iter], err.p[iter])
+
             max(err.x[iter], err.y[iter]) < ϵ_nl ? break : nothing
 
             #--------------------------------------------#
@@ -344,47 +350,57 @@ end
         #--------------------------------------------#
 
         (τII, ε̇II, εII) = invariants(Δ, τ, ε̇, inx_c, iny_c, εII)
-        
+
+        outp = MatlabCheck(materials, res, 1)
+
+        @show size(εII)
+        @show size(outp.εII)
+
         if flag.fields
-        z1 = heatmap(xv, yc, (V.x[inx_Vx,iny_Vx]')*1e7, aspect_ratio=1, xlim=extrema(xc), title="Vx [10⁻⁶]")
-        z2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt")
-        z3 = heatmap(xc, yc,  log10.(ε̇II)', aspect_ratio=1, xlim=extrema(xc), title="ε̇II", c=:coolwarm)
-        #z3 = heatmap(xc, yc,  log10.(εII)', aspect_ratio=1, xlim=extrema(xc), title="εII", c=:coolwarm)
-        z4 = heatmap(xc, yc,  (τII')*1e4, aspect_ratio=1, xlim=extrema(xc), title="τII e-4", c=:turbo)
-        #z1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright)
-        #z1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
-        #z1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
-        #z1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
-        display(plot(z1, z2, z3, z4, layout=(2,2)))
+            z1 = heatmap(xc, yc,  log10.(εII)', aspect_ratio=1, xlim=extrema(xc), title="εII", c=:coolwarm)
+            # z1 = heatmap(xc, yc,  η.c[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="εII", c=:coolwarm)
+            z2 = heatmap(xc, yc,  log10.(outp.εII)', aspect_ratio=1, xlim=extrema(xc), title="εII matlab", c=:coolwarm)
+            display(plot(z1, z2, layout=(2,1)))
+
+        # z1 = heatmap(xv, yc, (V.x[inx_Vx,iny_Vx]')*1e7, aspect_ratio=1, xlim=extrema(xc), title="Vx [10⁻⁶]")
+        # z2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt")
+        # z3 = heatmap(xc, yc,  log10.(ε̇II)', aspect_ratio=1, xlim=extrema(xc), title="ε̇II", c=:coolwarm)
+        # #z3 = heatmap(xc, yc,  log10.(εII)', aspect_ratio=1, xlim=extrema(xc), title="εII", c=:coolwarm)
+        # z4 = heatmap(xc, yc,  (τII')*1e4, aspect_ratio=1, xlim=extrema(xc), title="τII e-4", c=:turbo)
+        # #z1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright)
+        # #z1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
+        # #z1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
+        # #z1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
+        # display(plot(z1, z2, z3, z4, layout=(2,2)))
         end
         @show (3/materials.β[1] - 2*materials.G[1])/(2*(3/materials.β[1] + 2*materials.G[1]))
 
-        # PLot time evolution of accumulated strain
-        if flag.strain_evo
-            (ε_prof, C) = section(εII, Δ, nc,materials,L)
-            if flag.strain_int
-                cur_ε = bulk_rate*Δ.t*it
-                @show(cur_ε )
-                if cur_ε ≈ ε_bulk[d]
-                    if flag.Matlab
-                        outp = MatlabCheck(materials, res, it)
-                        if outp !== nothing
-                            (m_ε_prof, m_C, m_incr, m_Δ) = outp
-                            plot!(z8,m_C[2,:],(m_ε_prof)*1e3, label = "$(@sprintf("%0.1f", m_incr*it*1e4)) [10⁻⁴]") 
-                            plot!(z7,C[2,:],(ε_prof)*1e3, label = "$(@sprintf("%0.1f", cur_ε*1e4)) [10⁻⁴]") 
-                            display(plot(z7,z8, layout=(1,2)))
-                        end
-                    else
-                        plot!(z7,C[2,:],(ε_prof)*1e3, label = "$(@sprintf("%0.1f", cur_ε*1e4)) [10⁻⁴]")
-                        display(z7)
-                    end 
-                    d += 1
-                    if d > 5
-                        d = 5
-                    end
-                end
-            end
-        end
+        # # PLot time evolution of accumulated strain
+        # if flag.strain_evo
+        #     (ε_prof, C) = section(εII, Δ, nc,materials,L)
+        #     if flag.strain_int
+        #         cur_ε = bulk_rate*Δ.t*it
+        #         @show(cur_ε )
+        #         if cur_ε ≈ ε_bulk[d]
+        #             if flag.Matlab
+        #                 outp = MatlabCheck(materials, res, it)
+        #                 if outp !== nothing
+        #                     (m_ε_prof, m_C, m_incr, m_Δ) = outp
+        #                     plot!(z8,m_C[2,:],(m_ε_prof)*1e3, label = "$(@sprintf("%0.1f", m_incr*it*1e4)) [10⁻⁴]") 
+        #                     plot!(z7,C[2,:],(ε_prof)*1e3, label = "$(@sprintf("%0.1f", cur_ε*1e4)) [10⁻⁴]") 
+        #                     display(plot(z7,z8, layout=(1,2)))
+        #                 end
+        #             else
+        #                 plot!(z7,C[2,:],(ε_prof)*1e3, label = "$(@sprintf("%0.1f", cur_ε*1e4)) [10⁻⁴]")
+        #                 display(z7)
+        #             end 
+        #             d += 1
+        #             if d > 5
+        #                 d = 5
+        #             end
+        #         end
+        #     end
+        # end
     end
 
     # Obtain section normal to shear band angle
@@ -407,22 +423,29 @@ end
 #                                       M A I N    
 #---------------------------------------------------------------------------------------
 
-resolution = [100]
-z5 = plot(xlabel="x", ylabel="εᵢᵢ [10⁻³]", size = (700,300), title = "Accumulated strain across shear bands" )
+let 
+    resolution = [100]
+    NY = 69 #            !!!!!!!
+    # z5 = plot(xlabel="x", ylabel="εᵢᵢ [10⁻³]", size = (700,300), title = "Accumulated strain across shear bands" )
 
-for i in eachindex(resolution)
+    for i in eachindex(resolution)
 
-    res = resolution[i]
-    flag = (strain_evo=true, Matlab=true, fields=false, strain_int=true )
+        res = resolution[i]
+        flag = (strain_evo=true, Matlab=true, fields=true, strain_int=true )
 
-    (ε_prof, C, m_ε_prof, m_C) = main((x = res, y = res), flag, res)
-    plot!(z5,C[2,:],(ε_prof)*1e3, label="$(res)²")
-    if flag.Matlab
-        plot!(z5,m_C[2,:],(m_ε_prof)*1e3, label="$(res)² from M2Di")
+        (ε_prof, C, m_ε_prof, m_C) = main((x = res, y = NY), flag, res)
+        # plot!(z5,C[2,:],(ε_prof)*1e3, label="$(res)²")
+        # if flag.Matlab
+        #     plot!(z5,m_C[2,:],(m_ε_prof)*1e3, label="$(res)² from M2Di")
+        # end
+
     end
+
+    # display(z5)
 
 end
 
-display(z5)
+
+
 ###########################################################################################
 ##########################################################################################
