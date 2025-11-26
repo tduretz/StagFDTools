@@ -5,14 +5,16 @@ using Enzyme  # AD backends you want to use
 using TimerOutputs
 
 function InitialiseMarkerField(nc, nmpc, L, Δ) #,noise)
-    nmark = (x = nmpc.x * (nc.x + 2), y = nmpc.y * (nc.y +2))
+    nmark = (x = nmpc.x * (nc.x + 2), y = nmpc.y * (nc.y +2)) # num. of markers
     mΔ = (x = L.x/nmark.x, y = L.y/nmark.y)
     xm = LinRange(-L.x/2-Δ.x+mΔ.x/2, L.x/2+Δ.x-mΔ.x, nmark.x)
     ym = LinRange(-L.y/2-Δ.y+mΔ.y/2, L.y/2+Δ.y-mΔ.y, nmark.y)
-#if noise
-    #for i in eachindex(xm)
-    #    xm[i] 
-    return xm, ym
+if noise
+    # buff  = (x = zeros(size(xm)), y = zeros(size(ym)))
+    # rand!(buff) 
+    # coords .+= (buff .* (2 * k) .- k)
+end
+return xm, ym
 end
 
 function MarkerWeight(xm, x, Δx)
