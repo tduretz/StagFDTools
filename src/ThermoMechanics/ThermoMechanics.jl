@@ -154,7 +154,7 @@ function Continuity(Vx, Vy, Pt, Pt0, T, T0, phase, materials, type_loc, bcv_loc,
 
     ρ, ρ0 = 1.0, 1.0
     try
-        ρ, _     = density_volume(Pt[1,1], T[2,2], materials.EoS_params[phase]; EoS=materials.EoS_model[phase])
+        ρ, _     = density_volume(materials.EoS_model[phase], Pt[1,1], T[2,2], materials.EoS_params[phase])
     catch e
         @info "1"
         println("An error occurred: $e")
@@ -163,7 +163,7 @@ function Continuity(Vx, Vy, Pt, Pt0, T, T0, phase, materials, type_loc, bcv_loc,
     end
 
     try
-        ρ0, _    = density_volume(Pt0,     T0,     materials.EoS_params[phase]; EoS=materials.EoS_model[phase])
+        ρ0, _    = density_volume(materials.EoS_model[phase], Pt0,     T0,     materials.EoS_params[phase])
     catch e
         @info "2"
         println("An error occurred: $e")
@@ -205,7 +205,7 @@ function HeatDiffusion(Vx, Vy, Pt, Pt0, T, T0, phase, materials, k, type_loc, bc
 
      ρ = 1.0
     try
-        ρ, _     = density_volume(Pt[1], TC, materials.EoS_params[phase]; EoS=materials.EoS_model[phase])
+        ρ, _     = density_volume(materials.EoS_model[phase], Pt[1], TC, materials.EoS_params[phase])
     catch e
         @info "3"
         println("An error occurred: $e")
@@ -837,7 +837,7 @@ function ResidualContinuity2D!(R, V, T, T0, P, P0, ρ, phases, materials, number
         type_loc   = (x=typex_loc, y=typey_loc)
         R.pt[i,j] = Continuity(Vx_loc, Vy_loc, Pt_loc, P0.t[i,j], T_loc, T0.c[i,j], phases.c[i,j], materials, type_loc, bcv_loc, Δ)
     
-        ρ.c[i,j], _     = density_volume(Pt_loc[1,1], T_loc[2,2], materials.EoS_params[phases.c[i,j]]; EoS=materials.EoS_model[phases.c[i,j]])
+        ρ.c[i,j], _ = density_volume(materials.EoS_model[phases.c[i,j]], Pt_loc[1,1], T_loc[2,2], materials.EoS_params[phases.c[i,j]])
     
     end
     return nothing
