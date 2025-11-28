@@ -14,11 +14,23 @@ function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, �
 
     _ones = @SVector ones(4)
 
+    shift = (x = 2, y = 2)
     # Loop over centroids
-    for j=1:size(ε̇.xx,2)-0, i=1:size(ε̇.xx,1)-0
+    #=println("size(ε̇.xx)")
+    println(size(ε̇.xx))=#
+    for j=1:size(ε̇.xx,2)-0, i=1:size(ε̇.xx,1)-0#shift.x
         if (i==1 && j==1) || (i==size(ε̇.xx,1) && j==1) || (i==1 && j==size(ε̇.xx,2)) || (i==size(ε̇.xx,1) && j==size(ε̇.xx,2))
             # Avoid the outer corners - nothing is well defined there ;)
         else
+            #=println("size V.x")
+            println(size(V.x))
+            println("size V.y")
+            println(size(V.y))
+
+            println("size 𝐷.v")
+            println(size(𝐷.v))
+            println(size(𝐷.c))
+            println(size(ε̇.xy))=#
             Vx     = SMatrix{2,3}(      V.x[ii,jj] for ii in i:i+1,   jj in j:j+2)
             Vy     = SMatrix{3,2}(      V.y[ii,jj] for ii in i:i+2,   jj in j:j+1)
             bcx    = SMatrix{2,3}(    BC.Vx[ii,jj] for ii in i:i+1,   jj in j:j+2)
@@ -27,11 +39,29 @@ function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, �
             typey  = SMatrix{3,2}(  type.Vy[ii,jj] for ii in i:i+2,   jj in j:j+1)
             τxy0   = SMatrix{2,2}(    τ0.xy[ii,jj] for ii in i:i+1,   jj in j:j+1)
 
-            Δx_loc     = SVector{2}(Δ.x[ii+1] for ii in i:i+1)
-            Δy_loc     = SVector{2}(Δ.y[jj+1] for jj in j:j+1)
-    
+            if ( j==size(ε̇.xx,2) ) || ( i==size(ε̇.xx,1) )
+                Δx_loc     = zeros(2)
+                Δx_loc[1] = Δ.x[i]
+                Δx_loc[2] = Δx_loc[1]
+                Δy_loc     = zeros(2)
+                Δy_loc[1] = Δ.y[j]
+                Δy_loc[2] = Δy_loc[1]
+            else
+                Δx_loc     = SVector{2}(Δ.x[ii] for ii in i:i+1)
+                Δy_loc     = SVector{2}(Δ.y[jj] for jj in j:j+1)
+            end
+
+            #=if ( i==3 ) && (j == 3)
+                println("je suis dans le cas")
+            end=#
+
             Vx     = SetBCVx1_var(Vx, typex, bcx, Δx_loc, Δy_loc)
             Vy     = SetBCVy1_var(Vy, typey, bcy, Δx_loc, Δy_loc)
+
+            #=if ( i==3 ) && (j == 3)
+                println("i = ", i, " j = ", j)
+                println(Vx)
+            end=#
 
             Δx = zeros(2)
             Δx .= Δx_loc
@@ -41,10 +71,15 @@ function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, �
             size_stencil_Vx_Y = 3
             size_stencil_Vy_X = 3
             size_stencil_Vy_Y = 2
+            
             Dxx = zeros(size_stencil_Vx_X-1,size_stencil_Vx_Y-2)
             for i in 1:size_stencil_Vx_X-1, j in 1:size_stencil_Vx_Y-2
                 Dxx[i,j] = (Vx[i+1, j] - Vx[i, j]) / Δx[i]
             end
+            #=if ( i==3 ) && (j == 3)
+                println("Dxx")
+                println(Dxx)
+            end=#
             Dyy = zeros(size_stencil_Vy_X-2,size_stencil_Vy_Y-1)
             for i in 1:size_stencil_Vy_X-2, j in 1:size_stencil_Vy_Y-1
                 Dyy[i,j] = (Vy[i, j+1] - Vy[i, j]) / Δy[j]
@@ -107,7 +142,7 @@ function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, �
     end
 
     # Loop over vertices
-    for j=2:size(ε̇.xy,2)-2, i=2:size(ε̇.xy,1)-2
+    for j=1:size(ε̇.xy,2)-2, i=1:size(ε̇.xy,1)-2
         Vx     = SMatrix{3,2}(      V.x[ii,jj] for ii in i:i+2,   jj in j+1:j+2)
         Vy     = SMatrix{2,3}(      V.y[ii,jj] for ii in i+1:i+2, jj in j:j+2  )
         bcx    = SMatrix{3,2}(    BC.Vx[ii,jj] for ii in i:i+2,   jj in j+1:j+2)
@@ -118,15 +153,24 @@ function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, �
         τyy0   = SMatrix{2,2}(    τ0.yy[ii,jj] for ii in i:i+1,   jj in j:j+1)
         P      = SMatrix{2,2}(       Pt[ii,jj] for ii in i:i+1,   jj in j:j+1)
 
-        Δx_loc     = SVector{3}(Δ.x[ii+1] for ii in i:i+2)
-        Δy_loc     = SVector{3}(Δ.y[jj+1] for jj in j:j+2)
+        if ( i == size(ε̇.xy,1)-1) || ( j == size(ε̇.xy,2)-1)
+            Δx_loc = zeros(3)
+            Δy_loc = zeros(3)
+            Δx_loc[1] = Δ.x[i]
+            Δx_loc[2] = Δ.x[2]
+            Δy_loc[1] = Δ.y[j]
+            Δy_loc[2] = Δ.y[2]
+        else
+            Δx_loc     = SVector{2}(Δ.x[ii] for ii in i:i+1)
+            Δy_loc     = SVector{2}(Δ.y[jj] for jj in j:j+1)
+        end
 
         Vx     = SetBCVx1_var(Vx, typex, bcx, Δx_loc, Δy_loc)
         Vy     = SetBCVy1_var(Vy, typey, bcy, Δx_loc, Δy_loc)
     
-        Δx = zeros(3)
+        Δx = zeros(2)
         Δx .= Δx_loc
-        Δy = zeros(3)
+        Δy = zeros(2)
         Δy .= Δy_loc
         size_stencil_Vx_X = 3
         size_stencil_Vx_Y = 2
@@ -289,8 +333,8 @@ function ResidualContinuity2D_var!(R, V, P, P0, ΔP, τ0, 𝐷, phases, material
             Vx_loc     = SMatrix{2,2}(      V.x[ii,jj] for ii in i:i+1, jj in j:j+1)
             Vy_loc     = SMatrix{2,2}(      V.y[ii,jj] for ii in i:i+1, jj in j:j+1)
 
-            Δx_loc     = SVector{1}(Δ.x[ii+1] for ii in i:i)
-            Δy_loc     = SVector{1}(Δ.y[jj+1] for jj in j:j)
+            Δx_loc     = SVector{1}(Δ.x[ii] for ii in i:i)
+            Δy_loc     = SVector{1}(Δ.y[jj] for jj in j:j)
 
             Δt_loc = Δ.t[1]
 
@@ -346,19 +390,47 @@ function ResidualMomentum2D_x_var!(R, V, P, P0, ΔP, τ0, 𝐷, phases, material
             D          = (c=Dc, v=Dv)
             τ0_loc     = (xx=τxx0, yy=τyy0, xy=τxy0)
 
-            Δx_Vx_loc     = SVector{4}(Δ.x[ii+1] for ii in i-2:i+1)
-            Δy_Vx_loc     = SVector{3}(Δ.y[jj+1] for jj in j-2:j)
+            if (i == nc.x+shift.x+1)
+                Δx_Vx_loc     = zeros(3)
+                Δx_Vx_loc[1] = Δ.x[i-2]
+                Δx_Vx_loc[2] = Δ.x[i-1]
+                Δx_Vx_loc[3] = Δ.x[i]
+                Δx_Vx_loc[4] = Δx_Vx_loc[3]
+            #elseif ( i == 1+shift.x )
+            #    Δx_Vx_loc     = zeros(4)
+            #    Δx_Vx_loc[1] = Δ.x[1]
+            #    Δx_Vx_loc[2] = Δ.x[i-1] # i-1 = 1
+            #    Δx_Vx_loc[3] = Δ.x[i]
+            #    Δx_Vx_loc[4] = Δx_Vx_loc[i+1]
+            else
+                #Δx_Vx_loc     = SVector{4}(Δ.x[ii] for ii in i-2:i+1)
+                Δx_Vx_loc     = SVector{3}(Δ.x[ii] for ii in i-1:i+1)
+            end
+            #println("je suis dans residual x var ")
+            #println(j)
+            #Δy_Vx_loc     = SVector{3}(Δ.y[jj] for jj in j-2:j)
+            if (j == nc.y+shift.y)
+                Δy_Vx_loc     = zeros(4)
+                Δy_Vx_loc[1] = Δ.y[j-2]
+                Δy_Vx_loc[2] = Δ.y[j-1]
+                Δy_Vx_loc[3] = Δ.y[j]
+                Δy_Vx_loc[4] = Δy_Vx_loc[3]
+            else
+                Δy_Vx_loc     = SVector{4}(Δ.y[jj] for jj in j-2:j+1)
+            end
 
-            println("i,j----------------------------------")
-            println(i)
-            println(j)
-            println("P loc indices ranges")
-            println(i-1," ", i," ",j-2," ",j)
-            println("Vx loc indices ranges")
-            println(i-1," ",i+1," ",j-1," ",j+1)
-            println("Vy loc indices ranges")
-            println(i-1," ",i+2," ",j-2," ",j+1)
 
+            #=if (i==4) && (j==4)
+                println("i,j----------------------------------")
+                println(i)
+                println(j)
+                println("P loc indices ranges")
+                println(i-1," ", i," ",j-2," ",j)
+                println("Vx loc indices ranges")
+                println(i-1," ",i+1," ",j-1," ",j+1)
+                println("Vy loc indices ranges")
+                println(i-1," ",i+2," ",j-2," ",j+1)
+            end=#
 
             R.x[i,j]   = SMomentum_x_Generic_var(Vx_loc, Vy_loc, P_loc, ΔP_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δx_Vx_loc, Δy_Vx_loc, Δ.t[1])
         end
@@ -378,9 +450,9 @@ function SMomentum_x_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
     #Dyy = ∂y_inn(Vy) * (1/deltay)
     #Dyx = ∂x_inn(Vy) * (1/deltax)
     #Dxy = ∂y(Vx) * (1/deltay)
-    Δx = zeros(4)
+    Δx = zeros(3)
     Δx .= Δx_Vx_loc
-    Δy = zeros(3)
+    Δy = zeros(4)
     Δy .= Δy_Vx_loc
     size_stencil_X = 3
     size_stencil_Y = 4
@@ -507,8 +579,38 @@ function ResidualMomentum2D_y_var!(R, V, P, P0, ΔP, τ0, 𝐷, phases, material
             D          = (c=Dc, v=Dv)
             τ0_loc     = (xx=τxx0, yy=τyy0, xy=τxy0)
 
-            Δx_loc     = SVector{3}(Δ.x[ii+1] for ii in i-2:i)
-            Δy_loc     = SVector{4}(Δ.y[jj+1] for jj in j-2:j+1)
+            #Δx_loc     = SVector{3}(Δ.x[ii+1] for ii in i-2:i)
+            #Δy_loc     = SVector{4}(Δ.y[jj+1] for jj in j-2:j+1)
+
+            if (j == nc.y+shift.y+1)
+                Δy_loc     = zeros(4)
+                Δy_loc[1] = Δ.y[j-2]
+                Δy_loc[2] = Δ.y[j-1]
+                Δy_loc[3] = Δ.y[j]
+                Δy_loc[4] = Δy_loc[3]
+            elseif ( j == 1+shift.y )
+                Δy_loc     = zeros(4)
+                Δy_loc[1] = Δ.y[1]
+                Δy_loc[2] = Δ.y[j-1] # i-1 = 1
+                Δy_loc[3] = Δ.y[j]
+                Δy_loc[4] = Δy_loc[j+1]
+            else
+                #Δy_loc     = SVector{4}(Δ.y[jj] for jj in j-2:j+1)
+                Δy_loc     = SVector{3}(Δ.y[jj] for jj in j-1:j+1)
+            end
+            #Δy_loc     = SVector{4}(Δ.y[jj+1] for jj in j-2:j+1)
+
+            #Δx_loc     = SVector{3}(Δ.x[ii] for ii in i-2:i)
+            if (i == nc.x+shift.x)
+                Δx_loc     = zeros(4)
+                Δx_loc[1] = Δ.x[i-2]
+                Δx_loc[2] = Δ.x[i-1]
+                Δx_loc[3] = Δ.x[i]
+                Δx_loc[4] = Δx_loc[3]
+            else
+                Δx_loc     = SVector{4}(Δ.x[ii] for ii in i-2:i+1)
+            end
+
 
             R.y[i,j]   = SMomentum_y_Generic_var(Vx_loc, Vy_loc, P_loc, ΔP_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δx_loc, Δy_loc, Δ.t[1])
         end
@@ -528,9 +630,9 @@ function SMomentum_y_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, mat
     #Dyy = ∂y(Vy) * (1/Δy_loc[1])
     #Dxy = ∂y_inn(Vx) * (2/(Δy_loc[1]+Δy_loc[2]))
     #Dyx = ∂x(Vy) * (2/(Δx_loc[1]+Δx_loc[2]))
-    Δx = zeros(3)
+    Δx = zeros(4)
     Δx .= Δx_loc
-    Δy = zeros(4)
+    Δy = zeros(3)
     Δy .= Δy_loc
     size_stencil_X = 4
     size_stencil_Y = 3

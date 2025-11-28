@@ -17,7 +17,7 @@ include("rheology_var.jl")
     #--------------------------------------------#
 
     # Resolution
-    nc = (x = 20, y = 20)
+    nc = (x = 5, y = 5)
 
     # Boundary loading type
     config = BC_template
@@ -28,8 +28,8 @@ include("rheology_var.jl")
         compressible = false,
         plasticity   = :none,
         n    = [1.0    1.0  ],
-        η0   = [1e0    1e2  ],
-        #        η0   = [1e0    1e0  ], # I have removed the inclusion for the time being
+        #η0   = [1e0    1e2  ],
+                η0   = [1e0    1e0  ], # I have removed the inclusion for the time being
 
         G    = [1e20   1e20 ],
         #η0   = [1e0    1e5  ],
@@ -124,7 +124,9 @@ include("rheology_var.jl")
     D_ctl_v =  [@MMatrix(zeros(4,4)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)]
     𝐷_ctl   = (c = D_ctl_c, v = D_ctl_v)
 
-    
+    println("size R.x")
+    println(size(R.x))
+    println([inx_Vx,iny_Vx])
     # Intialize field
     L   = (x=1.0, y=1.0)
 
@@ -165,14 +167,19 @@ include("rheology_var.jl")
         yv = normal_linspace_interval(inflimit.y, suplimit.y, μ.y, σ.y, nc.y+1)
 
         # spaces between nodes
-        Δ = (x = zeros(nc.x+4), y = zeros(nc.y+4), t=fill(Δt0,1)) # nb cells
+        Δ = (x = zeros(nc.x+2), y = zeros(nc.y+2), t=fill(Δt0,1)) # nb cells
             
-        Δ.x[3:end-2]   .= diff(xv)
+        Δ.x[2:end-1]   .= diff(xv)
+        Δ.x[[1, end]] .= Δ.x[[2, end-1]]
+        Δ.y[2:end-1]   .= diff(yv)
+        Δ.y[[1, end]] .= Δ.y[[2, end-1]]
+
+        #=Δ.x[3:end-2]   .= diff(xv)
         Δ.x[[1, end]] .= Δ.x[[3, end-2]]
         Δ.x[[2, end-1]] .= Δ.x[[3, end-2]]
         Δ.y[3:end-2]   .= diff(yv)
         Δ.y[[1, end]] .= Δ.y[[3, end-2]]
-        Δ.y[[2, end-1]] .= Δ.y[[3, end-2]]
+        Δ.y[[2, end-1]] .= Δ.y[[3, end-2]]=#
 
         endv = nc.x+1
             
@@ -297,7 +304,7 @@ include("rheology_var.jl")
         p1 = heatmap(xc, yc,  Pt[inx_c,iny_c], aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik)=#
 
         # Evaluate analytical solution
-        p_ana = zeros(nc.x, nc.y)
+        #=p_ana = zeros(nc.x, nc.y)
         for i=1:nc.x, j=1:nc.y
             sol       = Stokes2D_Schmid2003( [xc[i]; yc[j]] )
             p_ana[i,j]    = sol.p
@@ -319,7 +326,7 @@ include("rheology_var.jl")
             Vx_ana[i,j]   = sol.V[1]
         end
         println("Max diff of V.x")
-        println(findmax(Vx_ana .- V.x[inx_Vx,iny_Vx]))
+        println(findmax(Vx_ana .- V.x[inx_Vx,iny_Vx]))=#
 
         # test symétrie
         println("Diff sym R.p")
