@@ -3,51 +3,56 @@ import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 using TimerOutputs
+using GridGeometryUtils
 
-function InitialiseMarkerField(nc, nmpc, L, Δ) #,noise)
-    nmark = (x = nmpc.x * (nc.x + 2), y = nmpc.y * (nc.y +2)) # num. of markers
+function InitialiseMarkerField(nc, nmpc, L, Δ, noise)
+    nmark = (x = nmpc.x * (nc.x + 2), y = nmpc.y * (nc.y + 2)) 
     mΔ = (x = L.x/nmark.x, y = L.y/nmark.y)
     xm = LinRange(-L.x/2-Δ.x+mΔ.x/2, L.x/2+Δ.x-mΔ.x, nmark.x)
     ym = LinRange(-L.y/2-Δ.y+mΔ.y/2, L.y/2+Δ.y-mΔ.y, nmark.y)
-if noise
-    # buff  = (x = zeros(size(xm)), y = zeros(size(ym)))
-    # rand!(buff) 
-    # coords .+= (buff .* (2 * k) .- k)
-end
-return xm, ym
+    Xmark = [xm[i] for i in eachindex(xm), j in eachindex(ym)]
+    Ymark = [ym[j] for i in eachindex(xm), j in eachindex(ym)]
+    
+    # Add noise to marker coordinates
+    if noise
+        Xmark .=+ (rand(size(Xmark)) .- 0.5) .* mΔ.x
+        Ymark .=+ (rand(size(Ymark)) .- 0.5) .* mΔ.y
+    end
+    return xm, ym, nmark, Xmark, Ymark
 end
 
 function MarkerWeight(xm, x, Δx)
-    # compute marker-grid distance and weight
+    # Compute marker-grid distance and weight
     dst = abs(xm - x)
     w = 1.0 - 2 * dst / Δx
     return w
 end
 
 function MarkerWeight_phase!(phase_ratio, phase_weight, x, y, xm, ym, Δ, materials, phase)
-    nphases = length(materials.n)
+    nphases = length(materials.n) # (materials[4])
     w_x = MarkerWeight(xm, x, Δ.x)
     w_y = MarkerWeight(ym, y, Δ.y)
     w = w_x * w_y
     for k = 1:nphases
-        phase_ratio[k]  += (k === phase) * w
-        phase_weight[k] += w
+        phase_ratio[k]  .+= (k === phase) * w
+        phase_weight[k] .+= w
     end
 end
+
 function PhaseRatios!(phase_ratios, phase_weights, materials)
-    nphases = length(materials.n)
+    nphases = length(materials.n) 
     # centroids
-    for i in axes(phase_ratios.center,1), j in axes(phase_ratios.center,2)
+    for i in axes(phase_ratios.c,1), j in axes(phase_ratios.c,2)
         #  normalize weights and assign to phase ratios
         for k = 1:nphases
-            phase_ratios.center[i,j][k] = phase_ratios.center[i,j][k] / (phase_weights.center[i,j][k] == 0.0 ? 1 : phase_weights.center[i,j][k])
+            phase_ratios.c[i,j][k] = phase_ratios.c[i,j][k] / (phase_weights.c[i,j][k] == 0.0 ? 1 : phase_weights.c[i,j][k])
         end
     end
     # vertices
-    for i in axes(phase_ratios.vertex,1), j in axes(phase_ratios.vertex,2)
+    for i in axes(phase_ratios.v,1), j in axes(phase_ratios.v,2)
         #  normalize weights and assign to phase ratios
         for k = 1:nphases
-            phase_ratios.vertex[i,j][k] = phase_ratios.vertex[i,j][k] / (phase_weights.vertex[i,j][k] == 0.0 ? 1 : phase_weights.vertex[i,j][k])
+            phase_ratios.v[i,j][k] = phase_ratios.v[i,j][k] / (phase_weights.v[i,j][k] == 0.0 ? 1 : phase_weights.v[i,j][k])
         end
     end
 end
@@ -55,13 +60,10 @@ end
 @views function main(BC_template, D_template)
     #--------------------------------------------#
 
-    # Intialise field
-    L   = (x=1.0, y=1.0)
-    # we need Δ.x and Δ.y
-
     # Resolution
-    nc = (x = 50, y = 50)
-    nmpc = (x = 3, y =3)
+    nc = (x = 50, y = 50) # number of cells
+    nmpc = (x = 3, y =3)  # markers per cell
+    mnoise = true         # noise in marker distribution
 
     # Boundary loading type
     config = BC_template
@@ -144,6 +146,7 @@ end
 
     #--------------------------------------------#
     # Intialise field
+    L   = (x=1.0, y=1.0)
     Δ   = (x=L.x/nc.x, y=L.y/nc.y, t = Δt0)
 
     # Allocations
@@ -172,7 +175,6 @@ end
     yv = LinRange(-L.y/2, L.y/2, nc.y+1)
     xc = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
     yc = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
-    phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...)) 
 
     # Initial velocity & pressure field
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
@@ -191,12 +193,43 @@ end
     BC.Vy[     2, iny_Vy] .= (type.Vy[     2, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[    2, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[1]   .+ D_BC[2,2]*yv)
     BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
 
-    xm, ym = InitialiseMarkerField(nc, nmpc, L, Δ)
+    # --------------------------------------------#
+    # Initialise marker field
+    xm, ym, nmark, Xmark, Ymark = InitialiseMarkerField(nc, nmpc, L, Δ, mnoise)
+    phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...)) 
+    mphase = ones(Int64, nmark...)
+    @show size(mphase)
+    @show size(Xmark)
 
     # Set material geometry 
-    rad = 0.1 + 1e-13
-    phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= rad^2] .= 2
-    phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= rad^2] .= 2
+    incl = Hexagon((0.8, -0.3), 0.2; θ = π / 10)
+    # rad = 0.1 + 1e-13
+    # mphase[(xm.^2 .+ (ym').^2) .<= rad^2] .= 2
+    for I in CartesianIndices(mphase)
+        𝐱 = SVector(Xmark[I], Ymark[I])
+        if inside(𝐱, incl)
+            mphase[I] = 2
+        end
+    end
+
+    nphases = length(materials.n)
+    centers  = [zeros(nphases) for i in 1 : size_c[1], j in 1 : size_c[2]]
+    verteces = [zeros(nphases) for i in 1 : size_v[1], j in 1 : size_v[2]]
+    phase_ratios  = (c = centers, v = verteces)
+    phase_weights = (c = [zeros(nphases) for i in 1 : size_c[1], j in 1 : size_c[2]],
+                     v = [zeros(nphases) for i in 1 : size_v[1], j in 1 : size_v[2]])
+    # phase_ratios  = (c = [@MVector[0.0 0.0] for i in 1 : size_c[1], j in 1 : size_c[2]],
+    #                  v = [@MVector[0.0 0.0] for i in 1 : size_v[1], j in 1 : size_v[2]])
+    # phase_weights = (c = [@MVector[0.0 0.0] for i in 1 : size_c[1], j in 1 : size_c[2]],
+    #                  v = [@MVector[0.0 0.0] for i in 1 : size_v[1], j in 1 : size_v[2]])
+     
+    for I in CartesianIndices(mphase)
+        i = Int64(round(Xmark[I]/Δ.x + 0.5))
+        j = Int64(round(Ymark[I]/Δ.y + 0.5))
+        MarkerWeight_phase!(phase_ratios.c, phase_weights.c, xc[i], yc[j],Xmark[I],Ymark[I],Δ,materials, mphase[I])
+    end
+
+    PhaseRatios!(phase_ratios, phase_weights, materials)
 
     #--------------------------------------------#
 
