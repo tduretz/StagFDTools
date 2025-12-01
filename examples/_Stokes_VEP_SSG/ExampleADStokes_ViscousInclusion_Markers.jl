@@ -5,20 +5,22 @@ using Enzyme  # AD backends you want to use
 using TimerOutputs
 using GridGeometryUtils
 
-function InitialiseMarkerField(nc, nmpc, L, Δ, noise)
-    nmark = (x = nmpc.x * (nc.x + 2), y = nmpc.y * (nc.y + 2)) 
-    mΔ = (x = L.x/nmark.x, y = L.y/nmark.y)
-    xm = LinRange(-L.x/2-Δ.x+mΔ.x/2, L.x/2+Δ.x-mΔ.x, nmark.x)
-    ym = LinRange(-L.y/2-Δ.y+mΔ.y/2, L.y/2+Δ.y-mΔ.y, nmark.y)
-    Xmark = [xm[i] for i in eachindex(xm), j in eachindex(ym)]
-    Ymark = [ym[j] for i in eachindex(xm), j in eachindex(ym)]
-    
+function InitialiseMarkerField(nc, nmpc, L, Δ, materials, noise)
+
+    num = (x = nmpc.x * (nc.x + 2), y = nmpc.y * (nc.y + 2)) 
+    Δm = (x = L.x/num.x, y = L.y/num.y)
+    xm = LinRange(-L.x/2-Δ.x+Δm.x/2, L.x/2+Δ.x-Δm.x, num.x)
+    ym = LinRange(-L.y/2-Δ.y+Δm.y/2, L.y/2+Δ.y-Δm.y, num.y)
+    Xm = [xm[i] for i in eachindex(xm), j in eachindex(ym)]
+    Ym = [ym[j] for i in eachindex(xm), j in eachindex(ym)]
+    nphases = length(materials.n)
+
     # Add noise to marker coordinates
     if noise
-        Xmark .=+ (rand(size(Xmark)) .- 0.5) .* mΔ.x
-        Ymark .=+ (rand(size(Ymark)) .- 0.5) .* mΔ.y
+        Xm .+= (rand(size(Xm)) .- 0.5) .* Δm.x
+        Ym .+= (rand(size(Ym)) .- 0.5) .* Δm.y
     end
-    return xm, ym, nmark, Xmark, Ymark
+    return (Xm = Xm, Ym = Ym, xm = xm, ym = ym, Δm = Δm, num = num, nphases = nphases)
 end
 
 function MarkerWeight(xm, x, Δx)
@@ -28,31 +30,47 @@ function MarkerWeight(xm, x, Δx)
     return w
 end
 
-function MarkerWeight_phase!(phase_ratio, phase_weight, x, y, xm, ym, Δ, materials, phase)
-    nphases = length(materials.n) # (materials[4])
+function MarkerWeight_phase!(phase_ratio, phase_weight, x, y, Δ, xm, ym, phase, nphases)
     w_x = MarkerWeight(xm, x, Δ.x)
     w_y = MarkerWeight(ym, y, Δ.y)
     w = w_x * w_y
     for k = 1:nphases
-        phase_ratio[k]  .+= (k === phase) * w
-        phase_weight[k] .+= w
+        phase_ratio[k]  += (k === phase) * w
+        phase_weight[k] += w
     end
 end
+function PhaseRatios!(phase_ratios, phase_weights, m, mphase, xce, yce, xve, yve, Δ)
+    nphases = m.nphases
 
-function PhaseRatios!(phase_ratios, phase_weights, materials)
-    nphases = length(materials.n) 
+    for I in CartesianIndices(mphase)
+        # find indices of grid centroid
+        ic = Int64(round((m.Xm[I] - xce[1])/Δ.x)) + 1
+        jc= Int64(round((m.Ym[I] - yce[1])/Δ.y)) + 1
+        # find indices of grid verteces
+        iv = Int64(round((m.Xm[I]-xve[1]) / Δ.x)) + 1
+        jv = Int64(round((m.Ym[I]-yve[1]) / Δ.y)) + 1 
+        # Clamp to valid bounds (critical fix!)
+        ic = clamp(ic, 1, size(phase_ratios.center, 1))
+        jc = clamp(jc, 1, size(phase_ratios.center, 2))
+        iv = clamp(iv, 1, size(phase_ratios.vertex, 1))
+        jv = clamp(jv, 1, size(phase_ratios.vertex, 2))
+
+        MarkerWeight_phase!(phase_ratios.center[ic,jc], phase_weights.center[ic,jc], xce[ic], yce[jc], Δ, m.Xm[I], m.Ym[I], mphase[I], m.nphases)
+        MarkerWeight_phase!(phase_ratios.vertex[iv,jv], phase_weights.vertex[iv,jv], xve[iv], yve[jv], Δ, m.Xm[I], m.Ym[I], mphase[I], m.nphases)
+    end
+
     # centroids
-    for i in axes(phase_ratios.c,1), j in axes(phase_ratios.c,2)
+    for i in axes(phase_ratios.center,1), j in axes(phase_ratios.center,2)
         #  normalize weights and assign to phase ratios
         for k = 1:nphases
-            phase_ratios.c[i,j][k] = phase_ratios.c[i,j][k] / (phase_weights.c[i,j][k] == 0.0 ? 1 : phase_weights.c[i,j][k])
+            phase_ratios.center[i,j][k] = phase_ratios.center[i,j][k] / (phase_weights.center[i,j][k] == 0.0 ? 1 : phase_weights.center[i,j][k])
         end
     end
     # vertices
-    for i in axes(phase_ratios.v,1), j in axes(phase_ratios.v,2)
+    for i in axes(phase_ratios.vertex,1), j in axes(phase_ratios.vertex,2)
         #  normalize weights and assign to phase ratios
         for k = 1:nphases
-            phase_ratios.v[i,j][k] = phase_ratios.v[i,j][k] / (phase_weights.v[i,j][k] == 0.0 ? 1 : phase_weights.v[i,j][k])
+            phase_ratios.vertex[i,j][k] = phase_ratios.vertex[i,j][k] / (phase_weights.vertex[i,j][k] == 0.0 ? 1 : phase_weights.vertex[i,j][k])
         end
     end
 end
@@ -154,10 +172,14 @@ end
     V       = (x  = zeros(size_x...), y  = zeros(size_y...))
     Vi      = (x  = zeros(size_x...), y  = zeros(size_y...))
     η       = (c  =  ones(size_c...), v  =  ones(size_v...) )
+    G       = (c  = zeros(size_c...), v  = zeros(size_v...) )
+    β       = (c  = zeros(size_c...), )
+
     λ̇       = (c  = zeros(size_c...), v  = zeros(size_v...) )
     ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
     τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
+
     Pt      = zeros(size_c...)
     Pti     = zeros(size_c...)
     Pt0     = zeros(size_c...)
@@ -173,8 +195,12 @@ end
     # Mesh coordinates
     xv = LinRange(-L.x/2, L.x/2, nc.x+1)
     yv = LinRange(-L.y/2, L.y/2, nc.y+1)
+    xve  = LinRange(-L.x/2-Δ.x, L.x/2+Δ.x, nc.x+3)
+    yve  = LinRange(-L.y/2-Δ.y, L.y/2+Δ.y, nc.y+3)
     xc = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
     yc = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
+    xce = LinRange(-L.x/2-Δ.x/2, L.x/2+Δ.x/2, nc.x+2)
+    yce = LinRange(-L.y/2-Δ.y/2, L.y/2+Δ.y/2, nc.y+2)
 
     # Initial velocity & pressure field
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
@@ -195,41 +221,34 @@ end
 
     # --------------------------------------------#
     # Initialise marker field
-    xm, ym, nmark, Xmark, Ymark = InitialiseMarkerField(nc, nmpc, L, Δ, mnoise)
+    m = InitialiseMarkerField(nc, nmpc, L, Δ, materials, mnoise)
     phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...)) 
-    mphase = ones(Int64, nmark...)
-    @show size(mphase)
-    @show size(Xmark)
+    mphase = ones(Int64, m.num...)
 
     # Set material geometry 
     incl = Hexagon((0.8, -0.3), 0.2; θ = π / 10)
     # rad = 0.1 + 1e-13
     # mphase[(xm.^2 .+ (ym').^2) .<= rad^2] .= 2
     for I in CartesianIndices(mphase)
-        𝐱 = SVector(Xmark[I], Ymark[I])
+        𝐱 = SVector(m.Xm[I], m.Ym[I])
         if inside(𝐱, incl)
             mphase[I] = 2
         end
     end
 
-    nphases = length(materials.n)
-    centers  = [zeros(nphases) for i in 1 : size_c[1], j in 1 : size_c[2]]
-    verteces = [zeros(nphases) for i in 1 : size_v[1], j in 1 : size_v[2]]
-    phase_ratios  = (c = centers, v = verteces)
-    phase_weights = (c = [zeros(nphases) for i in 1 : size_c[1], j in 1 : size_c[2]],
-                     v = [zeros(nphases) for i in 1 : size_v[1], j in 1 : size_v[2]])
-    # phase_ratios  = (c = [@MVector[0.0 0.0] for i in 1 : size_c[1], j in 1 : size_c[2]],
-    #                  v = [@MVector[0.0 0.0] for i in 1 : size_v[1], j in 1 : size_v[2]])
-    # phase_weights = (c = [@MVector[0.0 0.0] for i in 1 : size_c[1], j in 1 : size_c[2]],
-    #                  v = [@MVector[0.0 0.0] for i in 1 : size_v[1], j in 1 : size_v[2]])
-     
-    for I in CartesianIndices(mphase)
-        i = Int64(round(Xmark[I]/Δ.x + 0.5))
-        j = Int64(round(Ymark[I]/Δ.y + 0.5))
-        MarkerWeight_phase!(phase_ratios.c, phase_weights.c, xc[i], yc[j],Xmark[I],Ymark[I],Δ,materials, mphase[I])
-    end
+    phase_ratios = (center = [zeros(m.nphases) for i in 1:size(ε̇.xx,1), j in 1:size(ε̇.xx,2)],
+                vertex = [zeros(m.nphases) for i in 1:size(ε̇.xy,1), j in 1:size(ε̇.xy,2)])
+    phase_weights = (center = [zeros(m.nphases) for i in 1:size(ε̇.xx,1), j in 1:size(ε̇.xx,2)],
+                 vertex = [zeros(m.nphases) for i in 1:size(ε̇.xy,1), j in 1:size(ε̇.xy,2)])
 
-    PhaseRatios!(phase_ratios, phase_weights, materials)
+    PhaseRatios!(phase_ratios, phase_weights, m, mphase, xce, yce, xve, yve, Δ)
+
+    for I in CartesianIndices(phase_ratios.center)
+    s = sum(phase_ratios.center[I])
+    if !(s ≈ 1.0)
+        @warn "Invalid phase_ratios.center at $I: sum = $s, values = $(phase_ratios.center[I])"
+    end
+end
 
     #--------------------------------------------#
 
@@ -259,10 +278,10 @@ end
             #--------------------------------------------#
             # Residual check        
             @timeit to "Residual" begin
-                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
-                ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
-                ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-                ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, G, β, V, Pt, Pt0, ΔPt, type, BC, materials, phase_ratios, Δ)
+                ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, β, materials, number, type, BC, nc, Δ) 
+                ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, G, materials, number, type, BC, nc, Δ)
+                ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, G, materials, number, type, BC, nc, Δ)
             end
 
             err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
@@ -277,9 +296,9 @@ end
             #--------------------------------------------#
             # Assembly
             @timeit to "Assembly" begin
-                AssembleContinuity2D!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-                AssembleMomentum2D_x!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-                AssembleMomentum2D_y!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+                AssembleContinuity2D!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, β, materials, number, pattern, type, BC, nc, Δ)
+                AssembleMomentum2D_x!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, G, materials, number, pattern, type, BC, nc, Δ)
+                AssembleMomentum2D_y!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, G, materials, number, pattern, type, BC, nc, Δ)
             end
 
             #--------------------------------------------# 
@@ -300,9 +319,9 @@ end
 
             #--------------------------------------------#
             # Line search & solution update
-            @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+            @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, G, β, 𝐷, 𝐷_ctl, number, type, BC, materials, phase_ratios, nc, Δ)
             UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
-            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
+            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, G, β, V, Pt, Pt0, ΔPt, type, BC, materials, phase_ratios, Δ)
         end
 
         # Update pressure
