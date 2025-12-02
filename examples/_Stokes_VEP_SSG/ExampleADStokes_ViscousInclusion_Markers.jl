@@ -85,6 +85,46 @@ function PhaseRatios!(phase_ratios, phase_weights, m, mphase, xce, yce, xve, yve
     end
 end
 
+# This is the function that should be used to compute shear and bulk moduli (from Advection script)
+# function compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v, nphases)
+#     sum       = (c  =  ones(size_c...), v  =  ones(size_v...) )
+
+#     for I in CartesianIndices(β.c) 
+#         i, j = I[1], I[2]
+#         β.c[i,j] = 0.0
+#         G.c[i,j] = 0.0
+#         sum.c[i,j] = 0.0
+#         for p = 1:nphases # loop on phases
+#             if i>1 && j>1 && i<nc.x+2 && j<nc.y+2 
+#                 phase_ratio = @index phase_ratios.center[p, i-1, j-1]
+#                 β.c[i,j]   += phase_ratio * materials.β[p]
+#                 G.c[i,j]   += phase_ratio * materials.G[p]
+#                 sum.c[i,j] += phase_ratio
+#             end
+#         end
+#     end
+#     G.c[[1 end],:] .=  G.c[[2 end-1],:]
+#     G.c[:,[1 end]] .=  G.c[:,[2 end-1]]
+#     β.c[[1 end],:] .=  β.c[[2 end-1],:]
+#     β.c[:,[1 end]] .=  β.c[:,[2 end-1]]
+
+#     for I in CartesianIndices(G.v) 
+#         i, j = I[1], I[2]
+#         G.v[i,j]   = 0.0
+#         sum.v[i,j] = 0.0
+#         for p = 1:nphases # loop on phases
+#             if i>1 && j>1 && i<nc.x+3 && j<nc.y+3 
+#                 phase_ratio = @index phase_ratios.vertex[p, i-1, j-1]
+#                 G.v[i,j]   += phase_ratio * materials.G[p]
+#                 sum.v[i,j] += phase_ratio
+#             end
+#         end
+#     end
+#     G.v[[1 end],:] .=  G.v[[2 end-1],:]
+#     G.v[:,[1 end]] .=  G.v[:,[2 end-1]]
+#     @show extrema(sum.c[2:end-1,2:end-1]),  extrema(sum.v[2:end-1,2:end-1])
+# end
+
 @views function main(BC_template, D_template)
     #--------------------------------------------#
 
@@ -181,9 +221,9 @@ end
     R       = (x  = zeros(size_x...), y  = zeros(size_y...), p  = zeros(size_c...))
     V       = (x  = zeros(size_x...), y  = zeros(size_y...))
     Vi      = (x  = zeros(size_x...), y  = zeros(size_y...))
-    η       = (c  =  ones(size_c...), v  =  ones(size_v...) )
-    G       = (c  = zeros(size_c...), v  = zeros(size_v...) )
-    β       = (c  = zeros(size_c...), )
+    η       = (c  = ones(size_c...), v  =  ones(size_v...) )
+    G       = (c  = ones(size_c...), v  = ones(size_v...) )
+    β       = (c  = ones(size_c...), )
 
     λ̇       = (c  = zeros(size_c...), v  = zeros(size_v...) )
     ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
@@ -256,6 +296,13 @@ end
         end
     end
 
+    # Set bulk and shear moduli ( this is a makeshift assignment that only works because they are the same in all phases)
+    # Should be done like the function compute_shear_bulk_moduli() above
+    # It uses JustPIC functions, so it needs to be adapted)
+    G.c .= materials.G[1]
+    G.v .= materials.G[1]
+    β.c .= materials.β[1]
+
     #--------------------------------------------#
 
     rvec = zeros(length(α))
@@ -276,6 +323,10 @@ end
         τ0.yy .= τ.yy
         τ0.xy .= τ.xy
         Pt0   .= Pt
+
+        # Compute bulk and shear moduli
+        # compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v, m.nphases)
+
 
         for iter=1:niter
 
