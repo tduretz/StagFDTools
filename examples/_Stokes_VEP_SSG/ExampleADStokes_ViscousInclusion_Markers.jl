@@ -6,21 +6,32 @@ using TimerOutputs
 using GridGeometryUtils
 
 function InitialiseMarkerField(nc, nmpc, L, Δ, materials, noise)
-
+    nphases = length(materials.n)
     num = (x = nmpc.x * (nc.x + 2), y = nmpc.y * (nc.y + 2)) 
     Δm = (x = L.x/num.x, y = L.y/num.y)
     xm = LinRange(-L.x/2-Δ.x+Δm.x/2, L.x/2+Δ.x-Δm.x, num.x)
     ym = LinRange(-L.y/2-Δ.y+Δm.y/2, L.y/2+Δ.y-Δm.y, num.y)
     Xm = [xm[i] for i in eachindex(xm), j in eachindex(ym)]
     Ym = [ym[j] for i in eachindex(xm), j in eachindex(ym)]
-    nphases = length(materials.n)
 
     # Add noise to marker coordinates
     if noise
-        Xm .+= (rand(size(Xm)) .- 0.5) .* Δm.x
-        Ym .+= (rand(size(Ym)) .- 0.5) .* Δm.y
+        Xm .+= (rand() .- 0.5) .* Δm.x
+        Ym .+= (rand() .- 0.5) .* Δm.y
     end
     return (Xm = Xm, Ym = Ym, xm = xm, ym = ym, Δm = Δm, num = num, nphases = nphases)
+end
+
+function InitialisePhaseRatios(markers, f)
+    phase_ratios = (
+        center = [zeros(markers.nphases) for _ in axes(f.xx,1), _ in axes(f.xx,2)],
+        vertex = [zeros(markers.nphases) for _ in axes(f.xy,1), _ in axes(f.xy,2)],
+    )
+    phase_weights = (
+        center = [zeros(markers.nphases) for _ in axes(f.xx,1), _ in axes(f.xx,2)],
+        vertex = [zeros(markers.nphases) for _ in axes(f.xy,1), _ in axes(f.xy,2)],
+    )
+    return phase_ratios, phase_weights
 end
 
 function MarkerWeight(xm, x, Δx)
@@ -30,7 +41,7 @@ function MarkerWeight(xm, x, Δx)
     return w
 end
 
-function MarkerWeight_phase!(phase_ratio, phase_weight, x, y, Δ, xm, ym, phase, nphases)
+function MarkerWeight_phase!(phase_ratio, phase_weight, x, y, xm, ym, Δ, phase, nphases)
     w_x = MarkerWeight(xm, x, Δ.x)
     w_y = MarkerWeight(ym, y, Δ.y)
     w = w_x * w_y
@@ -40,36 +51,35 @@ function MarkerWeight_phase!(phase_ratio, phase_weight, x, y, Δ, xm, ym, phase,
     end
 end
 function PhaseRatios!(phase_ratios, phase_weights, m, mphase, xce, yce, xve, yve, Δ)
-    nphases = m.nphases
 
     for I in CartesianIndices(mphase)
         # find indices of grid centroid
-        ic = Int64(round((m.Xm[I] - xce[1])/Δ.x)) + 1
-        jc= Int64(round((m.Ym[I] - yce[1])/Δ.y)) + 1
+        ic = Int64(ceil((m.Xm[I] - xve[1]) / Δ.x))
+        jc = Int64(ceil((m.Ym[I] - yve[1]) / Δ.y))
         # find indices of grid verteces
-        iv = Int64(round((m.Xm[I]-xve[1]) / Δ.x)) + 1
-        jv = Int64(round((m.Ym[I]-yve[1]) / Δ.y)) + 1 
-        # Clamp to valid bounds (critical fix!)
-        ic = clamp(ic, 1, size(phase_ratios.center, 1))
-        jc = clamp(jc, 1, size(phase_ratios.center, 2))
-        iv = clamp(iv, 1, size(phase_ratios.vertex, 1))
-        jv = clamp(jv, 1, size(phase_ratios.vertex, 2))
+        iv = Int64(ceil((m.Xm[I]-xve[1]) / Δ.x + 0.5))
+        jv = Int64(ceil((m.Ym[I]-yve[1]) / Δ.y + 0.5))
+        # # Clamp to valid bounds (critical fix!)
+        # ic = clamp(ic, 1, size(phase_ratios.center, 1))
+        # jc = clamp(jc, 1, size(phase_ratios.center, 2))
+        # iv = clamp(iv, 1, size(phase_ratios.vertex, 1))
+        # jv = clamp(jv, 1, size(phase_ratios.vertex, 2))
 
-        MarkerWeight_phase!(phase_ratios.center[ic,jc], phase_weights.center[ic,jc], xce[ic], yce[jc], Δ, m.Xm[I], m.Ym[I], mphase[I], m.nphases)
-        MarkerWeight_phase!(phase_ratios.vertex[iv,jv], phase_weights.vertex[iv,jv], xve[iv], yve[jv], Δ, m.Xm[I], m.Ym[I], mphase[I], m.nphases)
+        MarkerWeight_phase!(phase_ratios.center[ic,jc], phase_weights.center[ic,jc], xce[ic], yce[jc], m.Xm[I], m.Ym[I], Δ, mphase[I], m.nphases)
+        MarkerWeight_phase!(phase_ratios.vertex[iv,jv], phase_weights.vertex[iv,jv], xve[iv], yve[jv], m.Xm[I], m.Ym[I], Δ, mphase[I], m.nphases)
     end
 
     # centroids
     for i in axes(phase_ratios.center,1), j in axes(phase_ratios.center,2)
         #  normalize weights and assign to phase ratios
-        for k = 1:nphases
+        for k = 1:m.nphases
             phase_ratios.center[i,j][k] = phase_ratios.center[i,j][k] / (phase_weights.center[i,j][k] == 0.0 ? 1 : phase_weights.center[i,j][k])
         end
     end
     # vertices
     for i in axes(phase_ratios.vertex,1), j in axes(phase_ratios.vertex,2)
         #  normalize weights and assign to phase ratios
-        for k = 1:nphases
+        for k = 1:m.nphases
             phase_ratios.vertex[i,j][k] = phase_ratios.vertex[i,j][k] / (phase_weights.vertex[i,j][k] == 0.0 ? 1 : phase_weights.vertex[i,j][k])
         end
     end
@@ -80,8 +90,8 @@ end
 
     # Resolution
     nc = (x = 50, y = 50) # number of cells
-    nmpc = (x = 3, y =3)  # markers per cell
-    mnoise = true         # noise in marker distribution
+    nmpc = (x = 4, y =4)  # markers per cell
+    mnoise = false         # noise in marker distribution
 
     # Boundary loading type
     config = BC_template
@@ -222,33 +232,29 @@ end
     # --------------------------------------------#
     # Initialise marker field
     m = InitialiseMarkerField(nc, nmpc, L, Δ, materials, mnoise)
-    phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...)) 
     mphase = ones(Int64, m.num...)
+    phase_ratios, phase_weights = InitialisePhaseRatios(m, ε̇)
 
     # Set material geometry 
-    incl = Hexagon((0.8, -0.3), 0.2; θ = π / 10)
-    # rad = 0.1 + 1e-13
-    # mphase[(xm.^2 .+ (ym').^2) .<= rad^2] .= 2
-    for I in CartesianIndices(mphase)
-        𝐱 = SVector(m.Xm[I], m.Ym[I])
-        if inside(𝐱, incl)
-            mphase[I] = 2
-        end
-    end
+    # incl = Hexagon((0.8, -0.3), 0.2; θ = π / 10)
+    rad = 0.1 + 1e-13
+    mphase[(m.xm.^2 .+ (m.ym').^2) .<= rad^2] .= 2
+    # for I in CartesianIndices(mphase)
+    #     𝐱 = SVector(m.Xm[I], m.Ym[I])
+    #     if inside(𝐱, incl)
+    #         mphase[I] = 2
+    #     end
+    # end
 
-    phase_ratios = (center = [zeros(m.nphases) for i in 1:size(ε̇.xx,1), j in 1:size(ε̇.xx,2)],
-                vertex = [zeros(m.nphases) for i in 1:size(ε̇.xy,1), j in 1:size(ε̇.xy,2)])
-    phase_weights = (center = [zeros(m.nphases) for i in 1:size(ε̇.xx,1), j in 1:size(ε̇.xx,2)],
-                 vertex = [zeros(m.nphases) for i in 1:size(ε̇.xy,1), j in 1:size(ε̇.xy,2)])
-
+    # Set phase ratios on grid
     PhaseRatios!(phase_ratios, phase_weights, m, mphase, xce, yce, xve, yve, Δ)
 
     for I in CartesianIndices(phase_ratios.center)
-    s = sum(phase_ratios.center[I])
-    if !(s ≈ 1.0)
-        @warn "Invalid phase_ratios.center at $I: sum = $s, values = $(phase_ratios.center[I])"
+        s = sum(phase_ratios.center[I])
+        if !(s ≈ 1.0)
+            @warn "Invalid phase_ratios.center at $I: sum = $s, values = $(phase_ratios.center[I])"
+        end
     end
-end
 
     #--------------------------------------------#
 
