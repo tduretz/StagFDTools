@@ -295,7 +295,7 @@ end
     type.Pf[:,1]             .= :Dirichlet
     type.Pf[:,end]           .= :Dirichlet
 
-    # Add a constrant pressure within a circular region
+    # Add a constant pressure within a circular region
     @views type.Pf[inx_c,  iny_c ][(xc.^2 .+ (yc').^2) .<= r_in^2 ] .= :constant
     @views type.Pf[inx_c,  iny_c ][(xc.^2 .+ (yc').^2) .>= r_out^2] .= :constant
     

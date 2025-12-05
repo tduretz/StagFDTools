@@ -5,31 +5,20 @@ using Enzyme  # AD backends you want to use
 @views function main(nc, Ωl, Ωη)
 
     nt  = 1 # 40
-    ηi      = 1.0                # viscous viscosity
-    Gi      = 1.0
-    Δt0 = ηi/Gi/4.0/1.0
-    Ginc    = Gi/(6.0)
+    Δt0 = 1e10
     viscoelastic = true
 
     # nt  = 1
     # Δt0 = 5e9
     # viscoelastic = false
-
-    # Adimensionnal numbers
-    Ωr     = 0.1             # Ratio inclusion radius / len
-    Ωηi    = 1e-1            # Ratio (inclusion viscosity) / (matrix viscosity)
-    Ωp     = 1.              # Ratio (ε̇bg * ηs) / P0
+   
     # Independant
     ηs0    = 1.              # Shear viscosity
-    r      = 0.1             # Inclusion size
-    τi     = 1.              # Initial ambiant pressure
-    ϕi     = 0.001
+    r      = 0.1e0             # Inclusion size
+    ϕi     = 0.01
     # Dependant
-    ηb0    = Ωη * ηs0        # Bulk viscosity
-    k_ηf0  = (r.^2 * Ωl^2) / (ηb0 + 4/3 * ηs0) # Permeability / fluid viscosity
-    len    = r / Ωr          # Inclusion radius
-    ηs_inc = 1 ./ Ωηi * ηs0       # Inclusion shear viscosity
-    ε̇      = Ωp * τi / ηs0   # Background strain rate
+    k_ηf0  = 1e-15/1e5
+    ε̇      = 1e-15   # Background strain rate
 
     # Velocity gradient matrix
     D_BC = @SMatrix( [ε̇ 0; 0 -ε̇] )
@@ -39,13 +28,13 @@ using Enzyme  # AD backends you want to use
         oneway       = false,
         compressible = true,
         n     = [1.0  1.0],
-        ηs0   = [ηi  ηi], 
-        ηb    = [ηb0  ηb0 ]./(1-ϕi),
-        G     = [Gi Ginc], 
-        Kd    = [1e-6 1e-6],
-        Ks    = [1e-6 1e-6],
-        KΦ    = [1e-6 1e-6],
-        Kf    = [1e-5 1e-5],
+        ηs0   = [1e22  1e20], 
+        ηb    = [1e23  1e23 ]./(1-ϕi),
+        G     = [3e10 3e10], 
+        Kd    = [1e11 1e11],
+        Ks    = [1e11 1e11],
+        KΦ    = [1e11 1e11],
+        Kf    = [1e9  1e9],
         k_ηf0 = [k_ηf0 k_ηf0],
     )
    
@@ -125,7 +114,7 @@ using Enzyme  # AD backends you want to use
 
     #--------------------------------------------#
     # Intialise field
-    L   = (x=len, y=len)
+    L   = (x=10*r, y=10*r)
     Δ   = (x=L.x/nc.x, y=L.y/nc.y, t=Δt0)
     R   = (x=zeros(size_x...), y=zeros(size_y...), pt=zeros(size_c...), pf=zeros(size_c...))
     V   = (x=zeros(size_x...), y=zeros(size_y...))

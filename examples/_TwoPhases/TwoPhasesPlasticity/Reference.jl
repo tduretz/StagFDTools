@@ -38,6 +38,7 @@ using Enzyme  # AD backends you want to use
         linearizeϕ   = false,              # !!!!!!!!!!!
         single_phase = false,
         n     = [1.0    1.0  ],
+        n_CK  = [1.0    1.0   1.0  ],
         ηs0   = [1e22   1e19 ]/sc.σ/sc.t, 
         ηΦ    = [2e22   2e22 ]/sc.σ/sc.t,
         G     = [3e10   3e10 ]./sc.σ, 

@@ -214,7 +214,11 @@ function Continuity(Vx, Vy, Pt, Pt0, Pf, Pf0, Φ0, phase, materials, type_loc, b
 
     divVs   = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy 
     
-    fp      = dlnρsdt - dΦdt/(1-Φ) +   divVs
+    # if materials.oneway
+    #     fp      = divVs
+    # else
+        fp      = dlnρsdt - dΦdt/(1-Φ) +   divVs
+    # end
 
     # Solid mass / immobile solid mass
     # ρim  = (1-phi)*ρs
@@ -687,9 +691,6 @@ function AssembleFluidContinuity2D!(K, V, P, ΔP, P0, ϕ0, phases, materials, nu
         end
         # Pf --- Pt
         Local = num.Pt[i-1:i+1,j-1:j+1] .* pattern[4][3]
-        # printxy(∂R∂Pt)
-        # printxy(Local)
-        # error()
         for jj in axes(Local,2), ii in axes(Local,1)
             if (Local[ii,jj]>0) && num.Pf[i,j]>0
                 K[4][3][num.Pf[i,j], Local[ii,jj]] = ∂R∂Pt[ii,jj]  
@@ -743,7 +744,7 @@ function SetBCPf1(Pf, type, bc, Δ, ρfg)
 
     MPf =  MMatrix(Pf)
 
-     # N/S
+    # N/S
     for ii in axes(type, 1)
         # South
         if type[ii,1] === :Dirichlet
@@ -754,8 +755,8 @@ function SetBCPf1(Pf, type, bc, Δ, ρfg)
             MPf[ii,1] = Pf[ii,2] - ρfg*Δ.y
         elseif type[ii,1] === :periodic || type[ii,1] === :in || type[ii,1] === :constant
             MPf[ii,1] = Pf[ii,1]
-        else
-            MPf[ii,1] = 1.0
+        # else
+        #     MPf[ii,1] = 1.0
         end
 
         # North
@@ -767,8 +768,8 @@ function SetBCPf1(Pf, type, bc, Δ, ρfg)
             MPf[ii,end] = Pf[ii,end-1] + ρfg*Δ.y
         elseif type[ii,end] === :periodic || type[ii,end] === :in || type[ii,end] === :constant
             MPf[ii,end] = Pf[ii,end]
-        else
-            MPf[ii,end] = 1.0
+        # else
+        #     MPf[ii,end] = 1.0
         end
     end
 
@@ -782,8 +783,8 @@ function SetBCPf1(Pf, type, bc, Δ, ρfg)
             MPf[1,jj] = fma(Δ.x, bc[1,jj], Pf[2,jj])
         elseif type[1,jj] === :periodic || type[1,jj] === :in || type[1,jj] === :constant
             MPf[1,jj] = Pf[1,jj] 
-        else
-            MPf[1,jj] =  1.0
+        # else
+        #     MPf[1,jj] =  1.0
         end
 
         # East
@@ -793,8 +794,8 @@ function SetBCPf1(Pf, type, bc, Δ, ρfg)
             MPf[end,jj] = fma(-Δ.x, bc[end,jj], Pf[end-1,jj])
         elseif type[end,jj] === :periodic || type[end,jj] === :in || type[end,jj] === :constant
             MPf[end,jj] = Pf[end,jj] 
-        else
-            MPf[end,jj] =  1.0
+        # else
+        #     MPf[end,jj] =  1.0
         end
     end
 
@@ -904,8 +905,7 @@ function Numbering!(N, type, nc)
     shift = periodic_south ? 1 : 0
     # Loop through inner nodes of the mesh
     for j=2:nc.y+3-1, i=3:nc.x+4-2
-        if type.Vy[i,j] == :Dirichlet_normal || (type.Vy[i,j] == :periodic && j==nc.y+3-1)
-        # if type.Vy[i,j] == :Dirichlet_normal || (type.Vy[i,j] != :periodic && j==nc.y+3-1) || type.Vy[i,j] == :constant 
+        if type.Vy[i,j] == :Dirichlet_normal || (type.Vy[i,j] != :periodic && j==nc.y+3-1) || type.Vy[i,j] == :constant 
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof+=1

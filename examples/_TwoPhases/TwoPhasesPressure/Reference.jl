@@ -14,7 +14,7 @@ using Enzyme  # AD backends you want to use
     ηs0    = 1.              # Shear viscosity
     len    = 1.              # Box size
     P0     = 1.              # Initial ambiant pressure
-    ϕ0     = 1e-1
+    Φ0     = 1e-1
     # Dependant
     ηb0    = Ωη * ηs0        # Bulk viscosity
     k_ηf0  = (len.^2 * Ωl^2) / (ηb0 + 4/3 * ηs0) # Permeability / fluid viscosity
@@ -22,7 +22,7 @@ using Enzyme  # AD backends you want to use
     ηs_inc = Ωηi * ηs0       # Inclusion shear viscosity
     ε̇      = Ωp * P0 / ηs0   # Background strain rate
 
-    ϕi     = ϕ0
+    Φi     = Φ0
     nt     = 1
 
     # Velocity gradient matrix
@@ -30,11 +30,19 @@ using Enzyme  # AD backends you want to use
 
     # Material parameters
     materials = ( 
+        g     = [0. 0.],
         oneway       = false,
+        compressible = true,
+        plasticity   = :off,
+        linearizeϕ   = false, 
+        single_phase = false,
         n     = [1.0  1.0],
+        n_CK  = [1.0  1.0],
         ηs0   = [ηs0  ηs_inc], 
-        ηΦ    = [ηb0  ηb0 ]./(1-ϕ0),
+        ηΦ    = [ηb0  ηb0 ]./(1-Φ0),
         G     = [1e30 1e30], 
+        ρs    = [1.0  1.0 ],
+        ρf    = [1.0  1.0 ],
         Kd    = [1e30 1e30],
         Ks    = [1e30 1e30],
         KΦ    = [1e30 1e30],
@@ -128,21 +136,21 @@ using Enzyme  # AD backends you want to use
     )
 
     #--------------------------------------------#
-    # Intialise field
+    # Intialise field 
     L   = (x=len, y=len)
     Δ   = (x=L.x/nc.x, y=L.y/nc.y, t=Δt0)
     R   = (x=zeros(size_x...), y=zeros(size_y...), pt=zeros(size_c...), pf=zeros(size_c...), Φ=zeros(size_c...))
     V   = (x=zeros(size_x...), y=zeros(size_y...))
     η   = (c  =  ones(size_c...), v  =  ones(size_v...) )
-    ϕ   = (c=ϕi.*ones(size_c...), v=ϕi.*ones(size_v...) )
-    ϕ0  = (c=ϕi.*ones(size_c...), v=ϕi.*ones(size_v...) )
+    Φ   = (c=Φi.*ones(size_c...), v=Φi.*ones(size_v...) )
+    Φ0  = (c=Φi.*ones(size_c...), v=Φi.*ones(size_v...) )
 
-    ln1mϕ   = (c=log(1-ϕi).*ones(size_c...), v=log(1-ϕi).*ones(size_v...) )
-    ln1mϕ0  = (c=log(1-ϕi).*ones(size_c...), v=log(1-ϕi).*ones(size_v...) )
+    ln1mΦ   = (c=log(1-Φi).*ones(size_c...), v=log(1-Φi).*ones(size_v...) )
+    ln1mΦ0  = (c=log(1-Φi).*ones(size_c...), v=log(1-Φi).*ones(size_v...) )
 
     ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
-    τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
+    τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...), f = zeros(size_c...)  )
     Dc      =  [@MMatrix(zeros(5,5)) for _ in axes(ε̇.xx,1), _ in axes(ε̇.xx,2)]
     Dv      =  [@MMatrix(zeros(5,5)) for _ in axes(ε̇.xy,1), _ in axes(ε̇.xy,2)]
     𝐷       = (c = Dc, v = Dv)
@@ -218,10 +226,10 @@ using Enzyme  # AD backends you want to use
         τ0.xx .= τ.xx
         τ0.yy .= τ.yy
         τ0.xy .= τ.xy
-        ϕ0.c  .= ϕ.c
+        Φ0.c  .= Φ.c
 
-        ϕ.c .= 1.0 .- exp.(ln1mϕ.c)
-        @show extrema(ϕ.c)
+        Φ.c .= 1.0 .- exp.(ln1mΦ.c)
+        @show extrema(Φ.c)
 
         # error(0)
 
@@ -231,12 +239,11 @@ using Enzyme  # AD backends you want to use
         end
 
         # Residual check
-        TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, ϕ0, type, BC, materials, phases, Δ)
+        TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
         ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-                    ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-
-        ResidualContinuity2D!(R, V, P, P0, ϕ0, phases, materials, number, type, BC, nc, Δ) 
-        ResidualFluidContinuity2D!(R, V, P, P0, ϕ0, phases, materials, number, type, BC, nc, Δ) 
+        ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+        ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
+        ResidualFluidContinuity2D!(R, V, P, ΔP, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
 
         # Set global residual vector
         r = zeros(nVx + nVy + nPt + nPf)
@@ -246,9 +253,9 @@ using Enzyme  # AD backends you want to use
         # Assembly
         @info "Assembly, ndof  = $(nVx + nVy + nPt + nPf)"
         AssembleMomentum2D_x!(M, V, P, P0, ΔP, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-        AssembleMomentum2D_y!(M, V, P, P0, ΔP, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-        AssembleContinuity2D!(M, V, P, P0, ϕ0, phases, materials, number, pattern, type, BC, nc, Δ)
-        AssembleFluidContinuity2D!(M, V, P, P0, ϕ0, phases, materials, number, pattern, type, BC, nc, Δ)
+        AssembleMomentum2D_y!(M, V, P, P0, ΔP, τ0, Φ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+        AssembleContinuity2D!(M, V, P, P0, Φ0, phases, materials, number, pattern, type, BC, nc, Δ)
+        AssembleFluidContinuity2D!(M, V, P, ΔP, P0, Φ0, phases, materials, number, pattern, type, BC, nc, Δ)
 
         # Two-phases operator as block matrix
         𝑀 = [
@@ -345,12 +352,11 @@ using Enzyme  # AD backends you want to use
 
         #--------------------------------------------#
         # Residual check
-        TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, ϕ0, type, BC, materials, phases, Δ)
+        TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
         ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-                    ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-
-        ResidualContinuity2D!(R, V, P, P0, ϕ0, phases, materials, number, type, BC, nc, Δ) 
-        ResidualFluidContinuity2D!(R, V, P, P0, ϕ0, phases, materials, number, type, BC, nc, Δ) 
+        ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+        ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
+        ResidualFluidContinuity2D!(R, V, P, ΔP, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
 
         @info "Residuals"
         @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
@@ -360,16 +366,16 @@ using Enzyme  # AD backends you want to use
 
         #--------------------------------------------#
         # Post process 
-        @time for i in eachindex(ϕ.c)
+        @time for i in eachindex(Φ.c)
             KΦ = materials.KΦ[phases.c[i]]
-            ηΦ = materials.ηb[phases.c[i]] 
-            ϕ.c[i] = ϕ0.c[i] .+ Δ.t*( 1/KΦ * ((P.f[i] - P0.f[i])/Δ.t - (P.t[i] - P0.t[i])/Δ.t) + 1/ηΦ*(P.f[i] - P.t[i]) )
-            # ln1mϕ.c[i] = ln1mϕ0.c[i] .+ Δ.t/(1 - ϕ.c[i]) *( 1/KΦ * ((P.f[i] - P0.f[i])/Δ.t + (P.t[i] - P0.t[i])/Δ.t) + 1/ηΦ*(P.f[i] - P.t[i]) )
-            # ϕ.c[i] = 1.0 - exp(ln1mϕ.c[i])
+            ηΦ = materials.ηΦ[phases.c[i]] 
+            Φ.c[i] = Φ0.c[i] .+ Δ.t*( 1/KΦ * ((P.f[i] - P0.f[i])/Δ.t - (P.t[i] - P0.t[i])/Δ.t) + 1/ηΦ*(P.f[i] - P.t[i]) )
+            # ln1mΦ.c[i] = ln1mΦ0.c[i] .+ Δ.t/(1 - Φ.c[i]) *( 1/KΦ * ((P.f[i] - P0.f[i])/Δ.t + (P.t[i] - P0.t[i])/Δ.t) + 1/ηΦ*(P.f[i] - P.t[i]) )
+            # Φ.c[i] = 1.0 - exp(ln1mΦ.c[i])
         end
-        ϕ.v[inx_v, iny_v] .= 0.25*(ϕ.c[1:end-1,1:end-1] .+ ϕ.c[1:end-1,2:end-0] .+ ϕ.c[2:end-0,1:end-1] .+ ϕ.c[2:end-0,2:end-0] )
+        Φ.v[inx_v, iny_v] .= 0.25*(Φ.c[1:end-1,1:end-1] .+ Φ.c[1:end-1,2:end-0] .+ Φ.c[2:end-0,1:end-1] .+ Φ.c[2:end-0,2:end-0] )
 
-        @show extrema(ϕ.c)
+        @show extrema(Φ.c)
 
         Vxsc = 0.5*(V.x[1:end-1,2:end-1] + V.x[2:end,2:end-1])
         Vysc = 0.5*(V.y[2:end-1,1:end-1] + V.y[2:end-1,2:end])
@@ -387,7 +393,7 @@ using Enzyme  # AD backends you want to use
         ax1 = Axis(fig[1,1], title="Pt",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
         # # p1 = heatmap(xc, yc, Vs[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Vs")
         # p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vf")
-        # p2 = heatmap(xc, yc, ϕ.c[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="ϕ")
+        # p2 = heatmap(xc, yc, Φ.c[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Φ")
         # # p3 = heatmap(xc, yc, τII[inx_c,iny_c]',   aspect_ratio=1, xlim=extrema(xc), title="Pt", clims=(-3,3))
         # st = 20
         # p3 = quiver(Xc[1:st:end,1:st:end], Yc[1:st:end,1:st:end], quiver=(Vxsc[1:st:end,1:st:end],Vysc[1:st:end,1:st:end]), c=:black,  aspect_ratio=1, xlim=extrema(xc), title="Pt", clims=(-3,3))
