@@ -48,19 +48,19 @@ end
 function single_phase_return_mapping()
 
     # Parameters
-    nt = 1
+    nt = 400
     params = (
-        G     = 0.3,
-        K     = 0.6,
-        C     = .005,
-        ϕ     = 00.0,
-        ψ     = 0.0,
+        G     = 1e10,
+        K     = 1e11,
+        C     = 1e6,
+        ϕ     = 35.0,
+        ψ     = -0.0,
         ηvp   = 0.0*0,
-        Δt    = 1,
+        Δt    = 1e8,
     )  
 
     # Kinematics
-    ε̇bg  = 0.1
+    ε̇bg  = -1e-14
     ε̇    = @SVector([ε̇bg, -ε̇bg, 0])
     divV = -0.00   
 
@@ -81,6 +81,9 @@ function single_phase_return_mapping()
         t = zeros(nt),
         λ̇ = zeros(nt),
     )
+
+    θ = LinRange(-90, 90, 180)
+    r = zeros(size(θ))
 
     # Time loop
     for it=1:nt
@@ -106,12 +109,9 @@ function single_phase_return_mapping()
 
         # display(De)
 
-        Te = @SMatrix([2/3 -1/3 0; -1/3 2/3 0; 0 0 1; 1 1 0 ])
-        Ts = @SMatrix([ 1 0 0 -1; 0 1 0 -1; 0 0 1 0])
-        𝐃ep = (Ts)* Dep * (Te) 
-
-        θ = LinRange(-90, 90, 180)
-        r = zeros(size(θ))
+        Te  = @SMatrix([2/3 -1/3 0; -1/3 2/3 0; 0 0 1; 1 1 0 ])
+        Ts  = @SMatrix([ 1 0 0 -1; 0 1 0 -1; 0 0 1 0])
+        𝐃ep = Ts * Dep * Te 
 
         for i in eachindex(θ)
             n = @SVector([cosd(θ[i]), sind(θ[i])])
@@ -119,22 +119,29 @@ function single_phase_return_mapping()
             r[i] = det(𝐧'*𝐃ep*𝐧)
         end
 
-        @show abs(θ[argmin(r)])
-        @show 180/4 - (params.ϕ + params.ψ)/4
-        @show params.ϕ - params.ψ/2
-
-
-        fig = Figure(size=(500,500))
-        ax  = Axis(fig[1,1], title=L"$$Det. acoustic tensor", xlabel=L"\theta", ylabel=L"\det{\mathbf{A}}")
-        lines!(  ax, θ, r )
-        
-        display(fig)
-
         # Probes
         probes.t[it] = it*params.Δt
         probes.τ[it] = invII(τ)
         probes.P[it] = P
+
+        if minimum(r) < 0
+            @info "Bifurcation"
+            break
+        end
     end
+
+    ii = argmin(r)
+    @show (θ[ii])
+    @show 180/4 - (params.ϕ + params.ψ)/4
+    @show params.ϕ - params.ψ/2
+    @show asind( (sind(params.ϕ) + sind(params.ψ))/2 )
+
+    fig = Figure(size=(500,500))
+    ax  = Axis(fig[1,1], title=L"$$Det. acoustic tensor", xlabel=L"\theta", ylabel=L"\det{\mathbf{A}}")
+    lines!( ax, θ, r )
+    scatter!( ax, θ[ii], r[ii] ) 
+    
+    display(fig)
 
     # p1 = plot(probes.t, probes.τ, xlabel="t", ylabel="τ")
     # p2 = plot(probes.t, probes.P, xlabel="t", ylabel="P")

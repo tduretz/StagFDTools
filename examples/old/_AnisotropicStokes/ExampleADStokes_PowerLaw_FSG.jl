@@ -36,38 +36,36 @@ function Momentum_x(Vx, V̄x, Vy, V̄y, Pt, P̄t, phase, p̄hase, materials, tx,
     invΔx    = 1 / Δ.x
     invΔy    = 1 / Δ.y
 
-    # # SW
-    # if ty[1,1] == :Neu_norm_half
-    #     Vy[1,1] = Vy[1,2] - Δ.y*bc_val.D[2,2]
-    # elseif ty[1,1] == :Dir_norm_half
-    #     Vy[1,1] = 2*bc_val.y.N[1] - Vy[1,2]
-    # end
+    # SW
+    if ty[1,1] == :Neu_norm_half
+        Vy[1,1] = Vy[1,2] - Δ.y*bc_val.D[2,2]
+    elseif ty[1,1] == :Dir_norm_half
+        Vy[1,1] = 2*bc_val.y.N[1] - Vy[1,2]
+    end
 
-    # # SE
-    # if ty[2,1] == :Neu_norm_half
-    #     Vy[2,1] = Vy[2,2] - Δ.y*bc_val.D[2,2]
-    # elseif ty[2,1] == :Dir_norm_half
-    #     Vy[2,1] = 2*bc_val.y.N[2] - Vy[2,2]
-    # end
+    # SE
+    if ty[2,1] == :Neu_norm_half
+        Vy[2,1] = Vy[2,2] - Δ.y*bc_val.D[2,2]
+    elseif ty[2,1] == :Dir_norm_half
+        Vy[2,1] = 2*bc_val.y.N[2] - Vy[2,2]
+    end
 
-    # # NW
-    # if ty[1,2] == :Neu_norm_half
-    #     Vy[1,2] = Vy[1,1] + Δ.y*bc_val.D[2,2]
-    # elseif ty[1,2] == :Dir_norm_half
-    #     Vy[1,2] = 2*bc_val.y.N[1] - Vy[1,1]
-    # end
+    # NW
+    if ty[1,2] == :Neu_norm_half
+        Vy[1,2] = Vy[1,1] + Δ.y*bc_val.D[2,2]
+    elseif ty[1,2] == :Dir_norm_half
+        Vy[1,2] = 2*bc_val.y.N[1] - Vy[1,1]
+    end
 
-    # # NE
-    # if ty[2,2] == :Neu_norm_half
-    #     Vy[2,2] = Vy[2,1] + Δ.y*bc_val.D[2,2]
-    # elseif ty[2,2] == :Dir_norm_half
-    #     Vy[2,2] = 2*bc_val.y.N[2] - Vy[2,1]
-    # end
-
-
+    # NE
+    if ty[2,2] == :Neu_norm_half
+        Vy[2,2] = Vy[2,1] + Δ.y*bc_val.D[2,2]
+    elseif ty[2,2] == :Dir_norm_half
+        Vy[2,2] = 2*bc_val.y.N[2] - Vy[2,1]
+    end
 
     # TODO: add BC for shear stress on sides
-    ############################################
+    ###########################################
     if tx[2,1] == :Neu_tang_half  # South
         Vx[2,1] = Vx[2,2] #- Δ.y*bc_val.D[1,2] 
     elseif tx[2,1] == :Dir_tang_half
@@ -140,6 +138,18 @@ function Momentum_x(Vx, V̄x, Vy, V̄y, Pt, P̄t, phase, p̄hase, materials, tx,
     Dxy = (Vx[:,2:end] - Vx[:,1:end-1]) * invΔy 
     Dyx = (Vy[2:end,:] - Vy[1:end-1,:]) * invΔx 
 
+
+    # if tx[2,1] == :Neu_tang_half 
+    #     # @show "South tangent half grid 1"
+    #     Dxy[:,1] .= 0.0
+    # end
+
+    #  if tx[2,1] == :Neu_tang_conf 
+    #     # @show "South tangent conf grid 1"
+    #     Dxy[:,1] .= -Dxy[:,2]
+    #     #  @show Dxy
+    # end
+
     D̄xx = (V̄x[2:end,:] - V̄x[1:end-1,:]) * invΔx             # Static Arrays ???
     D̄yy = (V̄y[:,2:end] - V̄y[:,1:end-1]) * invΔy             
     D̄kk = D̄xx + D̄yy[2:end-1,:]
@@ -202,7 +212,7 @@ function Momentum_y(Vx, V̄x, Vy, V̄y, Pt, P̄t, phase, p̄hase, materials, tx,
     invΔy    = 1 / Δ.y
    
     # TODO: add BC for shear stress on sides
-    ############################################
+    ###########################################
     if ty[2,1] == :Neu_norm_half # South
         Vy[2,1] = Vy[2,2] - Δ.y*bc_val.D[2,2]
     elseif ty[2,1] == :Dir_norm_half
@@ -727,10 +737,10 @@ function main(nc)
     type.Vy[1][inx_V[1],1]        .= :Dir_norm_half
     type.Vy[2][inx_V[2],2]        .= :Dirichlet_normal 
     # ----- North ----- #
-    # type.Vx[1][inx_V[1],end]      .= :Dir_tang_half
-    type.Vx[1][inx_V[1],end]      .= :Neu_tang_half
-    # type.Vx[2][inx_V[2],end-1]    .= :Dirichlet_normal 
-    type.Vx[2][inx_V[2],end-0]    .= :Neu_tang_conf 
+    type.Vx[1][inx_V[1],end]      .= :Dir_tang_half
+    # type.Vx[1][inx_V[1],end]      .= :Neu_tang_half
+    type.Vx[2][inx_V[2],end-1]    .= :Dirichlet_normal 
+    # type.Vx[2][inx_V[2],end-0]    .= :Neu_tang_conf 
 
     type.Vy[1][inx_V[1],end]      .= :Dir_norm_half
     type.Vy[2][inx_V[2],end-1]    .= :Dirichlet_normal 
@@ -775,7 +785,7 @@ function main(nc)
     θ  = 10
     N  = [sind(θ) cosd(θ)]
     η0 = [1e0 1e2]
-    δ  = [1.5 1]
+    δ  = [1.0 1]
     D1 = ViscosityTensor(η0[1], δ[1], N, false)
     D2 = ViscosityTensor(η0[2], δ[2], N, false)
 
@@ -1016,9 +1026,8 @@ function main(nc)
     p4 = plot!(1:niter_nl, log10.(err.Pt[2][1:niter_nl]), label="Pt")
     display(plot(p1, p2, p3, p4))
 
-    printxy(type.Vx[2])
-
-    printxy(number.Vx[2])
+    # printxy(type.Vx[2])
+    # printxy(number.Vx[2])
 
     #--------------------------------------------#
 end

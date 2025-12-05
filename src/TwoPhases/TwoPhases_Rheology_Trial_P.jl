@@ -217,10 +217,15 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
         typepf = SMatrix{3,3}(  type.Pf[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         bcpf   = SMatrix{3,3}(    BC.Pf[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
 
+        # Density for Darcy flux
+        ρfS = materials.ρf[phases.c[i,j-1]]
+        ρfC = materials.ρf[phases.c[i,j]]
+        ρfg = 1/2*(ρfS + ρfC) * materials.g[2]
+
         # BCs
         Vx  = SetBCVx1(Vx, typex, bcx, Δ)
         Vy  = SetBCVy1(Vy, typey, bcy, Δ)
-        Pf  = SetBCPf1(Pf_loc, typepf, bcpf, Δ)
+        Pf  = SetBCPf1(Pf_loc, typepf, bcpf, Δ, ρfg)
 
         # Kinematics
         Dxx = ∂x_inn(Vx) / Δ.x 
@@ -304,7 +309,10 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
 
         Vx     = SetBCVx1(Vx, typex, bcx, Δ)
         Vy     = SetBCVy1(Vy, typey, bcy, Δ)
-        Pf     = SetBCPf1(Pfex, typepf, bcpf, Δ)
+
+        ρgf    = materials.ρf[phases.v[i,j]] * materials.g[2]
+        
+        Pf     = SetBCPf1(Pfex, typepf, bcpf, Δ, ρgf)
 
         Dxx    = ∂x(Vx) / Δ.x
         Dyy    = ∂y(Vy) / Δ.y
@@ -364,17 +372,6 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
         η.v[i,j]  = jac.val[2]
     end
 end
-
-
-
-
-
-
-
-
-
-
-
 
 # function LocalRheology(ε̇, materials, phases, Δ)
 

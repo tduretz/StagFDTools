@@ -197,29 +197,39 @@ end
 @views function main(nc, Ωl, Ωη)
 
     # Independant
-    len      = 10.              # Box size
+    len      = 20.              # Box size
     ϕ0       = 1e-6
     # Dependant
-    ε̇        = 1.0    # Background strain rate
-
-    params = (mm = 1.0, mc = 100, rc = 2.0, gr = 0.0, er = ε̇)
+    r_in     = 1.0        # Inclusion radius 
+    r_out    = 10*r_in
+    ε̇        = 0.0    # Background strain rate
     
+    # Set Rozhko values for fluid pressure
+    G_anal = 1.0
+    ν_anal = 0.25
+    K      = 2/3*G_anal*(1+ν_anal)/(1-2ν_anal) 
+
     materials = ( 
-        oneway       = false,
         compressible = true,
-        n     = [1.0  1.0],
-        ηs0   = [1e0  100], 
-        ηb    = [1e30 1e30]./(1-ϕ0),
-        G     = [1e30 1e30], 
-        Kd    = [1e30 1e30],
-        Ks    = [1e30 1e30],
-        KΦ    = [1e30 1e30],
-        Kf    = [1e30 1e30],
+        n     = [1.0 1.0  1.0],
+        ηs0   = [1e40  1e40*1e-6  1e40*1e-6], 
+        ηb    = [1e40  1e40*1e6   1e40*1e-6],
+        G     = [G_anal  1e-10 1e-10 ], 
+        Kd    = [K  K*1e6 1*K/1e6 ],
+        Ks    = [K  K*1e6 1*K/1e6 ],
+        KΦ    = [K  K*1e6 1*K/1e6 ],
+        Kf    = [K  K*1e6 1*K/1e6 ],
         k_ηf0 = [1e0 1e0 1e0],
     )
 
-    Δt0   = 1e0
-    nt    = 1
+    # nondim 
+    m      = 0.0   # 0 - circle, 0.5 - ellipse, 1 - cut 
+    # dependent scales
+    Pf_out = 0.    # Fluid pressure on external boundary, Pa
+    dPf    = 1.0   # Fluid pressure on cavity - Po    
+    Δt0    = 1e0
+    nt     = 1
+    params = (r_in=r_in, r_out=r_out, P0=Pf_out, dPf=dPf, m=m, nu=ν_anal, G=G_anal)
 
     # Velocity gradient matrix
     D_BC = @SMatrix( [ε̇ 0; 0 -ε̇] )
@@ -234,6 +244,7 @@ end
     V   = (x=zeros(size_x...), y=zeros(size_y...))
     η   = (c  =  ones(size_c...), v  =  ones(size_v...) )
     ϕ   = (c=ϕ0.*ones(size_c...), v=ϕ0.*ones(size_c...) )
+    
     ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
     τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
@@ -284,14 +295,31 @@ end
     type.Pf[:,1]             .= :Dirichlet
     type.Pf[:,end]           .= :Dirichlet
 
+    # Add a constant pressure within a circular region
+    @views type.Pf[inx_c,  iny_c ][(xc.^2 .+ (yc').^2) .<= r_in^2 ] .= :constant
+    @views type.Pf[inx_c,  iny_c ][(xc.^2 .+ (yc').^2) .>= r_out^2] .= :constant
+    
+    @views type.Vx[inx_Vx, iny_Vx][(xv.^2 .+ (yc').^2) .<= r_in^2 ] .= :constant
+    @views type.Vx[inx_Vx, iny_Vx][(xv.^2 .+ (yc').^2) .>= r_out^2] .= :constant
+    
+    @views type.Vy[inx_Vy, iny_Vy][(xc.^2 .+ (yv').^2) .<= r_in^2 ] .= :constant
+    @views type.Vy[inx_Vy, iny_Vy][(xc.^2 .+ (yv').^2) .>= r_out^2] .= :constant
+    
+    @views type.Pt[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= r_in^2 ] .= :constant
+    @views type.Pt[inx_c, iny_c][(xc.^2 .+ (yc').^2) .>= r_out^2] .= :constant
+    
     #--------------------------------------------#
 
     # Initial configuration
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
     V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
+    P.f[inx_c, iny_c][(xc.^2 .+ (yc').^2) .< r_in^2]  .= dPf
+    P.f[inx_c, iny_c][(xc.^2 .+ (yc').^2) .> r_out^2] .= Pf_out
 
-    phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .< params.rc^2 ] .= 2
-    phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .< params.rc^2 ] .= 2
+    phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .< r_in^2 ] .= 2
+    phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .> r_out^2] .= 3
+    phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .< r_in^2 ] .= 2
+    phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .> r_out^2] .= 3
     
     # Boundary condition values
     BC = ( Vx = zeros(size_x...), Vy = zeros(size_y...), Pt = zeros(size_c...), Pf = zeros(size_c...))
@@ -304,36 +332,49 @@ end
     BC.Vy[     2, iny_Vy] .= (type.Vy[     2, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[    2, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[1]   .+ D_BC[2,2]*yv)
     BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
 
-    Vx_ana = zero(BC.Vx)
-    Vy_ana = zero(BC.Vy)
-    Pt_ana = zero(BC.Pt)
-    ϵ_Pt   = zero(BC.Pt)
-    ϵ_Vx   = zero(BC.Vx)
+    Ur_ana = zero(BC.Pf)
+    Ux_ana = zero(BC.Pf)
+    Ut_ana = zero(BC.Pf)
+    Ux_ana = zero(BC.Vx)
+    Uy_ana = zero(BC.Vy)
+    Pf_ana = zero(BC.Pf)
+    Pt_ana = zero(BC.Pf)
+    ϵ_Ur   = zero(BC.Pf)
+    ϵ_Pf   = zero(BC.Pf)
+    ϵ_Pt   = zero(BC.Pf)
+    ϵ_Ux   = zero(BC.Vx)
 
     for i=1:size(BC.Pf,1), j=1:size(BC.Pf,2)
         # coordinate transform
-        sol = Stokes2D_Schmid2003( [xce[i], yce[j]]; params )
-        Pt_ana[i,j] = sol.p
+        sol = Poroelasticity2D_Rozhko2008([xce[i]; yce[j]] ; params)
+        BC.Pf[i,j]  = sol.pf
+        # P.f[i,j]    = sol.pf
+        Pf_ana[i,j] = sol.pf
+        # P.t[i,j]    = sol.pt*3/2
+        BC.Pt[i,j]  = sol.pt*3/2
+        Pt_ana[i,j] = sol.pt*3/2
+        Ur_ana[i,j] = sol.u_pol[1]
+        Ut_ana[i,j] = sol.u_pol[2]
     end
 
     xvx = LinRange(-L.x/2-Δ.x, L.x/2+Δ.x, nc.x+3)# nc.x+3, nc.y+4
     yvx  = LinRange(-L.y/2-3*Δ.y/2, L.y/2+3*Δ.y/2, nc.y+4)
     for i=1:size(BC.Vx,1), j=1:size(BC.Vx,2)
         # coordinate transform
-        sol = Stokes2D_Schmid2003( [xvx[i], yvx[j]]; params )
-        BC.Vx[i,j] = sol.V[1]
-        V.x[i,j]   = sol.V[1]
-        Vx_ana[i,j] = sol.V[1]
+        sol = Poroelasticity2D_Rozhko2008([xvx[i]; yvx[j]] ; params)
+        BC.Vx[i,j]  = sol.u[1]
+        V.x[i,j]    = sol.u[1]
+        Ux_ana[i,j] = sol.u[1]
     end
 
     xvy = LinRange(-L.x/2-3*Δ.x/2, L.x/2+3*Δ.x/2, nc.x+4)# nc.x+3, nc.y+4
     yvy  = LinRange(-L.y/2-Δ.y, L.y/2+Δ.y, nc.y+3)
     for i=1:size(BC.Vy,1), j=1:size(BC.Vy,2)
         # coordinate transform
-        sol = Stokes2D_Schmid2003( [xvy[i], yvy[j]]; params )
-        BC.Vy[i,j] = sol.V[2]
-        V.y[i,j]   = sol.V[2]
-        Vy_ana[i,j] = sol.V[2]
+        sol = Poroelasticity2D_Rozhko2008([xvy[i]; yvy[j]] ; params)
+        BC.Vy[i,j]  = sol.u[2]
+        V.y[i,j]    = sol.u[2]
+        Uy_ana[i,j] = sol.u[2]
     end
 
     # Equation Fields
@@ -383,7 +424,8 @@ end
         # Residual check
         TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, type, BC, materials, phases, Δ)
         ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-        ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+                    ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+
         ResidualContinuity2D!(R, V, P, P0, ϕ, phases, materials, number, type, BC, nc, Δ) 
         ResidualFluidContinuity2D!(R, V, P, P0, ϕ, phases, materials, number, type, BC, nc, Δ) 
 
@@ -405,202 +447,140 @@ end
         AssembleContinuity2D!(M, V, P, P0, ϕ, phases, materials, number, pattern, type, BC, nc, Δ)
         AssembleFluidContinuity2D!(M, V, P, P0, ϕ, phases, materials, number, pattern, type, BC, nc, Δ)
 
-    # Two-phases operator as block matrix
-    𝑀 = [
-        M.Vx.Vx M.Vx.Vy M.Vx.Pt M.Vx.Pf;
-        M.Vy.Vx M.Vy.Vy M.Vy.Pt M.Vy.Pf;
-        M.Pt.Vx M.Pt.Vy M.Pt.Pt M.Pt.Pf;
-        M.Pf.Vx M.Pf.Vy M.Pf.Pt M.Pf.Pf;
-    ]
+        # Two-phases operator as block matrix
+        𝑀 = [
+            M.Vx.Vx M.Vx.Vy M.Vx.Pt M.Vx.Pf;
+            M.Vy.Vx M.Vy.Vy M.Vy.Pt M.Vy.Pf;
+            M.Pt.Vx M.Pt.Vy M.Pt.Pt M.Pt.Pf;
+            M.Pf.Vx M.Pf.Vy M.Pf.Pt M.Pf.Pf;
+        ]
 
-    @info "System symmetry"
-    𝑀diff = 𝑀 - 𝑀'
-    dropzeros!(𝑀diff)
-    @show norm(𝑀diff)
+        @info "System symmetry"
+        𝑀diff = 𝑀 - 𝑀'
+        dropzeros!(𝑀diff)
+        @show norm(𝑀diff)
 
-    #--------------------------------------------#
-    # Direct solver 
+        #--------------------------------------------#
+        # Direct solver 
+        @time dx = - 𝑀 \ r
 
-    @show 1e-7/Δ.x/Δ.y
-    γ  = 0.0006399999999999999
-    PP = spdiagm(γ*ones(nPt))
+        #--------------------------------------------#
+        UpdateSolution!(V, P, dx, number, type, nc)
 
-    𝑀 = [
-        M.Vx.Vx M.Vx.Vy M.Vx.Pt 0*M.Vx.Pf;
-        M.Vy.Vx M.Vy.Vy M.Vy.Pt 0*M.Vy.Pf;
-        M.Pt.Vx M.Pt.Vy PP 0*M.Pt.Pf;
-        0*M.Pf.Vx 0*M.Pf.Vy 0*M.Pf.Pt M.Pf.Pf;
-    ]
+        #--------------------------------------------#
 
-    @time dx = - 𝑀 \ r
+        # Residual check
+        TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, type, BC, materials, phases, Δ)
+        ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+                    ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
 
-    # # M2Di solver
-    # fv    = -r[1:(nVx+nVy)]
-    # fpt   = -r[(nVx+nVy+1):(nVx+nVy+nPt)]
-    # fpf   = -r[(nVx+nVy+nPt+1):end]
-    # dv    = zeros(nVx+nVy)
-    # dpt   = zeros(nPt)
-    # dpf   = zeros(nPf)
-    # rv    = zeros(nVx+nVy)
-    # rpt   = zeros(nPt)
-    # rpf   = zeros(nPf)
-    # rv_t  = zeros(nVx+nVy)
-    # rpt_t = zeros(nPt)
-    # s     = zeros(nPf)
-    # ddv   = zeros(nVx+nVy)
-    # ddpt  = zeros(nPt)
-    # ddpf  = zeros(nPf)
+        ResidualContinuity2D!(R, V, P, P0, ϕ, phases, materials, number, type, BC, nc, Δ) 
+        ResidualFluidContinuity2D!(R, V, P, P0, ϕ, phases, materials, number, type, BC, nc, Δ) 
 
+        @info "Residuals"
+        @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
+        @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
+        @show norm(R.pt[inx_c,iny_c])/sqrt(nPt)
+        @show norm(R.pf[inx_c,iny_c])/sqrt(nPf)
 
-    # Jvv  = [M.Vx.Vx M.Vx.Vy;
-    #         M.Vy.Vx M.Vy.Vy]
-    # Jvp  = [M.Vx.Pt;
-    #         M.Vy.Pt]
-    # Jpv  = [M.Pt.Vx M.Pt.Vy]
-    # Jpp  = M.Pt.Pt
-    # Jppf = M.Pt.Pf
-    # Jpfv = [M.Pf.Vx M.Pf.Vy]
-    # Jpfp = M.Pf.Pt
-    # Jpf  = M.Pf.Pf
-    # Kvv  = Jvv
+        #--------------------------------------------#
 
-    # @time begin 
-    #     # Pre-conditionning (~Jacobi)
+        Vxsc = 0.5*(V.x[1:end-1,2:end-1] + V.x[2:end,2:end-1])
+        Vysc = 0.5*(V.y[2:end-1,1:end-1] + V.y[2:end-1,2:end])
+        Vs   = sqrt.( Vxsc.^2 .+ Vysc.^2)
+        Vxf  = -materials.k_ηf0[1]*diff(P.f, dims=1)/Δ.x
+        Vyf  = -materials.k_ηf0[1]*diff(P.f, dims=2)/Δ.y
+        Vyfc = 0.5*(Vyf[1:end-1,:] .+ Vyf[2:end,:])
+        Vxfc = 0.5*(Vxf[:,1:end-1] .+ Vxf[:,2:end])
+        Vf   = sqrt.( Vxfc.^2 .+ Vyfc.^2)
 
-    #     γ = 1e-4
-    #     Γ = spdiagm(γ*ones(nPt))
-    #     ΓV = spdiagm(γ*ones(nVx+nVy))
+        Vr_viz  = zero(Vxsc)
+        Vt_viz  = zero(Vxsc)
+        Pt_viz = copy(P.t)
+        Pf_viz = copy(P.f)
 
-    #     Jpv_t  = Jpv  - Jppf*spdiagm(1 ./ diag(Jpf  ) )*Jpfv
-    #     Jpp_t  = Jpp  - Jppf*spdiagm(1 ./ diag(Jpf  ) )*Jpfp
+        for i in 1:length(xce), j in 1:length(yce)
 
-    #     Jvv_t  = Kvv  - Jvp *spdiagm(1 ./ diag(Jpp_t) )*Jpv 
-    #     @show mean(diag(Jpp))
-    #     @show mean(diag(Jvv_t))
-    #    #  Jpf_h  = cholesky(Hermitian(SparseMatrixCSC(Jpf)), check = false  )        # Cholesky factors
-    #    #  Jvv_th = cholesky(Hermitian(SparseMatrixCSC(Jvv_t)), check = false)        # Cholesky factors
-    #    Jpf_h  = cholesky(Hermitian(SparseMatrixCSC(Jpf )) )        # Cholesky factors
-    #    Jvv_th = cholesky(Hermitian(SparseMatrixCSC(Jvv_t .+  ΓV )))        # Cholesky factors
-    #    Jpp_th = spdiagm(1 ./diag(Jpp_t));             # trivial inverse
-    #     @views for itPH=1:15
-    #         rv    .= -( Jvv*dv  + Jvp*dpt             - fv  )
-    #         rpt   .= -( Jpv*dv  + Jpp*dpt  + Jppf*dpf - fpt )
-    #         rpf   .= -( Jpfv*dv + Jpfp*dpt + Jpf*dpf  - fpf )
+            r = sqrt.(xce[i].^2 .+ yce[j].^2)
+            t = atan.(yce[j], xce[i])
 
+            J = [cos(t) sin(t);    
+                -sin(t) cos(t)]
+            V_cart = [Vxsc[i,j]; Vysc[i,j]]
+            V_pol  =  J*V_cart
 
+            Vr_viz[i,j] = V_pol[1]
+            Vt_viz[i,j] = V_pol[2]
+
+            if (xce[i].^2 .+ yce[j].^2) <= r_in^2 ||  (xce[i].^2 .+ yce[j].^2) >= r_out^2
+                Vr_viz[i,j] = NaN
+                Vt_viz[i,j] = NaN
+                Pf_viz[i,j] = NaN
+                Pt_viz[i,j] = NaN
+                Ur_ana[i,j] = NaN
+                Ut_ana[i,j] = NaN
+            else
+                ϵ_Ur[i,j] = abs(Ur_ana[i,j] - Vr_viz[i,j] )
+                ϵ_Pf[i,j] = abs(Pf_ana[i,j] - P.f[i,j])
+                ϵ_Pt[i,j] = abs(Pt_ana[i,j]*3/2 - P.t[i,j])
+            end
             
-    #         s     .= Jpf_h \ rpf
-    #         rpt_t .= -( Jppf*s - rpt)
-    #         s     .=    Jpp_th*rpt_t
-    #         rv_t  .= -( Jvp*s  - rv )
-    #         ddv   .= Jvv_th \ rv_t
-    #         s     .= -( Jpv_t*ddv - rpt_t )
-    #         ddpt  .=    Jpp_th*s 
-    #         s     .= -( Jpf*ddpt + Jpfv*ddv - rpf )
-    #         ddpf  .= Jpf_h \ s 
-    #         dv   .+= ddv
-    #         dpt  .+= ddpt
-    #         dpf  .+= ddpf
-            
-            
-    #         @printf("  --- iteration %d --- \n",itPH);
-    #         @printf("  ||res.v ||=%2.2e\n", norm(rv)/ 1)
-    #         @printf("  ||res.pt||=%2.2e\n", norm(rpt)/1)
-    #         @printf("  ||res.pf||=%2.2e\n", norm(rpf)/1)
-    #     #     if ((norm(rv)/length(rv)) < tol_linv) && ((norm(rpt)/length(rpt)) < tol_linpt) && ((norm(rpf)/length(rpf)) < tol_linpf), break; end
-    #     #     if ((norm(rv)/length(rv)) > (norm(rv0)/length(rv0)) && norm(rv)/length(rv) < tol_glob && (norm(rpt)/length(rpt)) > (norm(rpt0)/length(rpt0)) && norm(rpt)/length(rpt) < tol_glob && (norm(rpf)/length(rpf)) > (norm(rpf0)/length(rpf0)) && norm(rpf)/length(rpf) < tol_glob),
-    #     #         if noisy>=1, fprintf(' > Linear residuals do no converge further:\n'); break; end
-    #     #     end
-    #     #     rv0=rv; rpt0=rpt; rpf0=rpf; if (itPH==nPH), nfail=nfail+1; end
-    #     end
-    # end
+        end
 
-    
-    # dx = zeros(nVx + nVy + nPt + nPf)
-    # dx[1:(nVx+nVy)] .= dv
-    # dx[(nVx+nVy+1):(nVx+nVy+nPt)] .= dpt
-    # dx[(nVx+nVy+nPt+1):end] .= dpf
+        for i=1:size(BC.Vx,1), j=1:size(BC.Vx,2)
+            ro  = sqrt(xvx[i]^2 + yvx[j]^2)
+            if ro <= r_in || ro >= r_out
+                # Vx[i,j]     = NaN
+            else
+                ϵ_Ux[i,j] = abs(Ux_ana[i,j] - V.x[i,j])
+            end
+        end
 
-    #--------------------------------------------#
-    UpdateSolution!(V, P, dx, number, type, nc)
+        @show mean(ϵ_Ur)
+        @show mean(ϵ_Ux)
+        @show mean(ϵ_Pf)
+        @show mean(ϵ_Pt)
 
-    #--------------------------------------------#
+        p1 = heatmap(xc, yc, Vs[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Vs")
+        p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, title="Ux", xlims=(-5,5), ylims=(-5,5))
+        p2 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, title="Uy", xlims=(-5,5), ylims=(-5,5))
+        p1 = heatmap(xce, yce, Vr_viz', aspect_ratio=1, title="Ur", c=:jet)
+        p2 = heatmap(xce, yce, Vt_viz', aspect_ratio=1, title="Ut", c=:jet)
+        p3 = heatmap(xc, yc, Pt_viz[inx_c,iny_c]',   aspect_ratio=1, title="Pt", c=:jet)
+        p4 = heatmap(xc, yc, Pf_viz[inx_c,iny_c]',   aspect_ratio=1, title="Pf", c=:jet)
+        display(plot(p4, p3, p1, p2))
 
-    # Residual check
-    TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, type, BC, materials, phases, Δ)
-    ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-    ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-    ResidualContinuity2D!(R, V, P, P0, ϕ, phases, materials, number, type, BC, nc, Δ) 
-    ResidualFluidContinuity2D!(R, V, P, P0, ϕ, phases, materials, number, type, BC, nc, Δ) 
+        ymid = Int64(floor(nc.y/2))
+        p5 = plot(xlabel="x", ylabel="Pf")
+        p5 = scatter!(xc, P.f[2:end-1, ymid], label="numerics")
+        p5 = plot!(xc, Pf_ana[2:end-1, ymid], label="analytics")
+        p6 = plot(xlabel="x", ylabel="Pt")
+        p6 = scatter!(xc, P.t[2:end-1, ymid], label="numerics")
+        p6 = plot!(xc, Pt_ana[2:end-1, ymid], label="analytics")
+        p7 = plot(xlabel="x", ylabel="Ur")
+        p7 = scatter!(xc, Vr_viz[2:end-1, ymid].*Δ.t, label="numerics")
+        p7 = plot!(xc, Ur_ana[2:end-1, ymid], label="analytics")
+        # p6 = scatter!(xv, V.x[inx_Vx,iny_Vx][:,ymid].*Δ.t, label="numerics", markershape=:x)
+        # p6 = plot!(xv, Ux_ana[inx_Vx,iny_Vx][:,ymid], label="analytics")
 
-    @info "Residuals"
-    @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
-    @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-    @show norm(R.pt[inx_c,iny_c])/sqrt(nPt)
-    @show norm(R.pf[inx_c,iny_c])/sqrt(nPf)
-
-    #--------------------------------------------#
-
-    Vxsc = 0.5*(V.x[1:end-1,2:end-1] + V.x[2:end,2:end-1])
-    Vysc = 0.5*(V.y[2:end-1,1:end-1] + V.y[2:end-1,2:end])
-    Vs   = sqrt.( Vxsc.^2 .+ Vysc.^2)
-    Vxf  = -materials.k_ηf0[1]*diff(P.f, dims=1)/Δ.x
-    Vyf  = -materials.k_ηf0[1]*diff(P.f, dims=2)/Δ.y
-    Vyfc = 0.5*(Vyf[1:end-1,:] .+ Vyf[2:end,:])
-    Vxfc = 0.5*(Vxf[:,1:end-1] .+ Vxf[:,2:end])
-    Vf   = sqrt.( Vxfc.^2 .+ Vyfc.^2)
-
-    Vr_viz  = zero(Vxsc)
-    Vt_viz  = zero(Vxsc)
-
-    P.t .-= mean(P.t) 
-
-
-
-
-    for i in 1:length(xce), j in 1:length(yce)
-       
-            ϵ_Pt[i,j] = abs(Pt_ana[i,j] - P.t[i,j])
-        
-    end
-
-    for i=1:size(BC.Vx,1), j=1:size(BC.Vx,2)
-
-            ϵ_Vx[i,j] = abs(Vx_ana[i,j] - V.x[i,j])
-    end
-
-    @show mean(ϵ_Vx)
-    @show mean(ϵ_Pt)
-
-    P.t[P.t.>maximum(Pt_ana)] .= maximum(Pt_ana)
-    P.t[P.t.<minimum(Pt_ana)] .= minimum(Pt_ana)
-
-    p1 = heatmap(xc, yc, Vs[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Vs")
-    p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, title="Ux", xlims=(-5,5), ylims=(-5,5))
-    p2 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, title="Uy", xlims=(-5,5), ylims=(-5,5))
-    p1 = heatmap(xce, yce, Vr_viz', aspect_ratio=1, title="Ur", c=:jet)
-    p2 = heatmap(xce, yce, Vt_viz', aspect_ratio=1, title="Ut", c=:jet)
-    p3 = heatmap(xc, yc, P.t[inx_c,iny_c]', colorrange=(-3.5, 3.5),   aspect_ratio=1, title="Pt", c=:jet)
-    p4 = heatmap(xc, yc, Pt_ana[inx_c,iny_c]',   aspect_ratio=1, title="Pt_ana", c=:jet)
-    display(plot(p4, p3, p1, p2))
+        display(plot(p5, p6, p7, layout=(3,1)))
 
     end
 
     #--------------------------------------------#
 
-    return P, Δ, (c=xc, v=xv), (c=yc, v=yv)
+    # return P, Δ, (c=xc, v=xv), (c=yc, v=yv)
 end
 
 ##################################
 function Run()
 
-    nc = (x=100, y=100)
+    nc = (x=200, y=200)
 
     # Mode 0   
     Ωl = 0.1
     Ωη = 10.
-    P, Δ, x, y = main(nc,  Ωl, Ωη);
-    # save("/Users/tduretz/PowerFolders/_manuscripts/TwoPhasePressure/benchmark/SchmidTest.jld2", "x", x, "y", y, "P", P )
+    main(nc,  Ωl, Ωη);
 
 end
 

@@ -147,10 +147,13 @@ function single_phase_return_mapping()
         θ    = zeros(nt),
     )
 
+    it1 = 1
+
     # Time loop
     for it=1:nt
 
         @info "Step $(it)"
+        it1 = it
 
         # Old guys
         P0 = P
@@ -209,6 +212,11 @@ function single_phase_return_mapping()
         probes.P[it]    = P
         probes.detA[it] = detA[argmin(detA)]
         probes.θ[it]    = abs(θ[argmin(detA)])
+
+        if minimum(detA) < 0
+            @info "Bifurcation"
+            break
+        end
     end
 
     if minimum(probes.detA) <0
@@ -219,15 +227,16 @@ function single_phase_return_mapping()
 
     @info probes.θ[bif_ind]
 
+
     fig = Figure(size=(500, 500))
     ax  = Axis(fig[1,1], title=L"$$Det. acoustic tensor", xlabel=L"$t$", ylabel=L"$\tau$")
-    lines!(  ax, probes.t*sc.t, probes.τ*sc.σ )
+    lines!(  ax, probes.t[1:it1]*sc.t, probes.τ[1:it1]*sc.σ )
     ax  = Axis(fig[2,1], title=L"$$Det. acoustic tensor", xlabel=L"$t$", ylabel=L"$P$")
-    lines!(  ax, probes.t*sc.t, probes.P*sc.σ )
+    lines!(  ax, probes.t[1:it1]*sc.t, probes.P[1:it1]*sc.σ )
     ax  = Axis(fig[3,1], title=L"$$Det. acoustic tensor", xlabel=L"$t$", ylabel=L"$\det{\mathbf{A}}$")
-    lines!(  ax, probes.t*sc.t, probes.detA )
+    lines!(  ax, probes.t[1:it1]*sc.t, probes.detA[1:it1] )
     ax  = Axis(fig[4,1], title=L"$\theta$", xlabel=L"$t$", ylabel=L"$\theta$")
-    lines!(  ax, probes.t*sc.t, probes.θ )
+    lines!(  ax, probes.t[1:it1]*sc.t, probes.θ[1:it1] )
     display(fig)
 
 end

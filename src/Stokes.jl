@@ -120,6 +120,22 @@ function set_boundaries_template!(type, config, nc)
         type.Vy[inx_Vy,end-1]   .= :Dirichlet_normal 
         # -------- Pt -------- #
         type.Pt[2:end-1,2:end-1] .= :in
+
+    elseif config == :no_slip
+        # -------- Vx -------- #
+        type.Vx[inx_Vx,iny_Vx]  .= :in       
+        type.Vx[2,iny_Vx]       .= :Dirichlet_normal 
+        type.Vx[end-1,iny_Vx]   .= :Dirichlet_normal 
+        type.Vx[inx_Vx,2]       .= :Dirichlet_tangent
+        type.Vx[inx_Vx,end-1]   .= :Dirichlet_tangent
+        # -------- Vy -------- #
+        type.Vy[inx_Vy,iny_Vy]  .= :in       
+        type.Vy[2,iny_Vy]       .= :Dirichlet_tangent
+        type.Vy[end-1,iny_Vy]   .= :Dirichlet_tangent
+        type.Vy[inx_Vy,2]       .= :Dirichlet_normal 
+        type.Vy[inx_Vy,end-1]   .= :Dirichlet_normal 
+        # -------- Pt -------- #
+        type.Pt[2:end-1,2:end-1] .= :in
         
     end
 end

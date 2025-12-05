@@ -4,25 +4,28 @@ using Enzyme  # AD backends you want to use
 
 @views function main(nc, Ωl, Ωη)
 
-    nt  = 30
-    Δt0 = 1e9/3
-
+    nt  = 100
+    Δt0 = 1e9 * 10
     viscoelastic = true
 
+    # nt  = 1
+    # Δt0 = 1e9 * 10
+    # viscoelastic = false
+
     # Adimensionnal numbers
-    Ωr     = 0.1             # Ratio inclusion radius / len
+    Ωr     = 0.1*1             # Ratio inclusion radius / len
     Ωηi    = 1e-4            # Ratio (inclusion viscosity) / (matrix viscosity)
     Ωp     = 1.              # Ratio (ε̇bg * ηs) / P0
     # Independant
     ηs0    = 1.              # Shear viscosity
-    len    = 1.              # Box size
+    r      = 1.0              # Box size
     P0     = 1.              # Initial ambiant pressure
     ϕ0     = 1e-1
     # Dependant
     ηb0    = Ωη * ηs0        # Bulk viscosity
-    k_ηf0  = (len.^2 * Ωl^2) / (ηb0 + 4/3 * ηs0) # Permeability / fluid viscosity
-    r      = Ωr * len        # Inclusion radius
-    ηs_inc = 1 ./ Ωηi * ηs0       # Inclusion shear viscosity
+    k_ηf0  = (r.^2 * Ωl^2) / (ηb0 + 4/3 * ηs0) # Permeability / fluid viscosity
+    len    = r/Ωr            # Inclusion radius
+    ηs_inc = 1 ./ Ωηi * ηs0  # Inclusion shear viscosity
     ε̇      = Ωp * P0 / ηs0   # Background strain rate
 
     # Velocity gradient matrix
@@ -60,6 +63,17 @@ using Enzyme  # AD backends you want to use
     end
 
     @show materials
+    @show materials.ηs0 ./ materials.G
+    @show materials.ηb  ./ materials.G
+    @show materials.ηs0 ./ materials.Kd
+    @show materials.ηb  ./ materials.Kd
+    @show materials.ηs0 ./ materials.KΦ
+    @show materials.ηb  ./ materials.KΦ
+    @show materials.ηs0 ./ materials.Kf
+    @show materials.ηb  ./ materials.Kf
+    @show r^2/k_ηf0/materials.Kd[1]
+
+    error()
     
     # Resolution
     inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, inx_v, iny_v, size_x, size_y, size_c, size_v = Ranges(nc)
@@ -159,19 +173,23 @@ using Enzyme  # AD backends you want to use
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
     V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
 
+    
     Xc = xc .+ 0*yc'
     Yc = 0*xc .+ yc'
     Xv = xv .+ 0*yv'
     Yv = 0*xv .+ yv'
-    α  = 30.
-    ax = 2.0
-    ay = 1/2
-    X_tilt = cosd(α).*Xc .- sind(α).*Yc
-    Y_tilt = sind(α).*Xc .+ cosd(α).*Yc
-    phases.c[inx_c, iny_c][(X_tilt.^2 ./ax.^2 .+ (Y_tilt).^2 ./ay^2) .< r^2 ] .= 2
-    X_tilt = cosd(α).*Xv .- sind(α).*Yv
-    Y_tilt = sind(α).*Xv .+ cosd(α).*Yv
-    phases.v[inx_v, iny_v][(X_tilt.^2 ./ax.^2 .+ (Y_tilt).^2 ./ay^2) .< r^2 ] .= 2
+    phases.c[inx_c, iny_c][abs.(Yc) .< r] .= 2
+    phases.v[inx_v, iny_v][abs.(Yv) .< r] .= 2
+
+    # α  = 30.
+    # ax = 2.0
+    # ay = 1/2
+    # X_tilt = cosd(α).*Xc .- sind(α).*Yc
+    # Y_tilt = sind(α).*Xc .+ cosd(α).*Yc
+    # phases.c[inx_c, iny_c][(X_tilt.^2 ./ax.^2 .+ (Y_tilt).^2 ./ay^2) .< r^2 ] .= 2
+    # X_tilt = cosd(α).*Xv .- sind(α).*Yv
+    # Y_tilt = sind(α).*Xv .+ cosd(α).*Yv
+    # phases.v[inx_v, iny_v][(X_tilt.^2 ./ax.^2 .+ (Y_tilt).^2 ./ay^2) .< r^2 ] .= 2
 
     # Boundary condition values
     BC = ( Vx = zeros(size_x...), Vy = zeros(size_y...), Pt = zeros(size_c...), Pf = zeros(size_c...))
@@ -210,7 +228,8 @@ using Enzyme  # AD backends you want to use
         # Residual check
         TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, type, BC, materials, phases, Δ)
         ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-        ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+                    ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+
         ResidualContinuity2D!(R, V, P, P0, ϕ, phases, materials, number, type, BC, nc, Δ) 
         ResidualFluidContinuity2D!(R, V, P, P0, ϕ, phases, materials, number, type, BC, nc, Δ) 
 
@@ -273,8 +292,8 @@ using Enzyme  # AD backends you want to use
         Kvv  = Jvv
 
         @time begin 
-            # γ = 1e-8
-            # Γ = spdiagm(γ*ones(nPt))
+            γ = 1e8
+            Γ = spdiagm(γ*ones(nPt))
             # Pre-conditionning (~Jacobi)
             Jpv_t  = Jpv  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfv  
             Jpp_t  = Jpp  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfp  #.+ Γ
@@ -283,7 +302,7 @@ using Enzyme  # AD backends you want to use
             Jpf_h  = cholesky(Hermitian(SparseMatrixCSC(Jpf)), check = false  )        # Cholesky factors
             Jvv_th = cholesky(Hermitian(SparseMatrixCSC(Jvv_t)), check = false)        # Cholesky factors
             Jpp_th = spdiagm(1 ./diag(Jpp_t));             # trivial inverse
-            @views for itPH=1:15
+            @views for itPH=1:50
                 rv    .= -( Jvv*dv  + Jvp*dpt             - fv  )
                 rpt   .= -( Jpv*dv  + Jpp*dpt  + Jppf*dpf - fpt )
                 rpf   .= -( Jpfv*dv + Jpfp*dpt + Jpf*dpf  - fpf )
@@ -323,7 +342,8 @@ using Enzyme  # AD backends you want to use
         # Residual check
         TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, type, BC, materials, phases, Δ)
         ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-        ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+                    ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+
         ResidualContinuity2D!(R, V, P, P0, ϕ, phases, materials, number, type, BC, nc, Δ) 
         ResidualFluidContinuity2D!(R, V, P, P0, ϕ, phases, materials, number, type, BC, nc, Δ) 
 
@@ -346,24 +366,28 @@ using Enzyme  # AD backends you want to use
 
         p1 = heatmap(xc, yc, Vs[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Vs")
         p2 = heatmap(xv[2:end-1], yv[2:end-1], Vf[2:end-1,2:end-1]', aspect_ratio=1, xlim=extrema(xc), title="Vf")
-        p3 = heatmap(xc, yc, P.t[inx_c,iny_c]',   aspect_ratio=1, xlim=extrema(xc), title="Pt", clims=(-3,3))
+        p3 = heatmap(xc, yc, P.t[inx_c,iny_c]',   aspect_ratio=1, xlim=extrema(xc), title="Pt")
         # divV = diff(V.x[2:end-1,3:end-2], dims=1)/Δ.x  + diff(V.y[3:end-2,2:end-1], dims=2)/Δ.y
         # p3 = heatmap(xc, yc, divV',   aspect_ratio=1, xlim=extrema(xc), title="Pt")
-        p4 = heatmap(xc, yc, P.f[inx_c,iny_c]',   aspect_ratio=1, xlim=extrema(xc), title="Pf", clims=(-3,3))
+        p4 = heatmap(xc, yc, P.f[inx_c,iny_c]',   aspect_ratio=1, xlim=extrema(xc), title="Pf")
         display(plot(p1, p2, p3, p4))
 
         # P.t .-= mean(P.t)
         # P.f .-= mean(P.f)
 
+        @show extrema(P.f[phases.c.==1]), maximum(P.f[phases.c.==1]) - minimum(P.f[phases.c.==1])
+        @show extrema(P.t[phases.c.==1]), maximum(P.t[phases.c.==1]) - minimum(P.t[phases.c.==1])
+
         probes.Pti[it]  = mean(P.t[phases.c.==2])
         probes.Pfi[it]  = mean(P.f[phases.c.==2])
         probes.Pei[it]  = mean(P.t[phases.c.==2] .- P.f[phases.c.==2])
-        probes.ΔPt[it]  = maximum(P.t) - minimum(P.t)
-        probes.ΔPf[it]  = maximum(P.f) - minimum(P.f)
-        probes.ΔPe[it]  = maximum(P.t .- P.f) - minimum(P.t .- P.f) 
+        probes.ΔPt[it]  = maximum(P.t[phases.c.==1]) - minimum(P.t[phases.c.==1])
+        probes.ΔPf[it]  = maximum(P.f[phases.c.==1]) - minimum(P.f[phases.c.==1])
+        probes.ΔPe[it]  = maximum(P.t[phases.c.==1] .- P.f[phases.c.==1]) - minimum(P.t[phases.c.==1] .- P.f[phases.c.==1]) 
         probes.Pe[it]   = norm(P.t .- P.f)
         probes.Pt[it]   = norm(P.t)
         probes.Pf[it]   = norm(P.f)
+        probes.t[it]    = it*Δ.t
 
         @show mean(P.t[phases.c.==2])
         @show mean(P.f[phases.c.==2])
@@ -373,14 +397,17 @@ using Enzyme  # AD backends you want to use
 
     #--------------------------------------------#
 
-    save("./examples/_TwoPhases/TwoPhasesPressure/ViscousLimit.jld2", "Ωl", Ωl, "Ωη", Ωη, "probes", probes, "x", (c=xc, v=xv), "y", (c=yc, v=yv), "P", P, "phases", phases)
-
+    if viscoelastic
+        save("./examples/_TwoPhases/TwoPhasesPressure/Viscoelastic_Layer3.jld2", "Ωl", Ωl, "Ωη", Ωη, "probes", probes, "x", (c=xc, v=xv), "y", (c=yc, v=yv), "P", P, "phases", phases)
+    else
+        save("./examples/_TwoPhases/TwoPhasesPressure/ViscousLimit_Layer3.jld2", "Ωl", Ωl, "Ωη", Ωη, "probes", probes, "x", (c=xc, v=xv), "y", (c=yc, v=yv), "P", P, "phases", phases)
+    end
     return P, Δ, (c=xc, v=xv), (c=yc, v=yv)
 end
 
 function Run()
 
-    nc = (x=500, y=500)
+    nc = (x=250, y=250)
 
     # Mode 0   
     Ωl = 10^(-1.7)

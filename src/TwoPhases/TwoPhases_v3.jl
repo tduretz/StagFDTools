@@ -81,7 +81,7 @@ function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, Pf, ΔP, τ0, 𝐷, phases, mat
     return fx
 end
 
-function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, Pf, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δ)
+function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, Pf, ΔP, Pt0, Pf0, Φ0, τ0, 𝐷, phases, materials, type, bcv, Δ)
     
     invΔx, invΔy = 1 / Δ.x, 1 / Δ.y
 
@@ -126,7 +126,37 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, Pf, ΔP, τ0, 𝐷, phases, mat
 
     # Corrected pressure
     comp = materials.compressible
-    Ptc  = SVector{2, Float64}( @. Pt[2,:] + comp * ΔP[:] )
+    Ptc  = SVector{2, Float64}( @. Pt[2,:]  + comp * ΔP.t[:] )
+    Ptc0 = SVector{2, Float64}( @. Pt0[2,:] )
+    Pfc  = SVector{2, Float64}( @. Pf[2,:]  + comp * ΔP.f[:] )
+    Pfc0 = SVector{2, Float64}( @. Pf0[2,:] )
+
+    # Porosity
+    ηΦ      = SVector{2, Float64}( materials.ηΦ[phases.c])
+    KΦ      = SVector{2, Float64}( materials.KΦ[phases.c])
+
+    dPtdt   = (Ptc - Ptc0) / Δ.t
+    dPfdt   = (Pfc - Pfc0) / Δ.t
+    dΦdt    = @. (dPfdt - dPtdt)/KΦ + (Pfc - Ptc)/ηΦ
+
+    # # @show size(dPtdt), size(dPfdt), size(Ptc), size(Pfc),size(KΦ),size(ηΦ), size(dΦdt)
+
+    # THIS IF STATEMENT DOES NOT COMPILE WITH ENZYME
+    # if materials.linearizeϕ
+    #     Φ       = @. Φ0 
+    # else
+        Φ       = @. Φ0 + dΦdt*Δ.t
+    # end
+
+    # Density
+    ρs   = SVector{2, Float64}( materials.ρs[phases.c])
+    ρf   = SVector{2, Float64}( materials.ρf[phases.c])
+    ρt   = @. (1-Φ) * ρs + Φ * ρf
+    ρg   = materials.g[2] * 0.5*(ρt[1] + ρt[2])
+
+    # @show ρg
+
+    # error()
 
     # Stress
     τyy = @MVector zeros(2)
@@ -140,6 +170,7 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, Pf, ΔP, τ0, 𝐷, phases, mat
     fy  = ( τyy[2]  -  τyy[1] ) * invΔy
     fy += ( τxy[2]  -  τxy[1] ) * invΔx
     fy -= ( Ptc[2]  -  Ptc[1])  * invΔy
+    fy += ρg
     fy *= -1 * Δ.x * Δ.y
 
     # fy = Vy_loc[2,2]
@@ -183,52 +214,83 @@ function Continuity(Vx, Vy, Pt, Pt0, Pf, Pf0, Φ0, phase, materials, type_loc, b
 
     divVs   = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy 
     
-    fp      = dlnρsdt - dΦdt/(1-Φ) +   divVs
+    # if materials.oneway
+    #     fp      = divVs
+    # else
+        fp      = dlnρsdt - dΦdt/(1-Φ) +   divVs
+    # end
 
     # Solid mass / immobile solid mass
     # ρim  = (1-phi)*ρs
     # qx   = ρim*Vxs     # Brucite paper, Fowler (1985)
     # qy   = ρim*Vys     # Brucite paper, Fowler (1985)    
     # fp   = ∂ρim∂t  +  (∂qx∂x + ∂qy∂y)
-    
+
     return fp
 end
 
-function FluidContinuity(Vx, Vy, Pt, Pt0, Pf_loc, ΔPf_loc, Pf0, Φ0, phase, materials, kμ, type_loc, bcv_loc, Δ)
+function FluidContinuity(Vx, Vy, Pt, Pf_loc, ΔPf_loc, Pt0, Pf0, Φ0, phase, materials, kμ, type_loc, bcv_loc, Δ)
     
     invΔx   = 1 / Δ.x
     invΔy   = 1 / Δ.y
     Δt      = Δ.t
-    ηΦ      = materials.ηΦ[phase]
-    KΦ      = materials.KΦ[phase] 
-    Kf      = materials.Kf[phase]
+    ηΦ      = materials.ηΦ[phase[2,2]]
+    KΦ      = materials.KΦ[phase[2,2]] 
+    Kf      = materials.Kf[phase[2,2]]
 
-    Pf = SetBCPf1(Pf_loc, type_loc, bcv_loc, Δ)
+    # Density
+    ρ0f  = SMatrix{3,3, Float64}( materials.ρf[phase])
+    ρgS  = materials.g[2] * 0.5*(ρ0f[2,2] + ρ0f[2,1])
+    ρgN  = materials.g[2] * 0.5*(ρ0f[2,2] + ρ0f[2,3])
 
-    dPtdt   = (Pt[1,1] - Pt0) / Δt
-    dPfdt   = (Pf[2,2] - Pf0) / Δt
-    dΦdt    = (dPfdt - dPtdt)/KΦ + (Pf[2,2] - Pt[1,1])/ηΦ
+    Pf    = SetBCPf1(Pf_loc, type_loc, bcv_loc, Δ, ρgS)
+
+    dPtdt   = SMatrix{3,3, Float64}( (Pt .- Pt0) / Δt )
+    dPfdt   = SMatrix{3,3, Float64}( (Pf .- Pf0) / Δt )
+    dΦdt    = SMatrix{3,3, Float64}( (dPfdt .- dPtdt)/KΦ .+ (Pf .- Pt)/ηΦ )
     if materials.linearizeϕ
-        Φ       = Φ0 
+        Φ       = SMatrix{3,3, Float64}( Φ0 ) 
     else
-        Φ       = Φ0 + dΦdt*Δt
+        Φ       = SMatrix{3,3, Float64}( Φ0  .+ dΦdt*Δt )
     end
-    dlnρfdt = dPfdt / Kf
+    dlnρfdt = dPfdt[2,2] / Kf
 
-    # Pf1 = SetBCPf1(Pf_loc.+ΔPf_loc, type_loc, bcv_loc, Δ)
+    # Interpolate porosity to velocity nodes
+    ΦxW = 1/2*(Φ[1,2] + Φ[2,2])
+    ΦxE = 1/2*(Φ[3,2] + Φ[2,2])
+    ΦyS = 1/2*(Φ[2,1] + Φ[2,2])
+    ΦyN = 1/2*(Φ[2,3] + Φ[2,2])
 
-    qxW = -kμ.xx[1]*(Pf[2,2] - Pf[1,2]) * invΔx
-    qxE = -kμ.xx[2]*(Pf[3,2] - Pf[2,2]) * invΔx
-    qyS = -kμ.yy[1]*(Pf[2,2] - Pf[2,1]) * invΔy
-    qyN = -kμ.yy[2]*(Pf[2,3] - Pf[2,2]) * invΔy
+    # Carman-Kozeny
+    n   = materials.n_CK[phase[2,2]]
+
+    # Pf1 = SetBCPf1(Pf_loc.+ΔPf_loc, type_loc, bcv_loc, Δ, ρgS)
+
+    # Darcy flux
+    # printxy(Φ)
+    # @show (dPfdt .- dPtdt)/KΦ
+    # @show (Pf .- Pt)/ηΦ
+    # @show dΦdt
+    # @show Δt
+    qxW = -kμ.xx[1]* ΦxW^n * ((Pf[2,2] - Pf[1,2]) * invΔx      )
+    qxE = -kμ.xx[2]* ΦxE^n * ((Pf[3,2] - Pf[2,2]) * invΔx      )
+    qyS = -kμ.yy[1]* ΦyS^n * ((Pf[2,2] - Pf[2,1]) * invΔy - ρgS) 
+    qyN = -kμ.yy[2]* ΦyN^n * ((Pf[2,3] - Pf[2,2]) * invΔy - ρgN) 
 
     divqD = (    qxE -     qxW) * invΔx + (    qyN -     qyS) * invΔy
     divVs = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy 
 
+    # if type_loc[2,1] ==:Dirichlet
+    #     printxy(type_loc)
+    #     printxy(Pf)
+    #     printxy(1/2*(Pf[:,1:end-1] .+ Pf[:,2:end]))
+    
+    # end
+
     if materials.oneway
         fp   = divqD
     else
-        fp = (Φ*dlnρfdt + dΦdt       + Φ*divVs + divqD)
+        fp = (Φ[2,2]*dlnρfdt + dΦdt[2,2]       + Φ[2,2]*divVs + divqD)
     end
 
     # Total mass
@@ -354,7 +416,7 @@ function AssembleMomentum2D_x!(K, V, P, P0, ΔP, τ0, 𝐷, phases, materials, n
     return nothing
 end
 
-function ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)                 
+function ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)                 
     shift    = (x=2, y=1)
     for j in 1+shift.y:nc.y+shift.y+1, i in 1+shift.x:nc.x+shift.x
         Vx_loc     = SMatrix{4,4}(      V.x[ii,jj] for ii in i-2:i+1, jj in j-1:j+2)
@@ -368,6 +430,10 @@ function ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, n
         Pt_loc     = SMatrix{3,2}(      P.t[ii,jj] for ii in i-2:i,   jj in j-1:j  )
         Pf_loc     = SMatrix{3,2}(      P.f[ii,jj] for ii in i-2:i,   jj in j-1:j  )
         ΔPt_loc    = SMatrix{1,2}(     ΔP.t[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
+        ΔPf_loc    = SMatrix{1,2}(     ΔP.f[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
+        Pt0_loc    = SMatrix{3,2}(     P0.t[ii,jj] for ii in i-2:i,   jj in j-1:j  )
+        Pf0_loc    = SMatrix{3,2}(     P0.f[ii,jj] for ii in i-2:i,   jj in j-1:j  )
+        Φ0_loc     = SMatrix{1,2}(     Φ0.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
         τxx0       = SMatrix{3,2}(    τ0.xx[ii,jj] for ii in i-2:i,   jj in j-1:j  )
         τyy0       = SMatrix{3,2}(    τ0.yy[ii,jj] for ii in i-2:i,   jj in j-1:j  )
         τxy0       = SMatrix{2,3}(    τ0.xy[ii,jj] for ii in i-1:i,   jj in j-1:j+1)
@@ -376,16 +442,17 @@ function ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, n
         bcv_loc    = (x=bcx_loc, y=bcy_loc)
         type_loc   = (x=typex_loc, y=typey_loc)
         ph_loc     = (c=phc_loc, v=phv_loc)
+        ΔP_loc     = (t=ΔPt_loc, f=ΔPf_loc)
         D          = (c=Dc, v=Dv)
         τ0_loc     = (xx=τxx0, yy=τyy0, xy=τxy0)
         if type.Vy[i,j] == :in
-            R.y[i,j]   = SMomentum_y_Generic(Vx_loc, Vy_loc, Pt_loc, Pf_loc, ΔPt_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δ)
+            R.y[i,j]   = SMomentum_y_Generic(Vx_loc, Vy_loc, Pt_loc, Pf_loc, ΔP_loc, Pt0_loc, Pf0_loc, Φ0_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δ)
         end
     end
     return nothing
 end
 
-function AssembleMomentum2D_y!(K, V, P, P0, ΔP, τ0, 𝐷, phases, materials, num, pattern, type, BC, nc, Δ) 
+function AssembleMomentum2D_y!(K, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, num, pattern, type, BC, nc, Δ) 
     
     ∂R∂Vy = @MMatrix zeros(3,3)
     ∂R∂Vx = @MMatrix zeros(4,4)
@@ -410,6 +477,10 @@ function AssembleMomentum2D_y!(K, V, P, P0, ΔP, τ0, 𝐷, phases, materials, n
         Pt_loc    .= SMatrix{3,2}(      P.t[ii,jj] for ii in i-2:i,   jj in j-1:j  )
         Pf_loc    .= SMatrix{3,2}(      P.f[ii,jj] for ii in i-2:i,   jj in j-1:j  )
         ΔPt_loc    = @inline SMatrix{1,2}(@inbounds     ΔP.t[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
+        ΔPf_loc    = SMatrix{1,2}(     ΔP.f[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
+        Pt0_loc    = SMatrix{3,2}(     P0.t[ii,jj] for ii in i-2:i,   jj in j-1:j  )
+        Pf0_loc    = SMatrix{3,2}(     P0.f[ii,jj] for ii in i-2:i,   jj in j-1:j  )
+        Φ0_loc     = SMatrix{1,2}(     Φ0.c[ii,jj] for ii in i-1:i-1, jj in j-1:j  )
         τxx0       = @inline SMatrix{3,2}(@inbounds     τ0.xx[ii,jj] for ii in i-2:i,   jj in j-1:j  )
         τyy0       = @inline SMatrix{3,2}(@inbounds     τ0.yy[ii,jj] for ii in i-2:i,   jj in j-1:j  )
         τxy0       = @inline SMatrix{2,3}(@inbounds     τ0.xy[ii,jj] for ii in i-1:i,   jj in j-1:j+1)
@@ -418,6 +489,7 @@ function AssembleMomentum2D_y!(K, V, P, P0, ΔP, τ0, 𝐷, phases, materials, n
         bcv_loc    = (x=bcx_loc, y=bcy_loc)
         type_loc   = (x=typex_loc, y=typey_loc)
         ph_loc     = (c=phc_loc, v=phv_loc)
+        ΔP_loc     = (t=ΔPt_loc, f=ΔPf_loc)
         D          = (c=Dc, v=Dv)
         τ0_loc     = (xx=τxx0, yy=τyy0, xy=τxy0)
 
@@ -428,7 +500,7 @@ function AssembleMomentum2D_y!(K, V, P, P0, ΔP, τ0, 𝐷, phases, materials, n
             fill!(∂R∂Pt, 0.0)
             fill!(∂R∂Pf, 0.0)
 
-            autodiff(Enzyme.Reverse, SMomentum_y_Generic, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(Pt_loc, ∂R∂Pt), Duplicated(Pf_loc, ∂R∂Pf), Const(ΔPt_loc), Const(τ0_loc), Const(D), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+            autodiff(Enzyme.Reverse, SMomentum_y_Generic, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(Pt_loc, ∂R∂Pt), Duplicated(Pf_loc, ∂R∂Pf), Const(ΔP_loc), Const(Pt0_loc), Const(Pf0_loc), Const(Φ0_loc), Const(τ0_loc), Const(D), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
 
             Local = num.Vx[i-2:i+1,j-1:j+2] .* pattern[2][1]
             for jj in axes(Local,2), ii in axes(Local,1)
@@ -548,10 +620,13 @@ function ResidualFluidContinuity2D!(R, V, P, ΔP, P0, ϕ0, phases, materials, nu
     shift    = (x=1, y=1)
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
         if type.Pf[i,j] !== :constant 
-            Pt_loc     = SMatrix{1,1}(      P.t[ii,jj] for ii in i:i, jj in j:j)
+            phase      = SMatrix{3,3}( phases.c[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            Pt_loc     = SMatrix{3,3}(      P.t[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             Pf_loc     = SMatrix{3,3}(      P.f[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             ΔPf_loc    = SMatrix{3,3}(     ΔP.f[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-            # Pf0        = SMatrix{1,1}(     P0.f[ii,jj] for ii in i:i, jj in j:j)
+            Pt0        = SMatrix{3,3}(     P0.t[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            Pf0        = SMatrix{3,3}(     P0.f[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+            Φ0         = SMatrix{3,3}(     ϕ0.c[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             type_loc   = SMatrix{3,3}(  type.Pf[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             bcv_loc    = SMatrix{3,3}(    BC.Pf[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
             Vx_loc     = SMatrix{2,3}(      V.x[ii,jj] for ii in i:i+1, jj in j:j+2)
@@ -562,7 +637,7 @@ function ResidualFluidContinuity2D!(R, V, P, ΔP, P0, ϕ0, phases, materials, nu
             k_loc_yy   = @SVector [materials.k_ηf0[phases.y[i+1,j]], materials.k_ηf0[phases.y[i+1,j+1]]]
             k_loc      = (xx = k_loc_xx,    xy = 0.,
                           yx = 0.,          yy = k_loc_yy)
-            R.pf[i,j]  = FluidContinuity(Vx_loc, Vy_loc, Pt_loc, P0.t[i,j], Pf_loc, ΔPf_loc, P0.f[i,j], ϕ0.c[i,j], phases.c[i,j], materials, k_loc, type_loc, bcv_loc, Δ)
+            R.pf[i,j]  = FluidContinuity(Vx_loc, Vy_loc, Pt_loc, Pf_loc, ΔPf_loc, Pt0, Pf0, Φ0, phase, materials, k_loc, type_loc, bcv_loc, Δ)
 
         end
     end
@@ -574,14 +649,17 @@ function AssembleFluidContinuity2D!(K, V, P, ΔP, P0, ϕ0, phases, materials, nu
     shift    = (x=1, y=1)
     ∂R∂Vx = @MMatrix zeros(2,3)
     ∂R∂Vy = @MMatrix zeros(3,2)
-    ∂R∂Pt = @MMatrix zeros(1,1)
+    ∂R∂Pt = @MMatrix zeros(3,3)
     ∂R∂Pf = @MMatrix zeros(3,3)
 
     for j in 1+shift.y:nc.y+shift.y, i in 1+shift.x:nc.x+shift.x
-        Pt_loc     = MMatrix{1,1}(      P.t[ii,jj] for ii in i:i, jj in j:j)
+        phase      = SMatrix{3,3}( phases.c[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+        Pt_loc     = MMatrix{3,3}(      P.t[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         Pf_loc     = MMatrix{3,3}(      P.f[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         ΔPf_loc    = MMatrix{3,3}(     ΔP.f[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
-        # Pf0        = MMatrix{1,1}(     P0.f[ii,jj] for ii in i:i, jj in j:j)
+        Pt0        = SMatrix{3,3}(     P0.t[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+        Pf0        = SMatrix{3,3}(     P0.f[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
+        Φ0         = SMatrix{3,3}(     ϕ0.c[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)        
         type_loc   = SMatrix{3,3}(  type.Pf[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         bcv_loc    = SMatrix{3,3}(    BC.Pf[ii,jj] for ii in i-1:i+1, jj in j-1:j+1)
         Vx_loc     = MMatrix{2,3}(      V.x[ii,jj] for ii in i:i+1, jj in j:j+2)
@@ -595,7 +673,7 @@ function AssembleFluidContinuity2D!(K, V, P, ΔP, P0, ϕ0, phases, materials, nu
         ∂R∂Vy .= 0.
         ∂R∂Pt .= 0.
         ∂R∂Pf .= 0.
-        autodiff(Enzyme.Reverse, FluidContinuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(Pt_loc, ∂R∂Pt), Const(P0.t[i,j]), Duplicated(Pf_loc, ∂R∂Pf), Const(ΔPf_loc), Const(P0.f[i,j]), Const(ϕ0.c[i,j]), Const(phases.c[i,j]), Const(materials), Const(k_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
+        autodiff(Enzyme.Reverse, FluidContinuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(Pt_loc, ∂R∂Pt), Duplicated(Pf_loc, ∂R∂Pf), Const(ΔPf_loc), Const(Pt0), Const(Pf0), Const(Φ0), Const(phase), Const(materials), Const(k_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
              
         # Pf --- Vx
         Local = num.Vx[i:i+1,j:j+2] .* pattern[4][1]
@@ -612,7 +690,7 @@ function AssembleFluidContinuity2D!(K, V, P, ΔP, P0, ϕ0, phases, materials, nu
             end
         end
         # Pf --- Pt
-        Local = num.Pt[i,j] .* pattern[4][3]
+        Local = num.Pt[i-1:i+1,j-1:j+1] .* pattern[4][3]
         for jj in axes(Local,2), ii in axes(Local,1)
             if (Local[ii,jj]>0) && num.Pf[i,j]>0
                 K[4][3][num.Pf[i,j], Local[ii,jj]] = ∂R∂Pt[ii,jj]  
@@ -662,21 +740,23 @@ function ResidualPorosity2D!(R, V, P, P0, Φ, Φ0, phases, materials, number, ty
     return nothing
 end
 
-function SetBCPf1(Pf, type, bc, Δ)
+function SetBCPf1(Pf, type, bc, Δ, ρfg)
 
     MPf =  MMatrix(Pf)
 
-     # N/S
+    # N/S
     for ii in axes(type, 1)
         # South
         if type[ii,1] === :Dirichlet
             MPf[ii,1] = fma(2, bc[ii,1], -Pf[ii,2])
-        elseif type[ii,1] === :Neumann
+        elseif type[ii,1] === :Neumann 
             MPf[ii,1] = fma(Δ.y, bc[ii,1], Pf[ii,2])
+        elseif type[ii,1] === :no_flux
+            MPf[ii,1] = Pf[ii,2] - ρfg*Δ.y
         elseif type[ii,1] === :periodic || type[ii,1] === :in || type[ii,1] === :constant
             MPf[ii,1] = Pf[ii,1]
-        else
-            MPf[ii,1] = 1.0
+        # else
+        #     MPf[ii,1] = 1.0
         end
 
         # North
@@ -684,10 +764,12 @@ function SetBCPf1(Pf, type, bc, Δ)
             MPf[ii,end] = fma(2, bc[ii,end], -Pf[ii,end-1])
         elseif type[ii,end] === :Neumann
             MPf[ii,end] = fma(-Δ.y, bc[ii,end], Pf[ii,end-1])
+        elseif type[ii,end] === :no_flux
+            MPf[ii,end] = Pf[ii,end-1] + ρfg*Δ.y
         elseif type[ii,end] === :periodic || type[ii,end] === :in || type[ii,end] === :constant
             MPf[ii,end] = Pf[ii,end]
-        else
-            MPf[ii,end] = 1.0
+        # else
+        #     MPf[ii,end] = 1.0
         end
     end
 
@@ -701,8 +783,8 @@ function SetBCPf1(Pf, type, bc, Δ)
             MPf[1,jj] = fma(Δ.x, bc[1,jj], Pf[2,jj])
         elseif type[1,jj] === :periodic || type[1,jj] === :in || type[1,jj] === :constant
             MPf[1,jj] = Pf[1,jj] 
-        else
-            MPf[1,jj] =  1.0
+        # else
+        #     MPf[1,jj] =  1.0
         end
 
         # East
@@ -712,8 +794,8 @@ function SetBCPf1(Pf, type, bc, Δ)
             MPf[end,jj] = fma(-Δ.x, bc[end,jj], Pf[end-1,jj])
         elseif type[end,jj] === :periodic || type[end,jj] === :in || type[end,jj] === :constant
             MPf[end,jj] = Pf[end,jj] 
-        else
-            MPf[end,jj] =  1.0
+        # else
+        #     MPf[end,jj] =  1.0
         end
     end
 
@@ -833,7 +915,9 @@ function Numbering!(N, type, nc)
 
     # Copy equation indices for periodic cases
     if periodic_south
-        N.Vy[:,1] .= N.Vy[:,end-2]
+        N.Vy[:,1]     .= N.Vy[:,end-2]
+        N.Vy[:,end-1] .= N.Vy[:,2]
+        N.Vy[:,end]   .= N.Vy[:,3]
     end
 
     # Copy equation indices for periodic cases
@@ -1116,7 +1200,7 @@ function LineSearch!(rvec, α, dx, R, V, P, ε̇, τ, Vi, Pi, ΔP, P0, Φ, Φ0, 
         UpdateSolution!(V, P, α[i].*dx, number, type, nc)
         TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
         ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-        ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+        ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
         ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
         ResidualFluidContinuity2D!(R, V, P, ΔP, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
         rvec[i] = @views norm(R.x[inx_Vx,iny_Vx])/length(R.x[inx_Vx,iny_Vx]) + norm(R.y[inx_Vy,iny_Vy])/length(R.y[inx_Vy,iny_Vy]) + norm(R.pt[inx_c,iny_c])/length(R.pt[inx_c,iny_c]) + norm(R.pf[inx_c,iny_c])/length(R.pf[inx_c,iny_c])  
@@ -1133,7 +1217,7 @@ function GlobalResidual!(α, dx, R, V, P, ε̇, τ, ΔP, P0, Φ, Φ0, τ0, λ̇,
     UpdateSolution!(V, P, α.*dx, number, type, nc)
     TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
     ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-    ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+    ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
     ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
     ResidualFluidContinuity2D!(R, V, P, ΔP, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
 end

@@ -31,15 +31,19 @@ using Enzyme  # AD backends you want to use
 
     # Material parameters
     materials = ( 
+        g     = [0. 0.] / (sc.L/sc.t^2),
         oneway       = false,
         compressible = true,
         plasticity   = :off,
         linearizeϕ   = false,              # !!!!!!!!!!!
         single_phase = false,
         n     = [1.0    1.0  ],
+        n_CK  = [1.0    1.0   1.0  ],
         ηs0   = [1e22   1e19 ]/sc.σ/sc.t, 
         ηΦ    = [2e22   2e22 ]/sc.σ/sc.t,
         G     = [3e10   3e10 ]./sc.σ, 
+        ρs    = [2800   2800 ]/(sc.σ*sc.t^2/sc.L^2),
+        ρf    = [1000   1000 ]/(sc.σ*sc.t^2/sc.L^2),
         Kd    = [1e30   1e30 ]./sc.σ,  # not needed
         Ks    = [1e11   1e11 ]./sc.σ,
         KΦ    = [1e10   1e10  ]./sc.σ,
@@ -230,7 +234,7 @@ using Enzyme  # AD backends you want to use
             # Residual check
             TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
             ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-            ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+            ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
             ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
             ResidualFluidContinuity2D!(R, V, P, ΔP, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
 
@@ -262,7 +266,7 @@ using Enzyme  # AD backends you want to use
             # Assembly
             @info "Assembly, ndof  = $(nVx + nVy + nPt + nPf)"
             AssembleMomentum2D_x!(M, V, P, P0, ΔP, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-            AssembleMomentum2D_y!(M, V, P, P0, ΔP, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+            AssembleMomentum2D_y!(M, V, P, P0, ΔP, τ0, Φ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
             AssembleContinuity2D!(M, V, P, P0, Φ0, phases, materials, number, pattern, type, BC, nc, Δ)
             AssembleFluidContinuity2D!(M, V, P, ΔP, P0, Φ0, phases, materials, number, pattern, type, BC, nc, Δ)
 
@@ -366,7 +370,8 @@ using Enzyme  # AD backends you want to use
         # Residual check
         TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
         ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-        ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+                    ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+
         ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
         ResidualFluidContinuity2D!(R, V, P, ΔP, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
 
