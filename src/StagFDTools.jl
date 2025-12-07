@@ -1,5 +1,11 @@
 module StagFDTools
 
+# abstract type AbstractYield end
+# struct DruckerPrager1 <: AbstractYield end
+# struct Hyperbolic     <: AbstractYield end
+# struct GolchinMCC     <: AbstractYield end
+# export DruckerPrager1, Hyperbolic, GolchinMCC
+
 using StaticArrays, ExtendableSparse, StaticArrays, Printf, LinearAlgebra, Enzyme
 
 include("operators.jl")
@@ -11,13 +17,17 @@ export GenerateGrid, printxy, av2D
 include("Solvers.jl")
 export DecoupledSolver
 
+# module markers
+#     include("markers.jl")
+#     export PhaseRatios, ...
+# end
 module Rheology
     using StaticArrays, Enzyme, StagFDTools, LinearAlgebra
     include("Rheology.jl")
     export LocalRheology, StressVector!
     export LocalRheology_div, StressVector_div!
     export LocalRheology_phase_ratios, StressVector_phase_ratios! 
-    export Kiss2023
+    export Kiss2023, Yield, Potential
 end
 
 module Poisson

@@ -53,7 +53,7 @@ function bt_line_search(Δx, J, x, r, params; α = 1.0, ρ = 0.5, c = 1.0e-4, α
     return α
 end
 
-function DruckerPragerHyperbolic_v1(τII, P, ε̇_eff, Dkk, P0, ηve, β, Δt, C, cosϕ, sinϕ, cosΨ, sinΨ, σT, ηvp)
+function Hyperbolic_v1(τII, P, ε̇_eff, Dkk, P0, ηve, β, Δt, C, cosϕ, sinϕ, cosΨ, sinΨ, σT, ηvp)
     
     tol     = 1e-9
     λ̇       = 0.0
@@ -129,7 +129,7 @@ let
     # (τII, P, ε̇_eff, Dkk, P0, ηve, β, Δt, C, cosϕ, sinϕ, cosΨ, sinΨ, σT, ηvp) = (0.01870740409269564, 0.02647058984524955, 9.35370204634782, 1.101209787325194, 0.027047835685611955, 0.001, 0.01, 0.0001, 0.01, 0.9961946980917455, 0.08715574274765818, 0.5, 0.5, 0.005, 0.0001)
     # ηvp = 1*ηvp/10
     
-    τII_corr, P_corr, λ̇ = DruckerPragerHyperbolic_v1(τII, P, ε̇_eff, Dkk, P0, ηve, β, Δt, C, cosϕ, sinϕ, cosΨ, sinΨ, σT, ηvp)
+    τII_corr, P_corr, λ̇ = Hyperbolic_v1(τII, P, ε̇_eff, Dkk, P0, ηve, β, Δt, C, cosϕ, sinϕ, cosΨ, sinΨ, σT, ηvp)
 
     ftsz = 20
     P_ax       = LinRange(-σT,  0.3/1e3, 100)

@@ -27,7 +27,7 @@ using TimerOutputs, CairoMakie
     materials = ( 
         compressible = true,
         plasticity   = :DruckerPrager,
-        # plasticity   = :DruckerPragerHyperbolic,
+        # plasticity   = :Hyperbolic,
         #       rock   seed   
         n    = [1.0    1.0    ],            # Power law exponent
         η0   = [1e30   1e30   ]./sc.σ/sc.t, # Reference viscosity 

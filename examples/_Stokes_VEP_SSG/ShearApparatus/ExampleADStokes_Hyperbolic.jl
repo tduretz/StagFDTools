@@ -23,21 +23,30 @@ end
     height    = 1.0/sc.L
     thickness = 0.2/sc.L
     θgouge    = (90-θgouge) /180*π
-    Δt0       = 5e0/sc.t
     ε̇xx       = 1e-6*sc.t
     Pbg       = 5e7/sc.σ
 
     # Boundary loading type
     # config = :EW_Neumann
     config = :free_slip
+
+    # # mode 1
+    # nt     = 85*2
+    # Δt0    = 5e0/sc.t
+    # D_BC   = @SMatrix( [  ε̇xx  0.;
+    #                       0  -ε̇xx*0 ])
+
+    # mode 2
+    nt     = 20#85
+    Δt0       = 5e1/sc.t
     D_BC   = @SMatrix( [  ε̇xx  0.;
-                          0  -ε̇xx*0 ])
+                          0  -ε̇xx ])
 
     # Material parameters
     materials = ( 
         compressible = true,
         # plasticity   = :tensile,
-        plasticity   = :DruckerPragerHyperbolic,
+        plasticity   = :Hyperbolic,
         # plasticity   = :DruckerPrager,
         # plasticity   = :Kiss2023,
         #      rock   gouge  salt 
@@ -78,9 +87,6 @@ end
     
     # Geometry
     L     = (x=width/sc.L, y=height/sc.L)
-
-    # Time steps
-    nt    = 85
 
     # Newton solver
     niter = 15
@@ -346,12 +352,18 @@ end
             # τ_ax_rock = materials.C[1]*materials.cosϕ[1] .+ P_ax.*materials.sinϕ[1]
             # lines!(ax, P_ax*sc.σ/1e6, τ_ax_rock*sc.σ/1e6, color=:black)
             
-            P_ax       = LinRange(-materials.σT[1]+1e-4, 20/1e3, 100)
-            τ_ax_rock = @. sqrt(materials.sinϕ[1]*(P_ax + materials.σT[1])*(2*materials.C[1]*materials.cosϕ[1] + P_ax*materials.sinϕ[1] - materials.sinϕ[1]*materials.σT[1]))
-            lines!(ax, P_ax*sc.σ/1e6, τ_ax_rock*sc.σ/1e6, color=:black)
-            # τ_ax_rock = @. materials.σT[1] + P_ax
-            # lines!(ax, P_ax*sc.σ/1e6, τ_ax_rock*sc.σ/1e6, color=:black)
-            
+            # Plot yield
+            P_ax       = LinRange(-materials.σT[1]+1e-4, 80/1e3, 100)
+            τ_ax       = LinRange( 0, 50/1e3, 100)
+            f          = zeros(length(P_ax), length(τ_ax))
+            for i in eachindex(P_ax), j in eachindex(τ_ax)
+                m = materials
+                yieldf = Hyperbolic()
+                p = (m.C[1], m.cosϕ[1], m.sinϕ[1], m.cosψ[1], m.sinψ[1], m.σT[1], 0*m.ηvp[1])
+                f[i,j] = Yield(@SVector([τ_ax[j], P_ax[i], 0.0]), p, yieldf)
+            end
+            contour!(ax, P_ax*sc.σ/1e6, τ_ax*sc.σ/1e6, f*sc.σ./1e6, levels=[0., 0.0], color=:red)
+
             cosΨ, sinΨ, C, σT = materials.cosϕ[1], materials.sinϕ[1], materials.sinϕ[1], materials.σT[1]
             B = C * cosΨ - σT*sinΨ
             dQdtau = @. τII_rock /sqrt(τII_rock^2 + B^2) 

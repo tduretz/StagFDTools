@@ -120,7 +120,7 @@ function set_boundaries_template!(type, config, nc)
         type.Vy[inx_Vy,end-1]   .= :Dirichlet_normal 
         # -------- Pt -------- #
         type.Pt[2:end-1,2:end-1] .= :in
-
+        
     elseif config == :no_slip
         # -------- Vx -------- #
         type.Vx[inx_Vx,iny_Vx]  .= :in       
@@ -838,10 +838,10 @@ function UpdateSolution!(V, Pt, dx, number, type, nc)
         end
     end
     
-    for j=1:size(Pt,2), i=1:size(Pt,1)
-        if type.Pt[i,j] == :in
-            ind = number.Pt[i,j] + nVx + nVy
-            Pt[i,j] += dx[ind]
+    for I in eachindex(Pt)
+        if type.Pt[I] == :in
+            ind = number.Pt[I] + nVx + nVy
+            Pt[I] += dx[ind]
         end
     end
 
