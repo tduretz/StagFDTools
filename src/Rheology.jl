@@ -108,8 +108,7 @@ end
 @inline Bf(p, pc, pt, M, C, α) = M*C*exp(α*(p - C)/(pc - pt))
 @inline Cf(pc, pt, γ)          = (pc - pt)/π * atan(γ/2) + (pc + pt)/2  
 
-GolchinMCC(τ, P, A, B, C, β) =  B*(P - C)^2/A + A*(τ - β*P)^2/B - A*B
-# GolchinMCC(τ, P, A, B, C, β) =  B^2 * (P - C + A) * (P - C - A) + A^2*(τ - β*P)^2
+GolchinMCC(τ, P, A, B, C, β, λ̇, ηvp) =  B*(P - λ̇*ηvp - C)^2/A + A*(τ - λ̇*ηvp - β*(P - λ̇*ηvp))^2/B - A*B
 
 function Yield(x, p, model::GolchinMCC)  
     M, N, Pt, Pc, α, β, γ, ηvp = p
@@ -118,8 +117,10 @@ function Yield(x, p, model::GolchinMCC)
     C  = Cf(Pc, Pt, γ) 
     B  = Bf(P, Pc, Pt, M, C, α) 
     A  = Af(P, Pc, Pt, γ) 
-    F  = GolchinMCC(τ, P, A, B, C, β) 
+    F  = GolchinMCC(τ, P, A, B, C, β, λ̇, 0*ηvp) 
     return (F - λ̇*ηvp)*(F>=ϵ) + (F<ϵ)*λ̇*ηvp
+    # return (F)*(F>=ϵ) + (F<ϵ)*λ̇*ηvp
+
 end
 
 function Potential(x, p, model::GolchinMCC)  
@@ -129,7 +130,7 @@ function Potential(x, p, model::GolchinMCC)
     C  = Cf(Pc, Pt, γ) 
     B  = Bf(P, Pc, Pt, N, C, α) 
     A  = Af(P, Pc, Pt, γ)
-    Q  = GolchinMCC(τ, P, A, B, C, β) 
+    Q  = GolchinMCC(τ, P, A, B, C, β, λ̇, ηvp) 
     return Q
 end
 
@@ -201,16 +202,16 @@ function NonLinearReturnMapping(τII, P, ε̇_eff, Dkk, P0, ηve, β, Δt, plast
         δx    = - J.derivs[1] \ J.val
         nR    = abs(J.val[3])
 
-        α = bt_line_search(δx, J.derivs[1], x0, J.val, trial, plastic, model)
-        x .= x0 .+  α*δx
+        # α = bt_line_search(δx, J.derivs[1], x0, J.val, trial, plastic, model)
+        # x .= x0 .+  α*δx
 
-        # for ils in eachindex(αvec)
-        #     x .= x0 .+  αvec[ils]δx
-        #     R = RheologyResidual(x, trial, plastic, model)           
-        #     Fvec[ils] = norm(R) 
-        # end
-        # ibest = argmin(Fvec)
-        # x .= x0 .+  αvec[ibest]*δx
+        for ils in eachindex(αvec)
+            x .= x0 .+  αvec[ils]δx
+            R = RheologyResidual(x, trial, plastic, model)           
+            Fvec[ils] = norm(R) 
+        end
+        ibest = argmin(Fvec)
+        x .= x0 .+  αvec[ibest]*δx
 
         # @show iter, nR,  αvec[ibest], x
 
@@ -226,7 +227,7 @@ function NonLinearReturnMapping(τII, P, ε̇_eff, Dkk, P0, ηve, β, Δt, plast
 
     if iter == itermax && (nR>tol && (nR/nR0)>tol )
         R    = RheologyResidual(x, trial, plastic, model)
-        @show τII, P 
+        @show τII*1e9, P*1e9 
         @show trial
         @show plastic
         @show R0

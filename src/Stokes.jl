@@ -92,8 +92,6 @@ function set_boundaries_template!(type, config, nc)
         type.Vx[inx_Vx,iny_Vx]  .= :in       
         type.Vx[1,iny_Vx]       .= :Neumann_normal
         type.Vx[end-0,iny_Vx]   .= :Neumann_normal
-        type.Vx[1, 5]   = :Dirichlet_normal  # fix Dirichlet??
-        # type.Vx[end, 5] = :Dirichlet_normal
         type.Vx[inx_Vx,2]       .= :Dirichlet_tangent
         type.Vx[inx_Vx,end-1]   .= :Dirichlet_tangent
         # -------- Vy -------- #
@@ -571,7 +569,6 @@ function SetBCVx1(Vx, typex, bcx, Δ)
         elseif typex[ii,1] == :Neumann_tangent
             MVx[ii,1] = fma(Δ.y, bcx[ii,1], Vx[ii,2])
         end
-
         if typex[ii,end] == :Dirichlet_tangent
             MVx[ii,end] = fma(2, bcx[ii,end], -Vx[ii,end-1])
         elseif typex[ii,end] == :Neumann_tangent
@@ -1024,8 +1021,10 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, 
 
     D_test = @MMatrix ones(4,4)
 
+    s = 1 
+
     # Loop over centroids
-    for j=1:size(ε̇.xx,2)-0, i=1:size(ε̇.xx,1)-0
+    for j=1+s:size(ε̇.xx,2)-s, i=1+s:size(ε̇.xx,1)-s
         if (i==1 && j==1) || (i==size(ε̇.xx,1) && j==1) || (i==1 && j==size(ε̇.xx,2)) || (i==size(ε̇.xx,1) && j==size(ε̇.xx,2))
             # Avoid the outer corners - nothing is well defined there ;)
         else
@@ -1062,6 +1061,7 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, 
             # Tangent operator used for Newton Linearisation
             jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector!, ε̇vec, Const(Dkk[1]), Const(Pt0[i,j]), Const(materials), Const(phases.c[i,j]), Const(Δ))
             
+
             # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
             @views 𝐷_ctl.c[i,j][:,1] .= jac.derivs[1][1][1]
             @views 𝐷_ctl.c[i,j][:,2] .= jac.derivs[1][2][1]
@@ -1100,10 +1100,28 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, 
         end
     end
 
+    # For periodic cases
+    for j=2:size(ε̇.xx,2)-1 
+        i = 1
+        @views 𝐷_ctl.c[i,j] .= 𝐷_ctl.c[end-1,j]
+        @views 𝐷.c[i,j]     .= 𝐷.c[end-1,j]
+        i = size(ε̇.xx,1)
+        @views 𝐷_ctl.c[i,j] .= 𝐷_ctl.c[2,j]
+        @views 𝐷.c[i,j]     .= 𝐷.c[2,j]
+    end
+     for i=2:size(ε̇.xx,1)-1 
+        j = 1
+        @views 𝐷_ctl.c[i,j] .= 𝐷_ctl.c[i,end-1]
+        @views 𝐷.c[i,j]     .= 𝐷.c[i,end-1]
+        j = size(ε̇.xx,2)
+        @views 𝐷_ctl.c[i,j] .= 𝐷_ctl.c[i,2]
+        @views 𝐷.c[i,j]     .= 𝐷.c[i,2]
+    end
+
     # @show "vertices"
 
     # Loop over vertices
-    for j=2:size(ε̇.xy,2)-1, i=2:size(ε̇.xy,1)-1
+    for j=1+s:size(ε̇.xy,2)-s, i=1+s:size(ε̇.xy,1)-s
         Vx     = SMatrix{3,2}(      V.x[ii,jj] for ii in i-1:i+1, jj in j:j+1  )
         Vy     = SMatrix{2,3}(      V.y[ii,jj] for ii in i:i+1  , jj in j-1:j+1)
         bcx    = SMatrix{3,2}(    BC.Vx[ii,jj] for ii in i-1:i+1, jj in j:j+1  )

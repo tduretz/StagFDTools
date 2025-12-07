@@ -57,8 +57,8 @@ end
         G    = [1e10   1e9    1e60]./sc.σ,      # Shear modulus
         C    = [10e6   10e6   15e60]./sc.σ,      # Cohesion
         ϕ    = [35.    35.    35. ],      # Friction angle
-        ψ    = [20.0   20.0   20.0],      # Dilation angle
-        ηvp  = [5e12   5e12   5e12].*1e-4/sc.σ./sc.t, # Viscoplastic regularisation
+        ψ    = [1.0    1.0    1.0 ]*10 ,      # Dilation angle
+        ηvp  = [1.0    1.0    1.0 ].*5e9/sc.σ./sc.t, # Viscoplastic regularisation
         β    = [1e-11  1e-10 1e-12].*sc.σ,      # Compressibility
         B    = [0.0    0.0    0.0 ],      # (calculated after) power-law creep pre-factor
         cosϕ = [0.0    0.0    0.0 ],      # (calculated after) frictional parameters
@@ -99,9 +99,9 @@ end
     L     = (x=width/sc.L, y=height/sc.L)
 
     # Newton solver
-    niter = 15
+    niter = 25
     ϵ_nl  = 1e-9
-    α     = LinRange(0.05, 1.0, 10)
+    α     = LinRange(0.05, 1.0, 20)
 
     # Grid bounds
     inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, inx_v, iny_v, size_x, size_y, size_c, size_v = Ranges(nc)
