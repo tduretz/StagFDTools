@@ -47,8 +47,8 @@ end
         compressible = true,
         # plasticity   = :tensile,
         # plasticity   = :DruckerPrager1,
-        # plasticity   = :GolchinMCC,
-        plasticity   = :Hyperbolic,
+        plasticity   = :GolchinMCC,
+        # plasticity   = :Hyperbolic,
         # plasticity   = :DruckerPrager,
         # plasticity   = :Kiss2023,
         #      rock   gouge  salt 
@@ -57,8 +57,8 @@ end
         G    = [1e10   1e9    1e60]./sc.σ,      # Shear modulus
         C    = [10e6   10e6   15e60]./sc.σ,      # Cohesion
         ϕ    = [35.    35.    35. ],      # Friction angle
-        ψ    = [20.0   20.0   20.0 ],      # Dilation angle
-        ηvp  = [5e14   5e14   5e14].*1e-4/sc.σ./sc.t, # Viscoplastic regularisation
+        ψ    = [20.0   20.0   20.0],      # Dilation angle
+        ηvp  = [5e12   5e12   5e12].*1e-4/sc.σ./sc.t, # Viscoplastic regularisation
         β    = [1e-11  1e-10 1e-12].*sc.σ,      # Compressibility
         B    = [0.0    0.0    0.0 ],      # (calculated after) power-law creep pre-factor
         cosϕ = [0.0    0.0    0.0 ],      # (calculated after) frictional parameters

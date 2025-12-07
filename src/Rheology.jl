@@ -108,7 +108,7 @@ end
 @inline Bf(p, pc, pt, M, C, α) = M*C*exp(α*(p - C)/(pc - pt))
 @inline Cf(pc, pt, γ)          = (pc - pt)/π * atan(γ/2) + (pc + pt)/2  
 
-GolchinMCC(τ, P, A, B, C, β) =  (P - C)^2/A^2 + (τ - β*P)^2/B^2 - 1
+GolchinMCC(τ, P, A, B, C, β) =  B*(P - C)^2/A + A*(τ - β*P)^2/B - A*B
 # GolchinMCC(τ, P, A, B, C, β) =  B^2 * (P - C + A) * (P - C - A) + A^2*(τ - β*P)^2
 
 function Yield(x, p, model::GolchinMCC)  
