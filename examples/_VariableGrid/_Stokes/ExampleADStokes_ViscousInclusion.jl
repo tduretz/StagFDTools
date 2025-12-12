@@ -17,7 +17,7 @@ include("rheology_var.jl")
     #--------------------------------------------#
 
     # Resolution
-    nc = (x = 5, y = 5)
+    nc = (x = 25, y = 25)
 
     # Boundary loading type
     config = BC_template
@@ -29,11 +29,7 @@ include("rheology_var.jl")
         plasticity   = :none,
         n    = [1.0    1.0  ],
         η0   = [1e0    1e2  ],
-        #        η0   = [1e0    1e0  ], # I have removed the inclusion for the time being
-
         G    = [1e20   1e20 ],
-        #η0   = [1e0    1e5  ],
-        #G    = [1e6    1e6  ],
         C    = [150    150  ],
         ϕ    = [30.    30.  ],
         ηvp  = [0.5    0.5  ],
@@ -127,7 +123,7 @@ include("rheology_var.jl")
     # Intialize field
     L   = (x=1.0, y=1.0)
 
-    uniform_grid = true
+    uniform_grid = false
     if uniform_grid
         original = false
         if original
@@ -257,16 +253,16 @@ include("rheology_var.jl")
             𝐐ᵀ .= [M.Pt.Vx M.Pt.Vy]
             𝐏  .= [M.Pt.Pt;]             
             
-            K_ref = load("/Users/msirdey/Documents/FGSE/StefanSchmalholz/StagFDTools/examples/_VariableGrid/_Stokes/K_ref.jld")["data"]
-            Q_ref = load("/Users/msirdey/Documents/FGSE/StefanSchmalholz/StagFDTools/examples/_VariableGrid/_Stokes/Q_ref.jld")["data"]
-            QT_ref = load("/Users/msirdey/Documents/FGSE/StefanSchmalholz/StagFDTools/examples/_VariableGrid/_Stokes/QT_ref.jld")["data"]
-            P_ref = load("/Users/msirdey/Documents/FGSE/StefanSchmalholz/StagFDTools/examples/_VariableGrid/_Stokes/P_ref.jld")["data"]
+            #=K_ref = load("/Users/msirdey/Documents/FGSE/StefanSchmalholz/StagFDTools_commitb5a7ed1/StagFDTools/K_ref_base.jld")["data"]
+            Q_ref = load("/Users/msirdey/Documents/FGSE/StefanSchmalholz/StagFDTools_commitb5a7ed1/StagFDTools/Q_ref_base.jld")["data"]
+            QT_ref = load("/Users/msirdey/Documents/FGSE/StefanSchmalholz/StagFDTools_commitb5a7ed1/StagFDTools/QT_ref_base.jld")["data"]
+            P_ref = load("/Users/msirdey/Documents/FGSE/StefanSchmalholz/StagFDTools_commitb5a7ed1/StagFDTools/P_ref_base.jld")["data"]
 
             println("  *******    Comparaison MATRICES    *******")
             println(findmax(K_ref .- 𝐊))
             println(findmax(Q_ref .- 𝐐))
             println(findmax(QT_ref .- 𝐐ᵀ))
-            println(findmax(P_ref .- 𝐏))
+            println(findmax(P_ref .- 𝐏))=#
             #--------------------------------------------#
      
             # Direct-iterative solver
@@ -285,13 +281,6 @@ include("rheology_var.jl")
 
         # Update pressure
         Pt .+= ΔPt.c 
-
-        #--------------------------------------------#
-
-        #=p3 = heatmap(xv, yc, R.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Rx", color=:vik)
-        p4 = heatmap(xc, yv, R.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Ry", color=:vik)
-        p2 = heatmap(xc, yc,  R.p[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Rp'", color=:vik)
-        p1 = heatmap(xc, yc,  R.p[inx_c,iny_c], aspect_ratio=1, xlim=extrema(xc), title="Rp'", color=:vik)=#
 
         p3 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Vx", color=:vik)
         p4 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy", color=:vik)
@@ -326,7 +315,7 @@ include("rheology_var.jl")
         p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
         
         display(plot(p1, p2, p3, p4, layout=(2,2)))
-        sleep(10)
+        sleep(20)
     end
 
     display(to)

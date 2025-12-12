@@ -281,7 +281,6 @@ function SetBCVx1_var(Vx, typex, bcx, Δx, Δy)
             MVx[ii,1] = fma(2, bcx[ii,1], -Vx[ii,2])
         elseif typex[ii,1] == :Neumann_tangent
             coeff = ((Δy[1]+Δy[2])/2)
-            #coeff = Δy[1]
             MVx[ii,1] = fma(coeff, bcx[ii,1], Vx[ii,2])
         end
 
@@ -289,7 +288,6 @@ function SetBCVx1_var(Vx, typex, bcx, Δx, Δy)
             MVx[ii,end] = fma(2, bcx[ii,end], -Vx[ii,end-1])
         elseif typex[ii,end] == :Neumann_tangent
             coeff = ((Δy[end]+Δy[end-1])/2)
-            #coeff = Δy[end]
             MVx[ii,end] = fma(coeff, bcx[ii,end], Vx[ii,end-1])
         end
     end
@@ -317,7 +315,6 @@ function SetBCVy1_var(Vy, typey, bcy, Δx, Δy)
             MVy[1,jj] = fma(2, bcy[1,jj], -Vy[2,jj])
         elseif typey[1,jj] == :Neumann_tangent
             coeff = ((Δx[1]+Δx[2])/2)
-            #coeff = Δx[1]
             MVy[1,jj] = fma(coeff, bcy[1,jj], Vy[2,jj])
         end
 
@@ -325,7 +322,6 @@ function SetBCVy1_var(Vy, typey, bcy, Δx, Δy)
             MVy[end,jj] = fma(2, bcy[end,jj], -Vy[end-1,jj])
         elseif typey[end,jj] == :Neumann_tangent
             coeff = ((Δx[end]+Δx[end-1])/2)
-            #coeff = Δx[end]
             MVy[end,jj] = fma(coeff, bcy[end,jj], Vy[end-1,jj])
         end
     end
@@ -703,24 +699,18 @@ function AssembleContinuity2D_var!(K, V, P, Pt0, ΔP, τ0, 𝐷, phases, materia
 
         autodiff(Enzyme.Reverse, Continuity_var, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂P), Const(Pt0[i,j]), Const(D), Const(phases.c[i,j]), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δx_loc), Const(Δy_loc), Const(Δt_loc))
 
-        if (i==3) && (j==3)
+        #=if (i==3) && (j==3)
             println("i = ")
             println(i)
             println("j = ")
             println(j)
             println(Δx_loc[1])
             println(Δy_loc[1])
-        end
+        end=#
         # Pt --- Vx
         Local = SMatrix{2,3}(num.Vx[ii,jj] for ii in i:i+1, jj in j:j+2)# .* pattern[3][1]        
         for jj in axes(Local,2), ii in axes(Local,1)
             if Local[ii,jj]>0 && num.Pt[i,j]>0
-                if (i==3) && (j==3)
-                    println(ii)
-                    println(jj)
-                    println(pattern[3][1])
-                    println(∂R∂Vx[ii,jj] / Δx_loc[1])
-                end
                 K[3][1][num.Pt[i,j], Local[ii,jj]] = ∂R∂Vx[ii,jj] / Δx_loc[1]
             end
         end
