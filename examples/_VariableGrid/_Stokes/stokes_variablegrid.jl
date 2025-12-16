@@ -405,40 +405,36 @@ function ResidualMomentum2D_x_var!(R, V, P, P0, ΔP, τ0, 𝐷, phases, material
             τ0_loc     = (xx=τxx0, yy=τyy0, xy=τxy0)
 
             if (i == nc.x+shift.x+1)
-                Δx_Vx_loc     = zeros(2)
-                Δx_Vx_loc[1] = Δ.x[i-1]
-                Δx_Vx_loc[2] = Δ.x[i]
+                Δx_loc     = zeros(2)
+                Δx_loc[1] = Δ.x[i-1]
+                Δx_loc[2] = Δ.x[i]
             else
-                Δx_Vx_loc     = SVector{2}(Δ.x[ii] for ii in i-1:i)
+                Δx_loc     = SVector{2}(Δ.x[ii] for ii in i-1:i)
             end
             if (j == nc.y+shift.y)
-                Δy_Vx_loc     = zeros(4)
-                Δy_Vx_loc[1] = Δ.y[j-2]
-                Δy_Vx_loc[2] = Δ.y[j-1]
-                Δy_Vx_loc[3] = Δ.y[j]
-                Δy_Vx_loc[4] = Δy_Vx_loc[3]
+                Δy_loc     = zeros(4)
+                Δy_loc[1] = Δ.y[j-2]
+                Δy_loc[2] = Δ.y[j-1]
+                Δy_loc[3] = Δ.y[j]
+                Δy_loc[4] = Δy_loc[3]
             else
-                Δy_Vx_loc     = SVector{4}(Δ.y[jj] for jj in j-2:j+1)
+                Δy_loc     = SVector{4}(Δ.y[jj] for jj in j-2:j+1)
             end
 
-            R.x[i,j]   = SMomentum_x_Generic_var(Vx_loc, Vy_loc, P_loc, ΔP_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δx_Vx_loc, Δy_Vx_loc, Δ.t[1])
+            R.x[i,j]   = SMomentum_x_Generic_var(Vx_loc, Vy_loc, P_loc, ΔP_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δx_loc, Δy_loc, Δ.t[1])
         end
     end
     return nothing
 end
 
 
-function SMomentum_x_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δx_Vx_loc, Δy_Vx_loc, Δt)
+function SMomentum_x_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δx, Δy, Δt)
 
     # BC
-    Vx = SetBCVx1_var(Vx_loc, type.x, bcv.x, Δx_Vx_loc, Δy_Vx_loc)
-    Vy = SetBCVy1_var(Vy_loc, type.y, bcv.y, Δx_Vx_loc, Δy_Vx_loc)
+    Vx = SetBCVx1_var(Vx_loc, type.x, bcv.x, Δx, Δy)
+    Vy = SetBCVy1_var(Vy_loc, type.y, bcv.y, Δx, Δy)
 
     # Velocity gradient
-    Δx = zeros(2)
-    Δx .= Δx_Vx_loc
-    Δy = zeros(4)
-    Δy .= Δy_Vx_loc
     size_stencil_X = 3
     size_stencil_Y = 4
     Dxx = zeros(size_stencil_X-1,size_stencil_X)
@@ -575,17 +571,13 @@ function ResidualMomentum2D_y_var!(R, V, P, P0, ΔP, τ0, 𝐷, phases, material
 end
 
 
-function SMomentum_y_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δx_loc, Δy_loc, Δt)
+function SMomentum_y_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δx, Δy, Δt)
     
     # BC
-    Vx = SetBCVx1_var(Vx_loc, type.x, bcv.x, Δx_loc, Δy_loc)
-    Vy = SetBCVy1_var(Vy_loc, type.y, bcv.y, Δx_loc, Δy_loc)
+    Vx = SetBCVx1_var(Vx_loc, type.x, bcv.x, Δx, Δy)
+    Vy = SetBCVy1_var(Vy_loc, type.y, bcv.y, Δx, Δy)
 
     # Velocity gradient
-    Δx = zeros(4)
-    Δx .= Δx_loc
-    Δy = zeros(2)
-    Δy .= Δy_loc
     size_stencil_X = 4
     size_stencil_Y = 3
     
@@ -699,14 +691,6 @@ function AssembleContinuity2D_var!(K, V, P, Pt0, ΔP, τ0, 𝐷, phases, materia
 
         autodiff(Enzyme.Reverse, Continuity_var, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂P), Const(Pt0[i,j]), Const(D), Const(phases.c[i,j]), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δx_loc), Const(Δy_loc), Const(Δt_loc))
 
-        #=if (i==3) && (j==3)
-            println("i = ")
-            println(i)
-            println("j = ")
-            println(j)
-            println(Δx_loc[1])
-            println(Δy_loc[1])
-        end=#
         # Pt --- Vx
         Local = SMatrix{2,3}(num.Vx[ii,jj] for ii in i:i+1, jj in j:j+2)# .* pattern[3][1]        
         for jj in axes(Local,2), ii in axes(Local,1)
