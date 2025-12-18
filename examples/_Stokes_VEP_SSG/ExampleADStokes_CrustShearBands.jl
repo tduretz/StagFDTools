@@ -16,34 +16,26 @@ end
     #--------------------------------------------#
 
     # Scaling
-    sc  = (σ=1e9, L=1, t=1e6)
+    sc  = (σ=1e9, L=1e3, t=1e10)
 
     # Parameters
-    width     = 1.0/sc.L
-    height    = 1.0/sc.L
-    thickness = 0.2/sc.L
     θgouge    = (90-θgouge) /180*π
-    ε̇xx       = 1e-6*sc.t
+    ε̇xx       = 1e-15*sc.t
     Pbg       = 5e7/sc.σ
 
     # Boundary loading type
-    # config = :EW_Neumann
-    config = :free_slip
-
-    # # mode 1
-    # nt     = 85*2
-    # Δt0    = 5e0/sc.t
-    # D_BC   = @SMatrix( [  ε̇xx  0.;
-    #                       0  -ε̇xx*0 ])
+    # config = :free_slip
+    config = :N_StressFree
 
     # mode 2
-    nt     = 85
-    Δt0       = 5e1/sc.t
+    nt     = 100
+    Δt0    = 1e11/sc.t
     D_BC   = @SMatrix( [  ε̇xx  0.;
-                          0  -ε̇xx ])
+                          0  -0*ε̇xx ])
 
     # Material parameters
     materials = ( 
+        g     = [0. -9.81] / (sc.L/sc.t^2),
         compressible = true,
         # plasticity   = :tensile,
         # plasticity   = :DruckerPrager1,
@@ -52,14 +44,15 @@ end
         # plasticity   = :DruckerPrager,
         # plasticity   = :Kiss2023,
         #      rock   gouge  salt 
+        ρ    = [2900   2900  2900 ]/(sc.σ*sc.t^2/sc.L^2),
         n    = [1.0    1.0    1.0 ],      # Power law exponent
-        η0   = [1e48   1e28   1e13]./sc.σ./sc.t,      # Reference viscosity 
-        G    = [1e10   1e9    1e60]./sc.σ,      # Shear modulus
-        C    = [10e6   10e6   15e60]./sc.σ,      # Cohesion
-        ϕ    = [35.    35.    35. ],      # Friction angle
-        ψ    = [1.0    1.0    1.0 ]*10 ,      # Dilation angle
-        ηvp  = [1.0    1.0    1.0 ].*5e9/sc.σ./sc.t, # Viscoplastic regularisation
-        β    = [1e-11  1e-10 1e-12].*sc.σ,      # Compressibility
+        η0   = [1e48   1e48   1e10]./sc.σ./sc.t,      # Reference viscosity 
+        G    = [4e10   1e10   1e60]./sc.σ,   # Shear modulus
+        C    = [5e7    5e7    5e60] ./sc.σ,   # Cohesion
+        ϕ    = [1.0    1.0    1.0 ].*35,       # Friction angle
+        ψ    = [1.0    1.0    1.0 ].*20 ,      # Dilation angle
+        ηvp  = [1.0    1.0    1.0 ].*2e20/sc.σ./sc.t, # Viscoplastic regularisation
+        β    = [1e-11  1e-11 1e-12].*sc.σ,    # Compressibility
         B    = [0.0    0.0    0.0 ],      # (calculated after) power-law creep pre-factor
         cosϕ = [0.0    0.0    0.0 ],      # (calculated after) frictional parameters
         sinϕ = [0.0    0.0    0.0 ],      # (calculated after) frictional parameters
@@ -67,16 +60,16 @@ end
         sinψ = [0.0    0.0    0.0 ],      # (calculated after) frictional parameters
         M    = [0.0    0.0    0.0 ],
         N    = [0.0    0.0    0.0 ],
-        Pc   = [6e7    6e7    6e7 ]./sc.σ,  
+        Pc   = [1.0    1.0    1.0 ].*5e8./sc.σ,  
         a    = [0.5    0.5    0.5 ],
         b    = [0.0    0.0    0.0 ],
         c    = [0.5    0.5    0.5 ],
-        σT   = [5e6   5.0e6  5.0e6]./sc.σ, # Kiss2023 / Tensile / Hyperbolic
-        δσT  = [1e6   1.0e6  1e6  ]./sc.σ, # Kiss2023
-        P1   = [0.0   0.0    0.0  ], # Kiss2023
-        τ1   = [0.0   0.0    0.0  ], # Kiss2023
-        P2   = [0.0   0.0    0.0  ], # Kiss2023
-        τ2   = [0.0   0.0    0.0  ], # Kiss2023
+        σT   = [5e6    5.0e6  5.0e6]./sc.σ, # Kiss2023 / Tensile / Hyperbolic
+        δσT  = [1e6    1.0e6  1e6  ]./sc.σ, # Kiss2023
+        P1   = [0.0    0.0    0.0  ], # Kiss2023
+        τ1   = [0.0    0.0    0.0  ], # Kiss2023
+        P2   = [0.0    0.0    0.0  ], # Kiss2023
+        τ2   = [0.0    0.0    0.0  ], # Kiss2023
     )
     # For power law
     materials.B   .= (2*materials.η0).^(-materials.n)
@@ -96,12 +89,13 @@ end
     @. materials.N     = 6*sind(materials.ψ) / (3 - sind(materials.ψ))
     
     # Geometry
-    L     = (x=width/sc.L, y=height/sc.L)
+    L     = (x=100e3/sc.L, y=20e3/sc.L)
+    rad   = 2e3/sc.L
 
     # Newton solver
     niter = 25
     ϵ_nl  = 1e-9
-    α     = LinRange(0.05, 1.0, 20)
+    α     = LinRange(0.05, 1.0, 10)
 
     # Grid bounds
     inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, inx_v, iny_v, size_x, size_y, size_c, size_v = Ranges(nc)
@@ -138,6 +132,7 @@ end
     nVx   = maximum(number.Vx)
     nVy   = maximum(number.Vy)
     nPt   = maximum(number.Pt)
+    # Newton
     M = Fields(
         Fields(ExtendableSparseMatrix(nVx, nVx), ExtendableSparseMatrix(nVx, nVy), ExtendableSparseMatrix(nVx, nPt)), 
         Fields(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt)), 
@@ -147,6 +142,17 @@ end
     𝐐  = ExtendableSparseMatrix(nVx + nVy, nPt)
     𝐐ᵀ = ExtendableSparseMatrix(nPt, nVx + nVy)
     𝐏  = ExtendableSparseMatrix(nPt, nPt)
+    # Picard
+    M1 = Fields(
+        Fields(ExtendableSparseMatrix(nVx, nVx), ExtendableSparseMatrix(nVx, nVy), ExtendableSparseMatrix(nVx, nPt)), 
+        Fields(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt)), 
+        Fields(ExtendableSparseMatrix(nPt, nVx), ExtendableSparseMatrix(nPt, nVy), ExtendableSparseMatrix(nPt, nPt))
+    )
+    𝐊1  = ExtendableSparseMatrix(nVx + nVy, nVx + nVy)
+    𝐐1  = ExtendableSparseMatrix(nVx + nVy, nPt)
+    𝐐ᵀ1 = ExtendableSparseMatrix(nPt, nVx + nVy)
+    𝐏1  = ExtendableSparseMatrix(nPt, nPt)
+    # Vectors
     dx = zeros(nVx + nVy + nPt)
     r  = zeros(nVx + nVy + nPt)
 
@@ -177,15 +183,22 @@ end
 
     # Mesh coordinates
     xv = LinRange(-L.x/2, L.x/2, nc.x+1)
-    yv = LinRange(-L.y/2, L.y/2, nc.y+1)
+    yv = LinRange(-L.y  ,   0.0, nc.y+1)
     xc = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
-    yc = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
+    yc = LinRange(-L.y  +Δ.y/2,   0.0-Δ.y/2, nc.y)
     phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...))  # phase on velocity points
 
     # Initial velocity & pressure field
     @views V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
     @views V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
     UpdateSolution!(V, Pt, dx, number, type, nc)
+
+    ρ̄ = materials.ρ[1] 
+    for i in inx_c, j in (nc.y+2-1):-1:2
+        # Interpolate densities at Vy points (midpoint) 
+        # ∫ (-ρ̄ g) dz (g < 0)
+        Pt[i,j] = Pt[i,j+1] - ρ̄ * materials.g[2] .* Δ.y
+    end
 
     # Boundary condition values
     BC = ( Vx = zeros(size_x...), Vy = zeros(size_y...))
@@ -201,10 +214,11 @@ end
     end
 
     # Set material geometry 
-    phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
-    phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= 0.1^2] .= 2
+    phases.c[inx_c, iny_c][(xc.^2 .+ (yc' .- yv[1]).^2) .<= rad^2] .= 2
+    phases.v[inx_v, iny_v][(xv.^2 .+ (yv' .- yv[1]).^2) .<= rad^2] .= 2
+    phases.v[:, end-1] .= 3
+    phases.c[:, end-1] .= 3
 
-    Pt  .= Pbg#*rand(size(Pt)...)
     Pt0 .= Pt
     Pti .= Pt
 
@@ -249,7 +263,7 @@ end
             err.x[iter] = @views norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
             err.y[iter] = @views norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
             err.p[iter] = @views norm(R.p[inx_c,iny_c])/sqrt(nPt)
-            max(err.x[iter], err.y[iter]) < ϵ_nl ? break : nothing
+            max(err.x[iter], err.y[iter], err.p[iter]) < ϵ_nl ? break : nothing
 
             #--------------------------------------------#
             # Set global residual vector
@@ -263,6 +277,12 @@ end
                 AssembleMomentum2D_y!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
             end
 
+            # @timeit to "Assembly" begin
+            #     AssembleContinuity2D!(M1, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, pattern, type, BC, nc, Δ)
+            #     AssembleMomentum2D_x!(M1, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, pattern, type, BC, nc, Δ)
+            #     AssembleMomentum2D_y!(M1, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, pattern, type, BC, nc, Δ)
+            # end
+
             #--------------------------------------------# 
             # Stokes operator as block matrices
             𝐊  .= [M.Vx.Vx M.Vx.Vy; M.Vy.Vx M.Vy.Vy]
@@ -270,12 +290,22 @@ end
             𝐐ᵀ .= [M.Pt.Vx M.Pt.Vy]
             𝐏  .= M.Pt.Pt
             
+            # # Stokes operator as block matrices
+            # 𝐊1  .= [M1.Vx.Vx M1.Vx.Vy; M1.Vy.Vx M1.Vy.Vy]
+            # 𝐐1  .= [M1.Vx.Pt; M1.Vy.Pt]
+            # 𝐐ᵀ1 .= [M1.Pt.Vx M1.Pt.Vy]
+            # 𝐏1  .= M1.Pt.Pt
+            
             #--------------------------------------------#
      
             # Direct-iterative solver
             fu   = @views -r[1:size(𝐊,1)]
             fp   = @views -r[size(𝐊,1)+1:end]
-            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu, ηb=1e3, niter_l=10, ϵ_l=1e-11)
+            # if it==22
+            #     u, p = DecoupledSolver(𝐊1, 𝐐1, 𝐐ᵀ1, 𝐏1, fu, fp; fact=:chol, ηb=1e3, niter_l=10, ϵ_l=1e-11)
+            # else
+                u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu, ηb=1e3, niter_l=10, ϵ_l=1e-11)
+            # end
             @views dx[1:size(𝐊,1)]     .= u
             @views dx[size(𝐊,1)+1:end] .= p
 
@@ -333,13 +363,16 @@ end
             ftsz = 25
             fig = Figure(size=(1000, 1000)) 
             empty!(fig)
-            ax  = Axis(fig[1:2,1], aspect=DataAspect(), title="Plastic Strain rate", xlabel="x", ylabel="y", xlabelsize=ftsz,  ylabelsize=ftsz, titlesize=ftsz)
-            eps   = 1e-1
-            # field = Pt[inx_c,iny_c] .* sc.σ
+            ax  = Axis(fig[1,1:2], aspect=DataAspect(), title="Plastic Strain rate", xlabel="x", ylabel="y", xlabelsize=ftsz,  ylabelsize=ftsz, titlesize=ftsz)
+            eps   = 1e-12
+            field = Pt[inx_c,iny_c] .* sc.σ
+            # field = phases.c
             field = log10.((λ̇.c[inx_c,iny_c] .+ eps)/sc.t )
-            hm = heatmap!(ax, xc.*sc.L, yc.*sc.L, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
-            contour!(ax, xc.*sc.L, yc.*sc.L,  phases.c[inx_c,iny_c], color=:white)
-            Colorbar(fig[3, 1], hm, label = L"$\dot\lambda$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
+            # crange=(minimum(field)-eps, maximum(field)+eps)
+            crange = (-17, -13)
+            hm = heatmap!(ax, xc.*sc.L, yc.*sc.L, field, colormap=Makie.Reverse(:bilbao), colorrange=crange)
+            contour!(ax, xc.*sc.L, yc.*sc.L,  phases.c[inx_c,iny_c], color=:black)
+            Colorbar(fig[2,1], hm, label = L"$\dot\lambda$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
             Vxc = (0.5*(V.x[1:end-1,2:end-1] + V.x[2:end,2:end-1]))[2:end-1,2:end-1].*sc.L/sc.t
             Vyc = (0.5*(V.y[2:end-1,1:end-1] + V.y[2:end-1,2:end]))[2:end-1,2:end-1].*sc.L/sc.t
             step = 20
@@ -352,47 +385,50 @@ end
             # scatter!(ax, probes.t[1:nt]*ε̇xx*L.y*sc.L, probes.σxxE[1:nt]*sc.σ./1e6, marker=:star5, markersize=20 )
             # scatter!(ax, probes.t[1:nt]*ε̇xx*L.y*sc.L, probes.σyyN[1:nt]*sc.σ./1e6 )
             # scatter!(ax, probes.t[1:nt]*ε̇xx*L.y*sc.L, probes.σyyS[1:nt]*sc.σ./1e6 )
-            ax  = Axis(fig[1,2], xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", xlabelsize=ftsz, ylabelsize=ftsz, titlesize=ftsz)
-            scatter!(ax, 1:niter, log10.(err.x[1:niter]./err.x[1]) )
-            scatter!(ax, 1:niter, log10.(err.y[1:niter]./err.y[1]) )
-            scatter!(ax, 1:niter, log10.(err.p[1:niter]./err.p[1]) )
+            
+            ax  = Axis(fig[3,1], xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", xlabelsize=ftsz, ylabelsize=ftsz, titlesize=ftsz)
+            scatter!(ax, 1:niter, log10.(err.x[1:niter]./err.x[1]), color=:blue )
+            scatter!(ax, 1:niter, log10.(err.y[1:niter]./err.y[1]), color=:green )
+            scatter!(ax, 1:niter, log10.(err.p[1:niter]./err.p[1]), color=:red )
             ylims!(ax, -15, 1)
-            ax  = Axis(fig[2,2], title=L"$$Stress space", xlabel=L"$P$", ylabel=L"$\tau_{II}$", xlabelsize=ftsz, ylabelsize=ftsz, titlesize=ftsz)
+
+            ax  = Axis(fig[3,2], title=L"$$Stress space", xlabel=L"$P$", ylabel=L"$\tau_{II}$", xlabelsize=ftsz, ylabelsize=ftsz, titlesize=ftsz)
             P_ax       = LinRange(-10/1e3, 100/1e3, 100)
             # τ_ax_rock = materials.C[1]*materials.cosϕ[1] .+ P_ax.*materials.sinϕ[1]
             # lines!(ax, P_ax*sc.σ/1e6, τ_ax_rock*sc.σ/1e6, color=:black)
             
             # Plot yield
-            P_ax       = LinRange(-materials.σT[1]+1e-4, 80/1e3, 100)
-            τ_ax       = LinRange( 0, 60/1e3, 100)
-            f          = zeros(length(P_ax), length(τ_ax))
+            P_ax       = LinRange(-1e7/sc.σ, 7e8/sc.σ, 100)
+            τ_ax       = LinRange(0e7/sc.σ, 4e8/sc.σ, 100)
+            f_max       = zeros(length(P_ax), length(τ_ax))
+            f_min       = zeros(length(P_ax), length(τ_ax))
             q          = zeros(length(P_ax), length(τ_ax))
             for i in eachindex(P_ax), j in eachindex(τ_ax)
                 m = materials
-                if m.plasticity == :DruckerPrager1 
+                if m.plasticity == :DruckerPrager1 || m.plasticity == :DruckerPrager
                     yieldf = DruckerPrager1()
                     p = (m.C[1], m.cosϕ[1], m.sinϕ[1], m.cosψ[1], m.sinψ[1], 0*m.ηvp[1])
                 elseif m.plasticity == :GolchinMCC     
                     yieldf = GolchinMCC()
-                    p = (m.M[1], m.N[1], -m.σT[1], m.Pc[1], m.a[1], m.b[1], m.c[1], 0*m.ηvp[1])
+                    p = (m.M[1], m.N[1], -m.σT[1], m.Pc[1], m.a[1], m.b[1], m.c[1], m.ηvp[1])
                 elseif m.plasticity == :Hyperbolic    
                     yieldf = Hyperbolic()
                     p = (m.C[1], m.cosϕ[1], m.sinϕ[1], m.cosψ[1], m.sinψ[1], m.σT[1], 0*m.ηvp[1])
                 end
-                f[i,j] = Yield(@SVector([τ_ax[j], P_ax[i], 0.0]), p, yieldf)
+                f_max[i,j] = Yield(@SVector([τ_ax[j], P_ax[i], maximum(λ̇.c)]), p, yieldf)
+                f_min[i,j] = Yield(@SVector([τ_ax[j], P_ax[i], 0.0]), p, yieldf)
+
+                # f[i,j] = Yield(@SVector([τ_ax[j], P_ax[i], 0.0]), p, yieldf)
                 q[i,j] = Potential(@SVector([τ_ax[j], P_ax[i], 0.0]), p, yieldf)
             end
-            contour!(ax, P_ax*sc.σ/1e6, τ_ax*sc.σ/1e6, f*sc.σ./1e6, levels=[0., 0.0], color=:red)
+            contour!(ax, P_ax*sc.σ/1e6, τ_ax*sc.σ/1e6, f_max*sc.σ./1e6, levels=[0., 0.0], color=:red)
+            contour!(ax, P_ax*sc.σ/1e6, τ_ax*sc.σ/1e6, f_min*sc.σ./1e6, levels=[0., 0.0], color=:black)
             contour!(ax, P_ax*sc.σ/1e6, τ_ax*sc.σ/1e6, q*sc.σ./1e6, levels=[0., 0.0], color=:red, linestyle=:dash)
 
             cosΨ, sinΨ, C, σT = materials.cosϕ[1], materials.sinϕ[1], materials.sinϕ[1], materials.σT[1]
             B = C * cosΨ - σT*sinΨ
             dQdtau = @. τII_rock /sqrt(τII_rock^2 + B^2) 
-            scatter!(ax, (P_rock .+ 0*sinΨ .* λ̇_rock.*materials.ηvp[1])*sc.σ/1e6, (τII_rock .+ dQdtau.*λ̇_rock.*materials.ηvp[1])*sc.σ/1e6, color=:black )
-                    
-            # τ_ax_gouge = materials.C[2]*materials.cosϕ[2] .+ P_ax.*materials.sinϕ[2]
-            # lines!(ax, P_ax*sc.σ/1e6, τ_ax_gouge*sc.σ/1e6, color=:red)
-            # scatter!(ax, P_gouge*sc.σ/1e6, τII_gouge*sc.σ/1e6, color=:red )
+            scatter!(ax, (P_rock .+ 0*sinΨ .* λ̇_rock.*materials.ηvp[1])*sc.σ/1e6, (τII_rock .+ 0*dQdtau.*λ̇_rock.*materials.ηvp[1])*sc.σ/1e6, color=:black )
             display(fig)
         end
         with_theme(figure, theme_latexfonts())
@@ -403,5 +439,5 @@ end
 end
 
 let
-    main((x = 100, y = 100), 60)
+    main((x = 100, y = 50), 60)
 end

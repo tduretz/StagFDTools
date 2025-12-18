@@ -3,7 +3,6 @@ import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 
-
 @views function main(nc, Ωl, Ωη)
 
     sc  = (σ=1e0, t=1e0, L=1e0)

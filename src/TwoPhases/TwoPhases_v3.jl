@@ -172,8 +172,6 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, Pf, ΔP, Pt0, Pf0, Φ0, τ0, �
     fy -= ( Ptc[2]  -  Ptc[1])  * invΔy
     fy += ρg
     fy *= -1 * Δ.x * Δ.y
-
-    # fy = Vy_loc[2,2]
     
     return fy
 end

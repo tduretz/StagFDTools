@@ -120,7 +120,6 @@ function Yield(x, p, model::GolchinMCC)
     F  = GolchinMCC(τ, P, A, B, C, β, λ̇, 0*ηvp) 
     return (F - λ̇*ηvp)*(F>=ϵ) + (F<ϵ)*λ̇*ηvp
     # return (F)*(F>=ϵ) + (F<ϵ)*λ̇*ηvp
-
 end
 
 function Potential(x, p, model::GolchinMCC)  
@@ -137,8 +136,8 @@ end
 function ResidualDeviator( x, τ_trial, ε̇_eff, ηve, p, model)
     τ, P, λ̇ = x[1], x[2], x[3]
     ∂Q∂σ = Enzyme.gradient(Enzyme.Forward, Potential, x, Const(p), Const(model))
-    # return ε̇_eff -  τ/2/ηve  - λ̇/2*∂Q∂σ[1][1]
-    return τ - τ_trial + ηve*λ̇*∂Q∂σ[1][1]
+    return ε̇_eff -  τ/2/ηve  - λ̇/2*∂Q∂σ[1][1]
+    # return τ - τ_trial + ηve*λ̇*∂Q∂σ[1][1]
 end  
 
 function ResidualVolume( x, P_trial, Dkk, P0, K, Δt, p, model)

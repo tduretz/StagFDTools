@@ -11,31 +11,34 @@ using TimerOutputs
 
     # Boundary loading type
     config = :free_slip
-    D_BC   = @SMatrix( [ -1. 0.;
-                          0  1 ])
+    config = :EW_Neumann
+    D_BC   = @SMatrix( [  1. 0.;
+                          0  -1 ])
 
     # Material parameters
     materials = ( 
         compressible = false,
         plasticity   = :none,
-        n    = [10.0   1.0  ],
-        η0   = [1e2    1e-1 ], 
-        G    = [1e1    1e1  ],
-        C    = [1e10   1e10 ],
-        ϕ    = [30.    30.  ],
-        ηvp  = [0.5    0.5  ],
-        β    = [1e-2   1e-2 ],
-        ψ    = [3.     3.   ],
-        B    = [0.     0.   ],
-        cosϕ = [0.0    0.0  ],
-        sinϕ = [0.0    0.0  ],
-        sinψ = [0.0    0.0  ],
+        g    = [0      0     0   ],
+        ρ    = [0.0    0.0   0.0 ],
+        n    = [3.0    3.0   1.0 ],
+        η0   = [1e2    1e-1  1e2 ], 
+        G    = [1e20   1e20  1e20],
+        C    = [1e10   1e10  1e10],
+        ϕ    = [30.    30.   30. ],
+        ηvp  = [0.5    0.5   0.5 ],
+        β    = [1e-2   1e-2  1e-2],
+        ψ    = [3.     3.    3.  ],
+        B    = [0.     0.    0.  ],
+        cosϕ = [0.0    0.0   0.0 ],
+        sinϕ = [0.0    0.0   0.0 ],
+        sinψ = [0.0    0.0   0.0 ],
     ) 
     materials.B   .= (2*materials.η0).^(-materials.n)
 
     # Time steps
     Δt0   = 0.5
-    nt    = 40
+    nt    = 1
 
     # Newton solver
     niter = 20
@@ -144,6 +147,10 @@ using TimerOutputs
     # Set material geometry 
     @views phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
     @views phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= 0.1^2] .= 2
+    @views phases.v[[2,end-1], :] .= 3  # Use linear material along Neumann boundaries
+    @views phases.v[:, [2,end-1]] .= 3  # Use linear material along Neumann boundaries
+    @views phases.c[[2,end-1], :] .= 3  # Use linear material along Neumann boundaries
+    @views phases.c[:, [2,end-1]] .= 3  # Use linear material along Neumann boundaries
 
     #--------------------------------------------#
 
@@ -232,18 +239,22 @@ using TimerOutputs
         ε̇xyc = av2D(ε̇.xy)
         ε̇II  = sqrt.( 0.5.*(ε̇.xx[inx_c,iny_c].^2 + ε̇.yy[inx_c,iny_c].^2 + (-ε̇.xx[inx_c,iny_c]-ε̇.yy[inx_c,iny_c]).^2) .+ ε̇xyc[inx_c,iny_c].^2 )
         
-        p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
-        p2 = heatmap(xv, yv,  η.v[inx_v,iny_v]', aspect_ratio=1, xlim=extrema(xv), title="ηv")
-        p3 = heatmap(xc, yc,  log10.(ε̇II)', aspect_ratio=1, xlim=extrema(xc), title="ε̇II", c=:coolwarm)
-        p4 = heatmap(xc, yc,  τII', aspect_ratio=1, xlim=extrema(xc), title="τII", c=:turbo)
-        p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright)
-        p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
-        p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
-        p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
-        display(plot(p1, p2, p3, p4, layout=(2,2)))
+        p2 = Plots.heatmap(xv, yc, R.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Vx")
+        # p2 = Plots.heatmap(xv, yv,  log10.(η.v[inx_v,iny_v])', aspect_ratio=1, xlim=extrema(xv), title="ηv")
+        p3 = Plots.heatmap(xc, yc,  log10.(ε̇II)', aspect_ratio=1, xlim=extrema(xc), title="ε̇II", c=:coolwarm, clim=(-0.4, 0.4))
+        p4 = Plots.heatmap(xc, yc,  τ.xx[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="τxx", c=:turbo)
+        p1 = Plots.plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright)
+        p1 = Plots.scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
+        p1 = Plots.scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
+        p1 = Plots.scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
+        display(Plots.plot(p1, p2, p3, p4, layout=(2,2)))
 
     end
-    gif(anim, "./results/PowerLaw.gif", fps = 5)
+    # Plots.gif(anim, "./results/PowerLaw.gif", fps = 5)
+
+    printxy(number.Vx)
+    printxy(type.Vx)
+    #  printxy(type.Vy)
 
     display(to)
     
@@ -251,5 +262,5 @@ end
 
 
 let
-    main((x = 100, y = 100))
+    main((x = 10, y = 10))
 end

@@ -17,8 +17,10 @@ using TimerOutputs
 
     # Material parameters
     materials = ( 
+        g    = [0.0    0.0  ],
         compressible = true,
         plasticity   = :none,
+        ρ    = [1.0    1.0  ],
         n    = [1.0    1.0  ],
         η0   = [1e2    1e-1 ], 
         G    = [1e1    1e1  ],
@@ -268,7 +270,7 @@ let
         :EW_periodic,
     ]
 
-    # Boundary deformation gradient matrix
+    # Boundary velocity gradient matrix
     D_BCs = [
         @SMatrix( [1 0; 0 -1] ),
         @SMatrix( [1 0; 0 -1] ),
