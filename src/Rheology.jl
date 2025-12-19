@@ -129,15 +129,15 @@ function Potential(x, p, model::GolchinMCC)
     C  = Cf(Pc, Pt, γ) 
     B  = Bf(P, Pc, Pt, N, C, α) 
     A  = Af(P, Pc, Pt, γ)
-    Q  = GolchinMCC(τ, P, A, B, C, β, λ̇, ηvp) 
-    return Q
+    Q  = GolchinMCC(τ, P, A, B, C, β, λ̇, 0*ηvp) 
+    return Q 
 end
 
 function ResidualDeviator( x, τ_trial, ε̇_eff, ηve, p, model)
     τ, P, λ̇ = x[1], x[2], x[3]
     ∂Q∂σ = Enzyme.gradient(Enzyme.Forward, Potential, x, Const(p), Const(model))
-    return ε̇_eff -  τ/2/ηve  - λ̇/2*∂Q∂σ[1][1]
-    # return τ - τ_trial + ηve*λ̇*∂Q∂σ[1][1]
+    # return ε̇_eff -  τ/2/ηve  - λ̇/2*∂Q∂σ[1][1]
+    return τ - τ_trial + ηve*λ̇*∂Q∂σ[1][1]
 end  
 
 function ResidualVolume( x, P_trial, Dkk, P0, K, Δt, p, model)

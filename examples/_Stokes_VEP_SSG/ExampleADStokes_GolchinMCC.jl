@@ -51,13 +51,15 @@ end
         # plasticity   = :Hyperbolic,
         # plasticity   = :DruckerPrager,
         # plasticity   = :Kiss2023,
+        g    = [0. 0.],
         #      rock   gouge  salt 
+        ρ    = [0.0    0.0    0.0 ],
         n    = [1.0    1.0    1.0 ],      # Power law exponent
         η0   = [1e48   1e28   1e13]./sc.σ./sc.t,      # Reference viscosity 
         G    = [1e10   1e9    1e60]./sc.σ,      # Shear modulus
         C    = [10e6   10e6   15e60]./sc.σ,      # Cohesion
-        ϕ    = [35.    35.    35. ],      # Friction angle
-        ψ    = [1.0    1.0    1.0 ]*10 ,      # Dilation angle
+        ϕ    = [1.0    1.0    1.0 ]*35,      # Friction angle
+        ψ    = [1.0    1.0    1.0 ]*15 ,      # Dilation angle
         ηvp  = [1.0    1.0    1.0 ].*5e9/sc.σ./sc.t, # Viscoplastic regularisation
         β    = [1e-11  1e-10 1e-12].*sc.σ,      # Compressibility
         B    = [0.0    0.0    0.0 ],      # (calculated after) power-law creep pre-factor
@@ -413,10 +415,11 @@ end
                 f_min[i,j] = Yield(@SVector([τ_ax[j], P_ax[i], 0.0]), p, yieldf)
 
                 # f[i,j] = Yield(@SVector([τ_ax[j], P_ax[i], 0.0]), p, yieldf)
-                # q[i,j] = Potential(@SVector([τ_ax[j], P_ax[i], 0.0]), p, yieldf)
+                q[i,j] = Potential(@SVector([τ_ax[j], P_ax[i], 0.0]), p, yieldf)
             end
             contour!(ax, P_ax*sc.σ/1e6, τ_ax*sc.σ/1e6, f_max*sc.σ./1e6, levels=[0., 0.0], color=:red)
             contour!(ax, P_ax*sc.σ/1e6, τ_ax*sc.σ/1e6, f_min*sc.σ./1e6, levels=[0., 0.0], color=:black)
+            contour!(ax, P_ax*sc.σ/1e6, τ_ax*sc.σ/1e6, q*sc.σ./1e6, levels=[0., 0.0], color=:red, linestyle=:dash)
 
             # contour!(ax, P_ax*sc.σ/1e6, τ_ax*sc.σ/1e6, q*sc.σ./1e6, levels=[0., 0.0], color=:red, linestyle=:dash)
 

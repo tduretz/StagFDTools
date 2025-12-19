@@ -28,8 +28,8 @@ end
     config = :N_StressFree
 
     # mode 2
-    nt     = 100
-    Δt0    = 1e11/sc.t
+    nt     = 400
+    Δt0    = 5e10/sc.t
     D_BC   = @SMatrix( [  ε̇xx  0.;
                           0  -0*ε̇xx ])
 
@@ -49,9 +49,9 @@ end
         η0   = [1e48   1e48   1e10]./sc.σ./sc.t,      # Reference viscosity 
         G    = [4e10   1e10   1e60]./sc.σ,   # Shear modulus
         C    = [5e7    5e7    5e60] ./sc.σ,   # Cohesion
-        ϕ    = [1.0    1.0    1.0 ].*35,       # Friction angle
-        ψ    = [1.0    1.0    1.0 ].*20 ,      # Dilation angle
-        ηvp  = [1.0    1.0    1.0 ].*2e20/sc.σ./sc.t, # Viscoplastic regularisation
+        ϕ    = [1.0    1.0    1.0 ].*10,       # Friction angle
+        ψ    = [1.0    1.0    1.0 ].*5 ,      # Dilation angle
+        ηvp  = [1.0    1.0    1.0 ].*1e20/sc.σ./sc.t, # Viscoplastic regularisation
         β    = [1e-11  1e-11 1e-12].*sc.σ,    # Compressibility
         B    = [0.0    0.0    0.0 ],      # (calculated after) power-law creep pre-factor
         cosϕ = [0.0    0.0    0.0 ],      # (calculated after) frictional parameters
@@ -60,7 +60,7 @@ end
         sinψ = [0.0    0.0    0.0 ],      # (calculated after) frictional parameters
         M    = [0.0    0.0    0.0 ],
         N    = [0.0    0.0    0.0 ],
-        Pc   = [1.0    1.0    1.0 ].*5e8./sc.σ,  
+        Pc   = [1.0    1.0    1.0 ].*1e9./sc.σ,  
         a    = [0.5    0.5    0.5 ],
         b    = [0.0    0.0    0.0 ],
         c    = [0.5    0.5    0.5 ],
@@ -439,5 +439,5 @@ end
 end
 
 let
-    main((x = 100, y = 50), 60)
+    main((x = 200, y = 100), 60)
 end
