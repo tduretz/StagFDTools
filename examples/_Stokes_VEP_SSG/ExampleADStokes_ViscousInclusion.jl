@@ -18,6 +18,8 @@ using TimerOutputs
     materials = ( 
         compressible = false,
         plasticity   = :none,
+        g    = [0.0    0.0  ],
+        ρ    = [1.0    1.0  ],
         n    = [1.0    1.0  ],
         η0   = [1e0    1e5  ], 
         G    = [1e6    1e6  ],
@@ -255,7 +257,7 @@ let
     #     :all_Dirichlet,
     # ]
 
-    # Boundary deformation gradient matrix
+    # Boundary velocity gradient matrix
     er    = -1
     # ∂𝐕∂𝐱 - velocity gradient tensor 
     D_BCs = [

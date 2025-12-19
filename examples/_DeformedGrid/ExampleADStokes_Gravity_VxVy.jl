@@ -415,7 +415,7 @@ let
         :free_slip,
     ]
 
-    # Boundary deformation gradient matrix
+    # Boundary velocity gradient matrix
     D_BCs = [
         @SMatrix( [0 0; 0 -0] ),
     ]
