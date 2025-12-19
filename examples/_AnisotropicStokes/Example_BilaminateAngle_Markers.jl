@@ -1,4 +1,4 @@
-using StagFDTools, StagFDTools.StokesJustPIC, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf
+using StagFDTools, StagFDTools.StokesJustPIC, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf, JLD2
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
@@ -444,35 +444,27 @@ end
         # average Principal stress and strain angles per phase (inside inner box)
 
         for k= 1:2
-            τ̄xx = zero(θ)
-            τ̄yy = zero(θ)
-            τ̄xy = zero(θ)
-            ε̇̄xx = zero(θ)
-            ε̇̄yy = zero(θ)
-            ε̇̄xy = zero(θ)
-            pts = zero(θ)
+            ηmat = materials.η0[k]
+            ϕσ   = 0.0
+            ϕε̇  = 0.0
+            pts = 0.0
             for i in inner_x, j in inner_y
                 if phase_ratios.center[i,j][k] == 1.0
+                    τxx_c = 2* ηmat * ε̇.xx[i,j] 
+                    τyy_c = 2* ηmat * ε̇.yy[i,j]
+                    τxy_c = 2 * ηmat * ε̇xyc[i,j]
                     pts += 1
-                    τ̄xx += τ.xx[i,j]
-                    τ̄yy += τ.yy[i,j]
-                    τ̄xy += τxyc[i,j]
-                    ε̇̄xx += ε̇.xx[i,j]
-                    ε̇̄yy += ε̇.yy[i,j]
-                    ε̇̄xy += ε̇xyc[i,j]
+                    ϕσp = 1/2 * atan(2 * τxy_c, (τxx_c - τyy_c)) 
+                    ϕε̇p = 1/2 * atan(2 * ε̇xyc[i,j], (ε̇.xx[i,j] - ε̇.yy[i,j]))
+                    ϕσ += ϕσp
+                    ϕε̇ += ϕε̇p
+                    @show 180/π * ϕσp, 180/π * ϕε̇p
                 end
             end
-            τ̄xx /= pts
-            τ̄yy /= pts
-            τ̄xy /= pts
-            ε̇̄xx /= pts
-            ε̇̄yy /= pts
-            ε̇̄xy /= pts
-
-            ϕσ = 1/2 * atan(2 * τ̄xy, (τ̄xx - τ̄yy)) 
-            ϕε̇ = 1/2 * atan(2 * ε̇̄xy, (ε̇̄xx - ε̇̄yy))
+            ϕσ /= pts
+            ϕε̇ /= pts
+            ϕ[k] = ϕε̇ # ϕε̇, ϕσ
             @show 180/π * ϕσ, 180/π * ϕε̇
-            ϕ[k] = ϕε̇
         end
         #-------------------------------------------#
 
@@ -544,8 +536,8 @@ let
 
 
     # Discretise angle of layer 
-    nθ         = 90
-    θ          = LinRange(0, π/2, nθ)
+    nθ         = 1
+    θ          = 30 * π/180 # LinRange(0, π/2, nθ)
     τ_cart     = zeros(nθ)
     τ_cart_lay = zeros(nθ)
     τ_cart_trf0d = zeros(nθ)
@@ -601,5 +593,5 @@ let
         cm.axislegend(position=:rt, framevisible=false, labelsize=12, orientation=:horizontal, merge=true)
         display(f)
     end
-    cm.with_theme(Visualisation, cm.theme_latexfonts())
+    # cm.with_theme(Visualisation, cm.theme_latexfonts())
 end
