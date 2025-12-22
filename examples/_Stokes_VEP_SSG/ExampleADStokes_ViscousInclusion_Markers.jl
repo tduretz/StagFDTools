@@ -50,7 +50,7 @@ function MarkerWeight_phase!(phase_ratio, phase_weight, x, y, xm, ym, Δ, phase,
         phase_weight[k] += w
     end
 end
-function PhaseRatios!(phase_ratios, phase_weights, m, mphase, xce, yce, xve, yve, Δ)
+function PhaseRatios!(phase_ratios, phase_weights, m, mphase, xce, yce, xve, yve, Δ, mp)
 
     for I in CartesianIndices(mphase)
         # find indices of grid centroid
@@ -64,6 +64,8 @@ function PhaseRatios!(phase_ratios, phase_weights, m, mphase, xce, yce, xve, yve
         # jc = clamp(jc, 1, size(phase_ratios.center, 2))
         # iv = clamp(iv, 1, size(phase_ratios.vertex, 1))
         # jv = clamp(jv, 1, size(phase_ratios.vertex, 2))
+        mp.c[ic,jc] += 1
+        mp.v[iv,jv] += 1
 
         MarkerWeight_phase!(phase_ratios.center[ic,jc], phase_weights.center[ic,jc], xce[ic], yce[jc], m.Xm[I], m.Ym[I], Δ, mphase[I], m.nphases)
         MarkerWeight_phase!(phase_ratios.vertex[iv,jv], phase_weights.vertex[iv,jv], xve[iv], yve[jv], m.Xm[I], m.Ym[I], Δ, mphase[I], m.nphases)
@@ -85,52 +87,51 @@ function PhaseRatios!(phase_ratios, phase_weights, m, mphase, xce, yce, xve, yve
     end
 end
 
-# This is the function that should be used to compute shear and bulk moduli (from Advection script)
-# function compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v, nphases)
-#     sum       = (c  =  ones(size_c...), v  =  ones(size_v...) )
+function compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v, nphases)
+    sum       = (c  =  ones(size_c...), v  =  ones(size_v...) )
 
-#     for I in CartesianIndices(β.c) 
-#         i, j = I[1], I[2]
-#         β.c[i,j] = 0.0
-#         G.c[i,j] = 0.0
-#         sum.c[i,j] = 0.0
-#         for p = 1:nphases # loop on phases
-#             if i>1 && j>1 && i<nc.x+2 && j<nc.y+2 
-#                 phase_ratio = @index phase_ratios.center[p, i-1, j-1]
-#                 β.c[i,j]   += phase_ratio * materials.β[p]
-#                 G.c[i,j]   += phase_ratio * materials.G[p]
-#                 sum.c[i,j] += phase_ratio
-#             end
-#         end
-#     end
-#     G.c[[1 end],:] .=  G.c[[2 end-1],:]
-#     G.c[:,[1 end]] .=  G.c[:,[2 end-1]]
-#     β.c[[1 end],:] .=  β.c[[2 end-1],:]
-#     β.c[:,[1 end]] .=  β.c[:,[2 end-1]]
+    for I in CartesianIndices(β.c) 
+        i, j = I[1], I[2]
+        β.c[i,j] = 0.0
+        G.c[i,j] = 0.0
+        sum.c[i,j] = 0.0
+        for p = 1:nphases # loop on phases
+            if i>1 && j>1 && i<nc.x+2 && j<nc.y+2 
+                phase_ratio = phase_ratios.center[i,j][p]
+                β.c[i,j]   += phase_ratio * materials.β[p]
+                G.c[i,j]   += phase_ratio * materials.G[p]
+                sum.c[i,j] += phase_ratio
+            end
+        end
+    end
+    G.c[[1 end],:] .=  G.c[[2 end-1],:]
+    G.c[:,[1 end]] .=  G.c[:,[2 end-1]]
+    β.c[[1 end],:] .=  β.c[[2 end-1],:]
+    β.c[:,[1 end]] .=  β.c[:,[2 end-1]]
 
-#     for I in CartesianIndices(G.v) 
-#         i, j = I[1], I[2]
-#         G.v[i,j]   = 0.0
-#         sum.v[i,j] = 0.0
-#         for p = 1:nphases # loop on phases
-#             if i>1 && j>1 && i<nc.x+3 && j<nc.y+3 
-#                 phase_ratio = @index phase_ratios.vertex[p, i-1, j-1]
-#                 G.v[i,j]   += phase_ratio * materials.G[p]
-#                 sum.v[i,j] += phase_ratio
-#             end
-#         end
-#     end
-#     G.v[[1 end],:] .=  G.v[[2 end-1],:]
-#     G.v[:,[1 end]] .=  G.v[:,[2 end-1]]
-#     @show extrema(sum.c[2:end-1,2:end-1]),  extrema(sum.v[2:end-1,2:end-1])
-# end
+    for I in CartesianIndices(G.v) 
+        i, j = I[1], I[2]
+        G.v[i,j]   = 0.0
+        sum.v[i,j] = 0.0
+        for p = 1:nphases # loop on phases
+            if i>1 && j>1 && i<nc.x+3 && j<nc.y+3 
+                phase_ratio = phase_ratios.vertex[i,j][p]
+                G.v[i,j]   += phase_ratio * materials.G[p]
+                sum.v[i,j] += phase_ratio
+            end
+        end
+    end
+    G.v[[1 end],:] .=  G.v[[2 end-1],:]
+    G.v[:,[1 end]] .=  G.v[:,[2 end-1]]
+    @show extrema(sum.c[2:end-1,2:end-1]),  extrema(sum.v[2:end-1,2:end-1])
+end
 
 @views function main(BC_template, D_template)
     #--------------------------------------------#
 
     # Resolution
     nc = (x = 50, y = 50) # number of cells
-    nmpc = (x = 4, y =4)  # markers per cell
+    nmpc = (x = 3, y =3)  # markers per cell
     mnoise = false         # noise in marker distribution
 
     # Boundary loading type
@@ -285,9 +286,10 @@ end
     #         mphase[I] = 2
     #     end
     # end
+    mp = (c= zeros(size_c...), v= zeros(size_v...))
 
     # Set phase ratios on grid
-    PhaseRatios!(phase_ratios, phase_weights, m, mphase, xce, yce, xve, yve, Δ)
+    PhaseRatios!(phase_ratios, phase_weights, m, mphase, xce, yce, xve, yve, Δ, mp)
 
     for I in CartesianIndices(phase_ratios.center)
         s = sum(phase_ratios.center[I])
@@ -296,12 +298,8 @@ end
         end
     end
 
-    # Set bulk and shear moduli ( this is a makeshift assignment that only works because they are the same in all phases)
-    # Should be done like the function compute_shear_bulk_moduli() above
-    # It uses JustPIC functions, so it needs to be adapted)
-    G.c .= materials.G[1]
-    G.v .= materials.G[1]
-    β.c .= materials.β[1]
+    heatmap(xce, yce, mp.c', aspect_ratio=1, xlim=extrema(xce), title="Markers per centroid", color=:vik) |> display
+    heatmap(xve, yve, mp.v', aspect_ratio=1, xlim=extrema(xve), title="Markers per vertex", color=:vik) |> display
 
     #--------------------------------------------#
 
@@ -325,7 +323,7 @@ end
         Pt0   .= Pt
 
         # Compute bulk and shear moduli
-        # compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v, m.nphases)
+        compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v, m.nphases)
 
 
         for iter=1:niter
@@ -393,7 +391,7 @@ end
         p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
         p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
         p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
-        display(plot(p1, p2, p3, p4, layout=(2,2)))
+        # display(plot(p1, p2, p3, p4, layout=(2,2)))
 
     end
 
