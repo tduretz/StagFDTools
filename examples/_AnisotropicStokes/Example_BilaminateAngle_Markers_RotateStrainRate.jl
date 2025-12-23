@@ -60,6 +60,7 @@ function ViscousRheology(θ, η_n, δ, D)
     
     return τ_II, ϕ, ϕ_ana
 end
+
 function MarkerWeight(xm, x, Δx)
     # compute marker-grid distance and weight
     dst = abs(xm - x)
@@ -270,7 +271,7 @@ end
             if isin
                 phases.m[k, l] = 2
             end
-    
+
             i = Int64(ceil((xm[k]-xve[1]) / Δ.x))
             j = Int64(ceil((ym[l]-yve[1]) / Δ.y))
             mp.c[i,j] += 1
@@ -315,8 +316,6 @@ end
         end
     end
 
-    # Unfortunalely, the data structure in JustPIC doesnt accoutn for ghost cells
-    # Here I just cut the ghosts away...  
     phase_ratios = (
         center   = phase_ratios.center[2:end-1,2:end-1],
         vertex   = phase_ratios.vertex[2:end-1,2:end-1],
@@ -501,8 +500,10 @@ end
 
         fig = cm.Figure()
         ax  = cm.Axis(fig[1,1], aspect=cm.DataAspect())
-        hm  = cm.heatmap!(ax, xc, yc,  τII[inx_c,iny_c], colormap=:bluesreds, colorrange=extrema(τII[inner_x, inner_y]))
+        # hm  = cm.heatmap!(ax, xce, yce,  p, colormap=:bluesreds, colorrange=(0, 1))
+        hm  = cm.heatmap!(ax, xce, yce,  τII, colormap=:bluesreds, colorrange=extrema(τII[inner_x, inner_y]))
         cm.poly!(ax, cm.Rect(xce[imin_x], yce[imin_y], xce[imax_x]-xce[imin_x], yce[imax_y]-yce[imin_y]), strokecolor=:white, strokewidth=2, color=:transparent)
+        # cm.scatter!(ax, (xm.+0*ym')[:], (0*xm.+ym')[:], color=phases.m[:] )
         st = 2
 
         # R       = @SMatrix([ cos(θ) -sin(θ); sin(θ) cos(θ)] )
@@ -515,10 +516,10 @@ end
         #     σ1.y[i] = x′[2]
         # end
 
-        cm.arrows2d!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], tiplength = 0, lengthscale=0.02, tipwidth=1, color=:white)
-        cm.Colorbar(fig[1,2], hm, label="τII [Pa]")
-        cm.xlims!(ax, -0.3, 0.3)
-        cm.ylims!(ax, -0.3, 0.3)
+        # cm.arrows2d!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], tiplength = 0, lengthscale=0.02, tipwidth=1, color=:white)
+        # cm.Colorbar(fig[1,2], hm, label="τII [Pa]")
+        # cm.xlims!(ax, -0.3, 0.3)
+        # cm.ylims!(ax, -0.3, 0.3)
         display(fig)
         function PlotComponents()
             f  = cm.Figure()
@@ -563,8 +564,8 @@ let
     # Boundary condition templates
     BCs = [
         # :EW_periodic,
-        # :all_Dirichlet,
-        :free_slip,
+        :all_Dirichlet,
+        # :free_slip,
     ]
 
     # Boundary deformation gradient matrix
@@ -573,13 +574,16 @@ let
          @SMatrix( [1 0; 0 -1] ),
     ]
 
-    nc = (x = 200, y = 200)
+    nc = (x = 100, y = 100)
     nmpc = (x = 8, y = 8)
 
 
     # Discretise angle of layer 
     nθ         = 10
     θ          = LinRange(0, π/2, nθ)
+    
+    # θ          = 0.0
+
     τ_cart     = zeros(nθ)
     τ_cart_lay = zeros(nθ)
     τ_cart_trf0d = zeros(nθ)
@@ -628,24 +632,36 @@ let
     # Run them all
     for iθ in eachindex(θ)
 
+        # Transform to layer coordinates
+        R       = @SMatrix([ cos(θ[iθ]) -sin(θ[iθ]); sin(θ[iθ]) cos(θ[iθ])] )
+
+        D = @SMatrix( [1 0; 0 -1] )
+
+        Drot = R * D * R'
+
+        D_BCs = [
+            Drot,
+        ]
+
         layering = Layering(
             (0*0.25, 0.025), 
             0.15, 
             α2; 
-            θ = θ[iθ],  
+            θ = 0*θ[iθ],  
             perturb_amp=0*1.0, 
             perturb_width=1.0
         )
         @show "run $(iθ)"
 
-        τ_cart_lay[iθ], ϕ_w_lay[iθ], ϕ_s_lay[iθ], SR, TAU = main( nc, layering, BCs[1], D_BCs[1], :chol, η1, η2, θ[iθ]; useMarkers=true, nmpc)
+        τ_cart_lay[iθ], ϕ_w_lay[iθ], ϕ_s_lay[iθ], SR, TAU = main( nc, layering, BCs[1], D_BCs[1], :chol, η1, η2, 0*θ[iθ]; useMarkers=true, nmpc)
         τ_cart_trf0d[iθ], ϕ_ani[iθ], ϕ_ana[iθ] = ViscousRheology(θ[iθ], ηn, δ, D_BCs[1])
 
 
-        # Transform to layer coordinates
-        R       = @SMatrix([ cos(θ[iθ]) -sin(θ[iθ]); sin(θ[iθ]) cos(θ[iθ])] )
-
         # Transform strain rate in weak and strong LocalRheology_phase_ratios
+        
+        R       = @SMatrix([ 1 0; 0 1] )
+
+
         E_w = @SMatrix([SR.xx[1] SR.xy[1]; SR.xy[1] SR.yy[1]])
         E_s = @SMatrix([SR.xx[2] SR.xy[2]; SR.xy[2] SR.yy[2]])
         E_w_rot = R * E_w * R'
