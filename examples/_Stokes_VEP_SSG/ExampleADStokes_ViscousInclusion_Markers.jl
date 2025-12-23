@@ -9,15 +9,17 @@ function InitialiseMarkerField(nc, nmpc, L, Δ, materials, noise)
     nphases = length(materials.n)
     num = (x = nmpc.x * (nc.x + 2), y = nmpc.y * (nc.y + 2)) 
     Δm = (x = L.x/num.x, y = L.y/num.y)
-    xm = LinRange(-L.x/2-Δ.x+Δm.x/2, L.x/2+Δ.x-Δm.x, num.x)
-    ym = LinRange(-L.y/2-Δ.y+Δm.y/2, L.y/2+Δ.y-Δm.y, num.y)
+    xm = LinRange(-L.x/2-Δ.x+Δm.x/2, L.x/2+Δ.x-Δm.x/2, num.x)
+    ym = LinRange(-L.y/2-Δ.y+Δm.y/2, L.y/2+Δ.y-Δm.y/2, num.y)
     Xm = [xm[i] for i in eachindex(xm), j in eachindex(ym)]
     Ym = [ym[j] for i in eachindex(xm), j in eachindex(ym)]
 
     # Add noise to marker coordinates
     if noise
-        Xm .+= (rand() .- 0.5) .* Δm.x
-        Ym .+= (rand() .- 0.5) .* Δm.y
+        for ind = 1:(num.x*num.y)
+            Xm[ind] += (rand() - 0.5) * Δm.x
+            Ym[ind] += (rand() - 0.5) * Δm.y
+        end
     end
     return (Xm = Xm, Ym = Ym, xm = xm, ym = ym, Δm = Δm, num = num, nphases = nphases)
 end
@@ -44,21 +46,20 @@ end
 function MarkerWeight_phase!(phase_ratio, phase_weight, x, y, xm, ym, Δ, phase, nphases)
     w_x = MarkerWeight(xm, x, Δ.x)
     w_y = MarkerWeight(ym, y, Δ.y)
-    w = w_x * w_y
     for k = 1:nphases
-        phase_ratio[k]  += (k === phase) * w
-        phase_weight[k] += w
+        phase_ratio[k]  += (k === phase) * w_x * w_y
+        phase_weight[k] += w_x * w_y
     end
 end
 function PhaseRatios!(phase_ratios, phase_weights, m, mphase, xce, yce, xve, yve, Δ, mp)
 
     for I in CartesianIndices(mphase)
         # find indices of grid centroid
-        ic = Int64(ceil((m.Xm[I] - xve[1]) / Δ.x))
-        jc = Int64(ceil((m.Ym[I] - yve[1]) / Δ.y))
+        ic = Int64(round((m.Xm[I] - xce[1]) / Δ.x + 1))
+        jc = Int64(round((m.Ym[I] - yce[1]) / Δ.y + 1))
         # find indices of grid verteces
-        iv = Int64(ceil((m.Xm[I]-xve[1]) / Δ.x + 0.5))
-        jv = Int64(ceil((m.Ym[I]-yve[1]) / Δ.y + 0.5))
+        iv = Int64(round((m.Xm[I] - xve[1]) / Δ.x + 1))
+        jv = Int64(round((m.Ym[I] - yve[1]) / Δ.y + 1))
         # # Clamp to valid bounds (critical fix!)
         # ic = clamp(ic, 1, size(phase_ratios.center, 1))
         # jc = clamp(jc, 1, size(phase_ratios.center, 2))
@@ -279,7 +280,7 @@ end
     # Set material geometry 
     # incl = Hexagon((0.8, -0.3), 0.2; θ = π / 10)
     rad = 0.1 + 1e-13
-    mphase[(m.xm.^2 .+ (m.ym').^2) .<= rad^2] .= 2
+    mphase[(m.xm.^2 .+ (m.ym)'.^2) .<= rad^2] .= 2
     # for I in CartesianIndices(mphase)
     #     𝐱 = SVector(m.Xm[I], m.Ym[I])
     #     if inside(𝐱, incl)
@@ -298,8 +299,18 @@ end
         end
     end
 
-    heatmap(xce, yce, mp.c', aspect_ratio=1, xlim=extrema(xce), title="Markers per centroid", color=:vik) |> display
-    heatmap(xve, yve, mp.v', aspect_ratio=1, xlim=extrema(xve), title="Markers per vertex", color=:vik) |> display
+    #DEBUG: plot phase ratios
+    phase_ratio1 = zeros(size_c...)
+    phase_ratio2 = zeros(size_c...)
+    for ind in eachindex(phase_ratios.center) 
+        phase_ratio1[ind] = phase_ratios.center[ind][1]
+        phase_ratio2[ind] = phase_ratios.center[ind][2]
+    end
+    heatmap(xce, yce, phase_ratio1', aspect_ratio=1, xlim=extrema(xc), ylim=extrema(yc), title="Phase 1 ratio at centroids", color=:vik) |> display
+    # heatmap(xce, yce, phase_ratio2', aspect_ratio=1, xlim=extrema(xc), ylim=extrema(yc), title="Phase 2 ratio at centroids", color=:vik) |> display
+    
+    # heatmap(xce, yce, mp.c', aspect_ratio=1, xlim=extrema(xce), title="Markers per centroid", color=:vik) |> display
+    # heatmap(xve, yve, mp.v', aspect_ratio=1, xlim=extrema(xve), title="Markers per vertex", color=:vik) |> display
 
     #--------------------------------------------#
 
@@ -391,7 +402,7 @@ end
         p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
         p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
         p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
-        # display(plot(p1, p2, p3, p4, layout=(2,2)))
+        display(plot(p1, p2, p3, p4, layout=(2,2)))
 
     end
 
