@@ -188,7 +188,6 @@ end
     Δ     = (x=L.x/nc.x, y=L.y/nc.y, t = Δt0)
     Δm    = (x=L.x/nmark.x, y=L.y/nmark.y)
 
-
     # Allocations
     R       = (x  = zeros(size_x...), y  = zeros(size_y...), p  = zeros(size_c...))
     V       = (x  = zeros(size_x...), y  = zeros(size_y...))
@@ -238,10 +237,10 @@ end
     mp           = (c = zeros(size_c...), v = zeros(size_v...))
 
     # Only account for the subdomain
-    imin_x = argmin(abs.(xce .+ 0.3))
-    imax_x = argmin(abs.(xce .- 0.3))
-    imin_y = argmin(abs.(yce .+ 0.3))
-    imax_y = argmin(abs.(yce .- 0.3))
+    imin_x = argmin(abs.(xce .+ 0.8))
+    imax_x = argmin(abs.(xce .- 0.8))
+    imin_y = argmin(abs.(yce .+ 0.8))
+    imax_y = argmin(abs.(yce .- 0.8))
     inner_x = imin_x:imax_x
     inner_y = imin_y:imax_y
 
@@ -429,7 +428,10 @@ end
 
         #-------------------------------------------#
         # Compute σ & ε̇ components in material coordinates
-        Q  = @SMatrix([cos(θ) sin(θ); -sin(θ) cos(θ)])
+        # Q  = @SMatrix([cos(θ) sin(θ); -sin(θ) cos(θ)])
+        
+        # May rotate or not, angle should be invarariant
+        Q  = @SMatrix([1 0; 0 1]) 
 
         ε̇_mat = (xx = zeros(size(Pt)), yy = zeros(size(Pt)), xy = zeros(size(Pt)))
         σ_mat  = (xx = zeros(size(Pt)), yy = zeros(size(Pt)), xy = zeros(size(Pt)))
@@ -461,27 +463,28 @@ end
 
         for k = 1:2
             ηmat = materials.η0[k]
-            ϕσ   = 0.0
-            ϕε̇  = 0.0
+            ϕσ       = 0.0
+            ϕε̇       = 0.0
             SR.xx[k] = 0.0
-            pts = 0.0
+            pts      = 0.0
             for i in inner_x, j in inner_y
-                if phase_ratios.center[i,j][k] == 1.0
+                # Here the shift is made to access arrays with ghosts
+                if phase_ratios.center[i-1,j-1][k] > 0.99 
                     τxx_c = 2* ηmat * ε̇.xx[i,j] 
                     τyy_c = 2* ηmat * ε̇.yy[i,j]
-                    τxy_c = 2 * ηmat * ε̇xyc[i,j]
+                    τxy_c = 2* ηmat * ε̇xyc[i,j]
                     pts += 1
                     ϕσp = 1/2 * atan(2 * τxy_c, (τxx_c - τyy_c)) 
                     ϕε̇p = 1/2 * atan(2 * ε̇xyc[i,j], (ε̇.xx[i,j] - ε̇.yy[i,j]))
                     ϕσ += ϕσp
                     ϕε̇ += ϕε̇p
-                    SR.xx[k] += ε̇.xx[i,j] 
-                    SR.yy[k] += ε̇.yy[i,j] 
-                    SR.xy[k] += ε̇xyc[i,j] 
+                    SR.xx[k]  += ε̇.xx[i,j] 
+                    SR.yy[k]  += ε̇.yy[i,j] 
+                    SR.xy[k]  += ε̇xyc[i,j] 
                     TAU.xx[k] += τ.xx[i,j] 
                     TAU.yy[k] += τ.yy[i,j] 
                     TAU.xy[k] += τxy_c 
-                    SR.p[k]  += Pt[i,j] 
+                    SR.p[k]   += Pt[i,j] 
                     # @show 180/π * ϕσp, 180/π * ϕε̇p
                 end
             end
@@ -494,7 +497,9 @@ end
             TAU.yy[k] /= pts
             TAU.xy[k] /= pts
             SR.p[k] /= pts
-            ϕ[k] = ϕε̇ # ϕε̇, ϕσ
+            # ϕσ = 1/2 * atan(2 * TAU.xy[k], (TAU.xx[k] - TAU.yy[k])) 
+            # ϕε̇ = 1/2 * atan(2 * SR.xy[k], (SR.xx[k] - SR.yy[k])) 
+            ϕ[k] = ϕσ # ϕε̇, ϕσ
             # @show 180/π * ϕσ, 180/π * ϕε̇
         end
         #-------------------------------------------#
@@ -517,8 +522,8 @@ end
 
         cm.arrows2d!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], tiplength = 0, lengthscale=0.02, tipwidth=1, color=:white)
         cm.Colorbar(fig[1,2], hm, label="τII [Pa]")
-        cm.xlims!(ax, -0.3, 0.3)
-        cm.ylims!(ax, -0.3, 0.3)
+        # cm.xlims!(ax, -0.3, 0.3)
+        # cm.ylims!(ax, -0.3, 0.3)
         display(fig)
         function PlotComponents()
             f  = cm.Figure()
@@ -563,8 +568,8 @@ let
     # Boundary condition templates
     BCs = [
         # :EW_periodic,
-        # :all_Dirichlet,
-        :free_slip,
+        :all_Dirichlet,
+        # :free_slip,
     ]
 
     # Boundary deformation gradient matrix
@@ -616,7 +621,7 @@ let
 
     #  Anisotropy parameters
     η2 = 2.0
-    m  = 10.000001
+    m  = 100.000001
     η1 = η2 / m
 
     α2 = 0.5
@@ -672,10 +677,10 @@ let
         Pt_s[iθ]  = SR.p[2]
 
         # transformed far-field strain rate
-        ε̇ff     = D_BCs[1]
-        ε̇ff_rot = R * ε̇ff * R'
-        τff_w_rot = 2*η2 .* ε̇ff_rot
-        τff_s_rot = 2*η1 .* ε̇ff_rot
+        ε̇ff        = D_BCs[1]
+        ε̇ff_rot    = R * ε̇ff * R'
+        τff_w_rot  = 2*η2 .* ε̇ff_rot
+        τff_s_rot  = 2*η1 .* ε̇ff_rot
         Exx_ff[iθ] = ε̇ff_rot[1,1]
         Eyy_ff[iθ] = ε̇ff_rot[2,2]
         Exy_ff[iθ] = ε̇ff_rot[1,2]
@@ -688,15 +693,17 @@ let
         τxy_ff_s[iθ] = τff_s_rot[1,2]
 
         # S1 rot
-        # S1_w_rot[iθ] =  θ[iθ] + 1/2 *atan( 2*E_w_rot[1,2], E_w_rot[1,1]-E_w_rot[2,2])
-        # S1_s_rot[iθ] =  θ[iθ] + 1/2 *atan( 2*E_s_rot[1,2], E_s_rot[1,1]-E_s_rot[2,2])
-
-        S1_w_rot[iθ] =  θ[iθ] + 1/2 *atan( 2*E_w_rot[1,2], ε̇ff_rot[1,1] - ε̇ff_rot[2,2])
-        S1_s_rot[iθ] =  θ[iθ] + 1/2 *atan( 2*E_s_rot[1,2]             , ε̇ff_rot[1,1] - ε̇ff_rot[2,2])
+        # S1_w_rot[iθ] =  1/2 *atan( 2*E_w_rot[1,2], E_w_rot[1,1]-E_w_rot[2,2])
+        # S1_s_rot[iθ] =  1/2 *atan( 2*E_s_rot[1,2], E_s_rot[1,1]-E_s_rot[2,2])
+        # S1_w_rot[iθ] =  1/2 *atan( 2*E_w_rot[1,2], ε̇ff_rot[1,1] - ε̇ff_rot[2,2])
+        # S1_s_rot[iθ] =  1/2 *atan( 2*E_s_rot[1,2]             , ε̇ff_rot[1,1] - ε̇ff_rot[2,2])
      
+        # From notebook
+        r    = 1.0
+        S1_w_rot[iθ]  =   θ[iθ] .- 1/2 .* atan.( (r+1)/(1+r/m) * sin.(2*θ[iθ]),  cos.(2*θ[iθ]))
+        S1_s_rot[iθ]  =   θ[iθ] .- 1/2 .* atan.( (r+1)/(m+r)   * sin.(2*θ[iθ]),  cos.(2*θ[iθ]))
 
         # Traction: n1*(Sxxy + n2*Sxxy_w = n2*SxyS
-    
         # Unknowns: τxx_w, τxx_s, p_s, p_w, τxy_w, τxy_s
         # 1) τxx_ff_w = τxx_ff_s - (τxx_s + τxx_w)
         # 2) Exx_w - Exx_ff = 0
@@ -704,22 +711,17 @@ let
         # 4) τxy_w = τxy_s
         # 6) p_w + p_s = 0
         # 5) -τxx_s - p_s = -τxx_w - p_w
-
         # 7) Exx_w + Exx_s = 0
-
         # 8) (Exy_w + Exy_s) - 2*Exy_ff = 0  (not true for large m)
-
-
-
-        M = [
-            # 1   1   0   0   0  0;
-            2η1 0   0   0   0  0;
-            0   2η2 0   0   0  0;
-            0   0   1  -1   0  0;
-            0   0   0   0   1 -1;
-            2η1 -2η2 0 0 0 0;
-            1   1   0   0   1  1;
-        ]
+        # M = [
+        #     # 1   1   0   0   0  0;
+        #     2η1 0   0   0   0  0;
+        #     0   2η2 0   0   0  0;
+        #     0   0   1  -1   0  0;
+        #     0   0   0   0   1 -1;
+        #     2η1 -2η2 0 0 0 0;
+        #     1   1   0   0   1  1;
+        # ]
         # inv(M)
 
         # b = [ 
@@ -746,52 +748,52 @@ let
 
     function Visualisation()
         f  = cm.Figure()
+        ax = cm.Axis(f[1,1], xlabel=cm.L"$\theta$ [$^\circ$]", ylabel=cm.L"$\phi$ [$^\circ$]")
+        cm.lines!(ax, θ*180/π, ϕ_ani*180/π, label=cm.L"$\phi_{ani}$" )
+        cm.lines!(ax, θ*180/π, ϕ_w_lay  *180/π, label=cm.L"$\phi_w$" )
+        cm.lines!(ax, θ*180/π, ϕ_s_lay  *180/π, label=cm.L"$\phi_s$" )
+        cm.lines!(ax, θ*180/π, S1_w_rot  *180/π, label=cm.L"$S1_{w}^\text{pred}$", linestyle=:dash )
+        cm.lines!(ax, θ*180/π, S1_s_rot  *180/π, label=cm.L"$S1_{s}^\text{pred}$", linestyle=:dash )
+        cm.axislegend(position=:rt, framevisible=false, labelsize=12, orientation=:horizontal, merge=true)
+
         # ax = cm.Axis(f[1,1], xlabel=cm.L"$\theta$ [$^\circ$]", ylabel=cm.L"$\phi$ [$^\circ$]")
-        # cm.lines!(ax, θ*180/π, ϕ_ani*180/π, label=cm.L"$\phi_{ani}$" )
-        # cm.lines!(ax, θ*180/π, ϕ_w_lay  *180/π, label=cm.L"$\phi_w$" )
-        # cm.lines!(ax, θ*180/π, ϕ_s_lay  *180/π, label=cm.L"$\phi_s$" )
-        # cm.scatter!(ax, θ*180/π, S1_w_rot  *180/π, label=cm.L"$S1_{w_rot}$" )
-        # cm.scatter!(ax, θ*180/π, S1_s_rot  *180/π, label=cm.L"$S1_{s_rot}$" )
+        # cm.lines!(ax, θ*180/π, Exx_ff, label=cm.L"$Exx^{ff}$" )
+        # # cm.lines!(ax, θ*180/π, Eyy_ff, label=cm.L"$Eyy^{ff}$" )
+        # cm.lines!(ax, θ*180/π, Exx_w, label=cm.L"$Exx_w$", linestyle=:dot )
+        # cm.lines!(ax, θ*180/π, Exx_s, label=cm.L"$Exx_s$", linestyle=:dash )
+        # cm.scatter!(ax, θ*180/π, (Exx_s .+ Exx_w)/2, label=cm.L"$x$")
+
+        # # cm.lines!(ax, θ*180/π, Eyy_w, label=cm.L"$Eyy_w$", linestyle=:dot )
+        # # cm.lines!(ax, θ*180/π, Eyy_s, label=cm.L"$Eyy_s$", linestyle=:dash )
+
+        # ax = cm.axislegend(position=:rt, framevisible=false, labelsize=12, orientation=:horizontal, merge=true)
+        # ax = cm.Axis(f[2,1], xlabel=cm.L"$\theta$ [$^\circ$]", ylabel=cm.L"$\phi$ [$^\circ$]")
+        # cm.lines!(ax, θ*180/π, Exy_ff, label=cm.L"$Exy^{ff}$" )
+        # cm.lines!(ax, θ*180/π, Exy_w, label=cm.L"$Exy_w$", linestyle=:dot  )
+        # cm.lines!(ax, θ*180/π, Exy_s, label=cm.L"$Exy_s$", linestyle=:dash )
+        # cm.scatter!(ax, θ*180/π, 1/2*(Exy_w .+ Exy_s), label=cm.L"$x$")
+        # cm.axislegend(position=:rt, framevisible=false, labelsize=12, orientation=:horizontal, merge=true)
+        
+        # ax = cm.Axis(f[3,1], xlabel=cm.L"$\theta$ [$^\circ$]", ylabel=cm.L"$\phi$ [$^\circ$]")
+        # cm.lines!(ax, θ*180/π, τxx_ff_w, label=cm.L"$τxx^{ff}_w$" )
+        # # cm.lines!(ax, θ*180/π, τyy_ff_w, label=cm.L"$τyy_{ff_w}$" )
+        # cm.lines!(ax, θ*180/π, τxx_ff_s, label=cm.L"$τxx^{ff}_s$" )
+        # # cm.lines!(ax, θ*180/π, τyy_ff_s, label=cm.L"$τyy_{ff_s}$" )
+        # cm.lines!(ax, θ*180/π, τxx_w, label=cm.L"$τxx_w$", linestyle=:dot )
+        # cm.lines!(ax, θ*180/π, τxx_s, label=cm.L"$τxx_s$", linestyle=:dash )
+        # # cm.lines!(ax, θ*180/π, τyy_w, label=cm.L"$τyy_w$", linestyle=:dot )
+        # # cm.lines!(ax, θ*180/π, τyy_s, label=cm.L"$τyy_s$", linestyle=:dash )
+        # # cm.scatter!(ax, θ*180/π, τxx_w .+ τxx_s .- τxx_ff_s, label=cm.L"$x$" )
+        # cm.scatter!(ax, θ*180/π, τxx_w .+ τxx_s .- τxx_ff_s, label=cm.L"$x$" )
         # cm.axislegend(position=:rt, framevisible=false, labelsize=12, orientation=:horizontal, merge=true)
 
-        ax = cm.Axis(f[1,1], xlabel=cm.L"$\theta$ [$^\circ$]", ylabel=cm.L"$\phi$ [$^\circ$]")
-        cm.lines!(ax, θ*180/π, Exx_ff, label=cm.L"$Exx^{ff}$" )
-        # cm.lines!(ax, θ*180/π, Eyy_ff, label=cm.L"$Eyy^{ff}$" )
-        cm.lines!(ax, θ*180/π, Exx_w, label=cm.L"$Exx_w$", linestyle=:dot )
-        cm.lines!(ax, θ*180/π, Exx_s, label=cm.L"$Exx_s$", linestyle=:dash )
-        cm.scatter!(ax, θ*180/π, (Exx_s .+ Exx_w)/2, label=cm.L"$x$")
-
-        # cm.lines!(ax, θ*180/π, Eyy_w, label=cm.L"$Eyy_w$", linestyle=:dot )
-        # cm.lines!(ax, θ*180/π, Eyy_s, label=cm.L"$Eyy_s$", linestyle=:dash )
-
-        ax = cm.axislegend(position=:rt, framevisible=false, labelsize=12, orientation=:horizontal, merge=true)
-        ax = cm.Axis(f[2,1], xlabel=cm.L"$\theta$ [$^\circ$]", ylabel=cm.L"$\phi$ [$^\circ$]")
-        cm.lines!(ax, θ*180/π, Exy_ff, label=cm.L"$Exy^{ff}$" )
-        cm.lines!(ax, θ*180/π, Exy_w, label=cm.L"$Exy_w$", linestyle=:dot  )
-        cm.lines!(ax, θ*180/π, Exy_s, label=cm.L"$Exy_s$", linestyle=:dash )
-        cm.scatter!(ax, θ*180/π, 1/2*(Exy_w .+ Exy_s), label=cm.L"$x$")
-        cm.axislegend(position=:rt, framevisible=false, labelsize=12, orientation=:horizontal, merge=true)
-        
-        ax = cm.Axis(f[3,1], xlabel=cm.L"$\theta$ [$^\circ$]", ylabel=cm.L"$\phi$ [$^\circ$]")
-        cm.lines!(ax, θ*180/π, τxx_ff_w, label=cm.L"$τxx^{ff}_w$" )
-        # cm.lines!(ax, θ*180/π, τyy_ff_w, label=cm.L"$τyy_{ff_w}$" )
-        cm.lines!(ax, θ*180/π, τxx_ff_s, label=cm.L"$τxx^{ff}_s$" )
-        # cm.lines!(ax, θ*180/π, τyy_ff_s, label=cm.L"$τyy_{ff_s}$" )
-        cm.lines!(ax, θ*180/π, τxx_w, label=cm.L"$τxx_w$", linestyle=:dot )
-        cm.lines!(ax, θ*180/π, τxx_s, label=cm.L"$τxx_s$", linestyle=:dash )
-        # cm.lines!(ax, θ*180/π, τyy_w, label=cm.L"$τyy_w$", linestyle=:dot )
-        # cm.lines!(ax, θ*180/π, τyy_s, label=cm.L"$τyy_s$", linestyle=:dash )
-        # cm.scatter!(ax, θ*180/π, τxx_w .+ τxx_s .- τxx_ff_s, label=cm.L"$x$" )
-        cm.scatter!(ax, θ*180/π, τxx_w .+ τxx_s .- τxx_ff_s, label=cm.L"$x$" )
-        cm.axislegend(position=:rt, framevisible=false, labelsize=12, orientation=:horizontal, merge=true)
-
-        ax = cm.Axis(f[4,1], xlabel=cm.L"$\theta$ [$^\circ$]", ylabel=cm.L"$\phi$ [$^\circ$]")
-        cm.lines!(ax, θ*180/π, τxy_ff_w, label=cm.L"$τxy^{ff}_w$" )
-        cm.lines!(ax, θ*180/π, τxy_ff_s, label=cm.L"$τxy^{ff}_s$" )
-        cm.lines!(ax, θ*180/π, τxy_w, label=cm.L"$τxy_w$", linestyle=:dash )
-        cm.lines!(ax, θ*180/π, τxy_s, label=cm.L"$τxy_s$", linestyle=:dash )
-        cm.scatter!(ax, θ*180/π, τxy_w .+ τxy_s .- τxy_ff_s, label=cm.L"$x$" )
-        cm.axislegend(position=:rt, framevisible=false, labelsize=12, orientation=:horizontal, merge=true)
+        # ax = cm.Axis(f[4,1], xlabel=cm.L"$\theta$ [$^\circ$]", ylabel=cm.L"$\phi$ [$^\circ$]")
+        # cm.lines!(ax, θ*180/π, τxy_ff_w, label=cm.L"$τxy^{ff}_w$" )
+        # cm.lines!(ax, θ*180/π, τxy_ff_s, label=cm.L"$τxy^{ff}_s$" )
+        # cm.lines!(ax, θ*180/π, τxy_w, label=cm.L"$τxy_w$", linestyle=:dash )
+        # cm.lines!(ax, θ*180/π, τxy_s, label=cm.L"$τxy_s$", linestyle=:dash )
+        # cm.scatter!(ax, θ*180/π, τxy_w .+ τxy_s .- τxy_ff_s, label=cm.L"$x$" )
+        # cm.axislegend(position=:rt, framevisible=false, labelsize=12, orientation=:horizontal, merge=true)
     
         # ax = cm.Axis(f[5,1], xlabel=cm.L"$\theta$ [$^\circ$]", ylabel=cm.L"$\phi$ [$^\circ$]")
         # cm.lines!(ax, θ*180/π, Pt_w, label=cm.L"$Pt_w$", linestyle=:dash )

@@ -185,10 +185,10 @@ end
     # Intialise field
     nmark = (x = nmpc.x * (nc.x+2), y = nmpc.y * (nc.y+2))
 
-    L     = (x=2.0, y=2.0)
+    L0    = 2
+    L     = (x=L0, y=L0)
     Δ     = (x=L.x/nc.x, y=L.y/nc.y, t = Δt0)
     Δm    = (x=L.x/nmark.x, y=L.y/nmark.y)
-
 
     # Allocations
     R       = (x  = zeros(size_x...), y  = zeros(size_y...), p  = zeros(size_c...))
@@ -239,10 +239,10 @@ end
     mp           = (c = zeros(size_c...), v = zeros(size_v...))
 
     # Only account for the subdomain
-    imin_x = argmin(abs.(xce .+ 0.3))
-    imax_x = argmin(abs.(xce .- 0.3))
-    imin_y = argmin(abs.(yce .+ 0.3))
-    imax_y = argmin(abs.(yce .- 0.3))
+    imin_x = argmin(abs.(xce .+ 0.33*L0))
+    imax_x = argmin(abs.(xce .- 0.33*L0))
+    imin_y = argmin(abs.(yce .+ 0.33*L0))
+    imax_y = argmin(abs.(yce .- 0.33*L0))
     inner_x = imin_x:imax_x
     inner_y = imin_y:imax_y
 
@@ -314,6 +314,34 @@ end
                 phase_ratios.vertex[i,j][2] = 0.0
             end
         end
+
+    #     # Indexing fixed 
+    #     for I in CartesianIndices(phase_ratios.center)   # loop on centroids
+    #         i, j = I[1], I[2]
+    #         𝐱 = @SVector([xce[i], yce[j]])
+    #         isin = yce[j]<0
+    #         if isin 
+    #             phase_ratios.center[i,j][1] = 0.0
+    #             phase_ratios.center[i,j][2] = 1.0
+    #         else
+    #             phase_ratios.center[i,j][1] = 1.0
+    #             phase_ratios.center[i,j][2] = 0.0
+    #         end
+    #     end
+
+    #     # Indexing fixed 
+    #     for I in CartesianIndices(phase_ratios.vertex)   # loop on vertices
+    #         i, j = I[1], I[2]
+    #         𝐱 = @SVector([xve[i], yve[j]])
+    #         isin = yve[j]<0
+    #         if isin 
+    #             phase_ratios.vertex[i,j][1] = 0.0
+    #             phase_ratios.vertex[i,j][2] = 1.0
+    #         else
+    #             phase_ratios.vertex[i,j][1] = 1.0
+    #             phase_ratios.vertex[i,j][2] = 0.0
+    #         end
+    #     end
     end
 
     phase_ratios = (
@@ -430,10 +458,10 @@ end
         # Compute σ & ε̇ components in material coordinates
         Q  = @SMatrix([cos(θ) sin(θ); -sin(θ) cos(θ)])
 
-        ε̇_mat = (xx = zeros(size(Pt)), yy = zeros(size(Pt)), xy = zeros(size(Pt)))
+        ε̇_mat  = (xx = zeros(size(Pt)), yy = zeros(size(Pt)), xy = zeros(size(Pt)))
         σ_mat  = (xx = zeros(size(Pt)), yy = zeros(size(Pt)), xy = zeros(size(Pt)))
+        σ1_mat = (x = zeros(size(Pt)), y = zeros(size(Pt)), v = zeros(size(Pt)))   
 
-        σ1_mat = (x = zeros(size(Pt)), y = zeros(size(Pt)), v = zeros(size(Pt)))       
         for i in inx_c, j in iny_c
             ε̇t        = @SMatrix([ε̇.xx[i,j] ε̇xyc[i,j]; ε̇xyc[i,j] ε̇.yy[i,j]])
             ε̇t_mat    = Q' * ε̇t * Q
@@ -464,23 +492,24 @@ end
             ϕε̇  = 0.0
             SR.xx[k] = 0.0
             pts = 0.0
-            for i in inner_x, j in inner_y
-                if phase_ratios.center[i,j][k] == 1.0
-                    τxx_c = 2* ηmat * ε̇.xx[i,j] 
-                    τyy_c = 2* ηmat * ε̇.yy[i,j]
+            for I in CartesianIndices(phase_ratios.center)
+                i, j = I[1]+1, I[2]+1 
+                if phase_ratios.center[I][k] > 0.999
+                    τxx_c = 2* ηmat *  ε̇.xx[i,j] 
+                    τyy_c = 2* ηmat *  ε̇.yy[i,j]
                     τxy_c = 2 * ηmat * ε̇xyc[i,j]
                     pts += 1
                     ϕσp = 1/2 * atan(2 * τxy_c, (τxx_c - τyy_c)) 
                     ϕε̇p = 1/2 * atan(2 * ε̇xyc[i,j], (ε̇.xx[i,j] - ε̇.yy[i,j]))
                     ϕσ += ϕσp
                     ϕε̇ += ϕε̇p
-                    SR.xx[k] += ε̇.xx[i,j] 
-                    SR.yy[k] += ε̇.yy[i,j] 
-                    SR.xy[k] += ε̇xyc[i,j] 
+                    SR.xx[k]  += ε̇.xx[i,j] 
+                    SR.yy[k]  += ε̇.yy[i,j] 
+                    SR.xy[k]  += ε̇xyc[i,j] 
                     TAU.xx[k] += τ.xx[i,j] 
                     TAU.yy[k] += τ.yy[i,j] 
                     TAU.xy[k] += τxy_c 
-                    SR.p[k]  += Pt[i,j] 
+                    SR.p[k]   += Pt[i,j] 
                     # @show 180/π * ϕσp, 180/π * ϕε̇p
                 end
             end
@@ -501,7 +530,7 @@ end
         fig = cm.Figure()
         ax  = cm.Axis(fig[1,1], aspect=cm.DataAspect())
         # hm  = cm.heatmap!(ax, xce, yce,  p, colormap=:bluesreds, colorrange=(0, 1))
-        hm  = cm.heatmap!(ax, xce, yce,  τII, colormap=:bluesreds, colorrange=extrema(τII[inner_x, inner_y]))
+        hm  = cm.heatmap!(ax, xc, yc,  τII[inx_c,iny_c], colormap=:bluesreds, colorrange=extrema(τII[inner_x, inner_y]))
         cm.poly!(ax, cm.Rect(xce[imin_x], yce[imin_y], xce[imax_x]-xce[imin_x], yce[imax_y]-yce[imin_y]), strokecolor=:white, strokewidth=2, color=:transparent)
         # cm.scatter!(ax, (xm.+0*ym')[:], (0*xm.+ym')[:], color=phases.m[:] )
         st = 2
@@ -620,7 +649,7 @@ let
 
     #  Anisotropy parameters
     η2 = 2.0
-    m  = 10.000001
+    m  = 100.000001
     η1 = η2 / m
 
     α2 = 0.5
@@ -653,7 +682,7 @@ let
         )
         @show "run $(iθ)"
 
-        τ_cart_lay[iθ], ϕ_w_lay[iθ], ϕ_s_lay[iθ], SR, TAU = main( nc, layering, BCs[1], D_BCs[1], :chol, η1, η2, 0*θ[iθ]; useMarkers=true, nmpc)
+        τ_cart_lay[iθ], ϕ_w_lay[iθ], ϕ_s_lay[iθ], SR, TAU = main( nc, layering, BCs[1], D_BCs[1], :chol, η1, η2, 0*θ[iθ]; useMarkers=false, nmpc)
         τ_cart_trf0d[iθ], ϕ_ani[iθ], ϕ_ana[iθ] = ViscousRheology(θ[iθ], ηn, δ, D_BCs[1])
 
 
@@ -762,52 +791,52 @@ let
 
     function Visualisation()
         f  = cm.Figure()
-        # ax = cm.Axis(f[1,1], xlabel=cm.L"$\theta$ [$^\circ$]", ylabel=cm.L"$\phi$ [$^\circ$]")
-        # cm.lines!(ax, θ*180/π, ϕ_ani*180/π, label=cm.L"$\phi_{ani}$" )
-        # cm.lines!(ax, θ*180/π, ϕ_w_lay  *180/π, label=cm.L"$\phi_w$" )
-        # cm.lines!(ax, θ*180/π, ϕ_s_lay  *180/π, label=cm.L"$\phi_s$" )
+        ax = cm.Axis(f[1,1], xlabel=cm.L"$\theta$ [$^\circ$]", ylabel=cm.L"$\phi$ [$^\circ$]")
+        cm.lines!(ax, θ*180/π, ϕ_ani*180/π, label=cm.L"$\phi_{ani}$" )
+        cm.lines!(ax, θ*180/π, ϕ_w_lay  *180/π, label=cm.L"$\phi_w$" )
+        cm.lines!(ax, θ*180/π, ϕ_s_lay  *180/π, label=cm.L"$\phi_s$" )
         # cm.scatter!(ax, θ*180/π, S1_w_rot  *180/π, label=cm.L"$S1_{w_rot}$" )
         # cm.scatter!(ax, θ*180/π, S1_s_rot  *180/π, label=cm.L"$S1_{s_rot}$" )
+        cm.axislegend(position=:rt, framevisible=false, labelsize=12, orientation=:horizontal, merge=true)
+
+        # ax = cm.Axis(f[1,1], xlabel=cm.L"$\theta$ [$^\circ$]", ylabel=cm.L"$\phi$ [$^\circ$]")
+        # cm.lines!(ax, θ*180/π, Exx_ff, label=cm.L"$Exx^{ff}$" )
+        # # cm.lines!(ax, θ*180/π, Eyy_ff, label=cm.L"$Eyy^{ff}$" )
+        # cm.lines!(ax, θ*180/π, Exx_w, label=cm.L"$Exx_w$", linestyle=:dot )
+        # cm.lines!(ax, θ*180/π, Exx_s, label=cm.L"$Exx_s$", linestyle=:dash )
+        # cm.scatter!(ax, θ*180/π, (Exx_s .+ Exx_w)/2, label=cm.L"$x$")
+
+        # # cm.lines!(ax, θ*180/π, Eyy_w, label=cm.L"$Eyy_w$", linestyle=:dot )
+        # # cm.lines!(ax, θ*180/π, Eyy_s, label=cm.L"$Eyy_s$", linestyle=:dash )
+
+        # ax = cm.axislegend(position=:rt, framevisible=false, labelsize=12, orientation=:horizontal, merge=true)
+        # ax = cm.Axis(f[2,1], xlabel=cm.L"$\theta$ [$^\circ$]", ylabel=cm.L"$\phi$ [$^\circ$]")
+        # cm.lines!(ax, θ*180/π, Exy_ff, label=cm.L"$Exy^{ff}$" )
+        # cm.lines!(ax, θ*180/π, Exy_w, label=cm.L"$Exy_w$", linestyle=:dot  )
+        # cm.lines!(ax, θ*180/π, Exy_s, label=cm.L"$Exy_s$", linestyle=:dash )
+        # cm.scatter!(ax, θ*180/π, 1/2*(Exy_w .+ Exy_s), label=cm.L"$x$")
+        # cm.axislegend(position=:rt, framevisible=false, labelsize=12, orientation=:horizontal, merge=true)
+        
+        # ax = cm.Axis(f[3,1], xlabel=cm.L"$\theta$ [$^\circ$]", ylabel=cm.L"$\phi$ [$^\circ$]")
+        # cm.lines!(ax, θ*180/π, τxx_ff_w, label=cm.L"$τxx^{ff}_w$" )
+        # # cm.lines!(ax, θ*180/π, τyy_ff_w, label=cm.L"$τyy_{ff_w}$" )
+        # cm.lines!(ax, θ*180/π, τxx_ff_s, label=cm.L"$τxx^{ff}_s$" )
+        # # cm.lines!(ax, θ*180/π, τyy_ff_s, label=cm.L"$τyy_{ff_s}$" )
+        # cm.lines!(ax, θ*180/π, τxx_w, label=cm.L"$τxx_w$", linestyle=:dot )
+        # cm.lines!(ax, θ*180/π, τxx_s, label=cm.L"$τxx_s$", linestyle=:dash )
+        # # cm.lines!(ax, θ*180/π, τyy_w, label=cm.L"$τyy_w$", linestyle=:dot )
+        # # cm.lines!(ax, θ*180/π, τyy_s, label=cm.L"$τyy_s$", linestyle=:dash )
+        # # cm.scatter!(ax, θ*180/π, τxx_w .+ τxx_s .- τxx_ff_s, label=cm.L"$x$" )
+        # cm.scatter!(ax, θ*180/π, τxx_w .+ τxx_s .- τxx_ff_s, label=cm.L"$x$" )
         # cm.axislegend(position=:rt, framevisible=false, labelsize=12, orientation=:horizontal, merge=true)
 
-        ax = cm.Axis(f[1,1], xlabel=cm.L"$\theta$ [$^\circ$]", ylabel=cm.L"$\phi$ [$^\circ$]")
-        cm.lines!(ax, θ*180/π, Exx_ff, label=cm.L"$Exx^{ff}$" )
-        # cm.lines!(ax, θ*180/π, Eyy_ff, label=cm.L"$Eyy^{ff}$" )
-        cm.lines!(ax, θ*180/π, Exx_w, label=cm.L"$Exx_w$", linestyle=:dot )
-        cm.lines!(ax, θ*180/π, Exx_s, label=cm.L"$Exx_s$", linestyle=:dash )
-        cm.scatter!(ax, θ*180/π, (Exx_s .+ Exx_w)/2, label=cm.L"$x$")
-
-        # cm.lines!(ax, θ*180/π, Eyy_w, label=cm.L"$Eyy_w$", linestyle=:dot )
-        # cm.lines!(ax, θ*180/π, Eyy_s, label=cm.L"$Eyy_s$", linestyle=:dash )
-
-        ax = cm.axislegend(position=:rt, framevisible=false, labelsize=12, orientation=:horizontal, merge=true)
-        ax = cm.Axis(f[2,1], xlabel=cm.L"$\theta$ [$^\circ$]", ylabel=cm.L"$\phi$ [$^\circ$]")
-        cm.lines!(ax, θ*180/π, Exy_ff, label=cm.L"$Exy^{ff}$" )
-        cm.lines!(ax, θ*180/π, Exy_w, label=cm.L"$Exy_w$", linestyle=:dot  )
-        cm.lines!(ax, θ*180/π, Exy_s, label=cm.L"$Exy_s$", linestyle=:dash )
-        cm.scatter!(ax, θ*180/π, 1/2*(Exy_w .+ Exy_s), label=cm.L"$x$")
-        cm.axislegend(position=:rt, framevisible=false, labelsize=12, orientation=:horizontal, merge=true)
-        
-        ax = cm.Axis(f[3,1], xlabel=cm.L"$\theta$ [$^\circ$]", ylabel=cm.L"$\phi$ [$^\circ$]")
-        cm.lines!(ax, θ*180/π, τxx_ff_w, label=cm.L"$τxx^{ff}_w$" )
-        # cm.lines!(ax, θ*180/π, τyy_ff_w, label=cm.L"$τyy_{ff_w}$" )
-        cm.lines!(ax, θ*180/π, τxx_ff_s, label=cm.L"$τxx^{ff}_s$" )
-        # cm.lines!(ax, θ*180/π, τyy_ff_s, label=cm.L"$τyy_{ff_s}$" )
-        cm.lines!(ax, θ*180/π, τxx_w, label=cm.L"$τxx_w$", linestyle=:dot )
-        cm.lines!(ax, θ*180/π, τxx_s, label=cm.L"$τxx_s$", linestyle=:dash )
-        # cm.lines!(ax, θ*180/π, τyy_w, label=cm.L"$τyy_w$", linestyle=:dot )
-        # cm.lines!(ax, θ*180/π, τyy_s, label=cm.L"$τyy_s$", linestyle=:dash )
-        # cm.scatter!(ax, θ*180/π, τxx_w .+ τxx_s .- τxx_ff_s, label=cm.L"$x$" )
-        cm.scatter!(ax, θ*180/π, τxx_w .+ τxx_s .- τxx_ff_s, label=cm.L"$x$" )
-        cm.axislegend(position=:rt, framevisible=false, labelsize=12, orientation=:horizontal, merge=true)
-
-        ax = cm.Axis(f[4,1], xlabel=cm.L"$\theta$ [$^\circ$]", ylabel=cm.L"$\phi$ [$^\circ$]")
-        cm.lines!(ax, θ*180/π, τxy_ff_w, label=cm.L"$τxy^{ff}_w$" )
-        cm.lines!(ax, θ*180/π, τxy_ff_s, label=cm.L"$τxy^{ff}_s$" )
-        cm.lines!(ax, θ*180/π, τxy_w, label=cm.L"$τxy_w$", linestyle=:dash )
-        cm.lines!(ax, θ*180/π, τxy_s, label=cm.L"$τxy_s$", linestyle=:dash )
-        cm.scatter!(ax, θ*180/π, τxy_w .+ τxy_s .- τxy_ff_s, label=cm.L"$x$" )
-        cm.axislegend(position=:rt, framevisible=false, labelsize=12, orientation=:horizontal, merge=true)
+        # ax = cm.Axis(f[4,1], xlabel=cm.L"$\theta$ [$^\circ$]", ylabel=cm.L"$\phi$ [$^\circ$]")
+        # cm.lines!(ax, θ*180/π, τxy_ff_w, label=cm.L"$τxy^{ff}_w$" )
+        # cm.lines!(ax, θ*180/π, τxy_ff_s, label=cm.L"$τxy^{ff}_s$" )
+        # cm.lines!(ax, θ*180/π, τxy_w, label=cm.L"$τxy_w$", linestyle=:dash )
+        # cm.lines!(ax, θ*180/π, τxy_s, label=cm.L"$τxy_s$", linestyle=:dash )
+        # cm.scatter!(ax, θ*180/π, τxy_w .+ τxy_s .- τxy_ff_s, label=cm.L"$x$" )
+        # cm.axislegend(position=:rt, framevisible=false, labelsize=12, orientation=:horizontal, merge=true)
     
         # ax = cm.Axis(f[5,1], xlabel=cm.L"$\theta$ [$^\circ$]", ylabel=cm.L"$\phi$ [$^\circ$]")
         # cm.lines!(ax, θ*180/π, Pt_w, label=cm.L"$Pt_w$", linestyle=:dash )
