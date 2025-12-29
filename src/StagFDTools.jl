@@ -47,6 +47,8 @@ module StokesJustPIC
     export AssembleContinuity2D!, AssembleMomentum2D_x!, AssembleMomentum2D_y!
     export TangentOperator!
     export LineSearch!
+    include("Particles.jl")
+    export InitialiseParticleField, InitialisePhaseRatios, PhaseRatios!, compute_shear_bulk_moduli!
 end
 
 module StokesDeformed

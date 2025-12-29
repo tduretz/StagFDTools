@@ -5,134 +5,12 @@ using Enzyme  # AD backends you want to use
 using TimerOutputs
 using GridGeometryUtils
 
-function InitialiseMarkerField(nc, nmpc, L, Δ, materials, noise)
-    nphases = length(materials.n)
-    num = (x = nmpc.x * (nc.x + 2), y = nmpc.y * (nc.y + 2)) 
-    Δm = (x = L.x/num.x, y = L.y/num.y)
-    xm = LinRange(-L.x/2-Δ.x+Δm.x/2, L.x/2+Δ.x-Δm.x/2, num.x)
-    ym = LinRange(-L.y/2-Δ.y+Δm.y/2, L.y/2+Δ.y-Δm.y/2, num.y)
-    Xm = [xm[i] for i in eachindex(xm), j in eachindex(ym)]
-    Ym = [ym[j] for i in eachindex(xm), j in eachindex(ym)]
-
-    # Add noise to marker coordinates
-    if noise
-        for ind = 1:(num.x*num.y)
-            Xm[ind] += (rand() - 0.5) * Δm.x
-            Ym[ind] += (rand() - 0.5) * Δm.y
-        end
-    end
-    return (Xm = Xm, Ym = Ym, xm = xm, ym = ym, Δm = Δm, num = num, nphases = nphases)
-end
-
-function InitialisePhaseRatios(markers, f)
-    phase_ratios = (
-        center = [zeros(markers.nphases) for _ in axes(f.xx,1), _ in axes(f.xx,2)],
-        vertex = [zeros(markers.nphases) for _ in axes(f.xy,1), _ in axes(f.xy,2)],
-    )
-    phase_weights = (
-        center = [zeros(markers.nphases) for _ in axes(f.xx,1), _ in axes(f.xx,2)],
-        vertex = [zeros(markers.nphases) for _ in axes(f.xy,1), _ in axes(f.xy,2)],
-    )
-    return phase_ratios, phase_weights
-end
-
-function MarkerWeight(xm, x, Δx)
-    # Compute marker-grid distance and weight
-    dst = abs(xm - x)
-    w = 1.0 - 2 * dst / Δx
-    return w
-end
-
-function MarkerWeight_phase!(phase_ratio, phase_weight, x, y, xm, ym, Δ, phase, nphases)
-    w_x = MarkerWeight(xm, x, Δ.x)
-    w_y = MarkerWeight(ym, y, Δ.y)
-    for k = 1:nphases
-        phase_ratio[k]  += (k === phase) * w_x * w_y
-        phase_weight[k] += w_x * w_y
-    end
-end
-function PhaseRatios!(phase_ratios, phase_weights, m, mphase, xce, yce, xve, yve, Δ, mp)
-
-    for I in CartesianIndices(mphase)
-        # find indices of grid centroid
-        ic = Int64(round((m.Xm[I] - xce[1]) / Δ.x + 1))
-        jc = Int64(round((m.Ym[I] - yce[1]) / Δ.y + 1))
-        # find indices of grid verteces
-        iv = Int64(round((m.Xm[I] - xve[1]) / Δ.x + 1))
-        jv = Int64(round((m.Ym[I] - yve[1]) / Δ.y + 1))
-        # # Clamp to valid bounds (critical fix!)
-        # ic = clamp(ic, 1, size(phase_ratios.center, 1))
-        # jc = clamp(jc, 1, size(phase_ratios.center, 2))
-        # iv = clamp(iv, 1, size(phase_ratios.vertex, 1))
-        # jv = clamp(jv, 1, size(phase_ratios.vertex, 2))
-        mp.c[ic,jc] += 1
-        mp.v[iv,jv] += 1
-
-        MarkerWeight_phase!(phase_ratios.center[ic,jc], phase_weights.center[ic,jc], xce[ic], yce[jc], m.Xm[I], m.Ym[I], Δ, mphase[I], m.nphases)
-        MarkerWeight_phase!(phase_ratios.vertex[iv,jv], phase_weights.vertex[iv,jv], xve[iv], yve[jv], m.Xm[I], m.Ym[I], Δ, mphase[I], m.nphases)
-    end
-
-    # centroids
-    for i in axes(phase_ratios.center,1), j in axes(phase_ratios.center,2)
-        #  normalize weights and assign to phase ratios
-        for k = 1:m.nphases
-            phase_ratios.center[i,j][k] = phase_ratios.center[i,j][k] / (phase_weights.center[i,j][k] == 0.0 ? 1 : phase_weights.center[i,j][k])
-        end
-    end
-    # vertices
-    for i in axes(phase_ratios.vertex,1), j in axes(phase_ratios.vertex,2)
-        #  normalize weights and assign to phase ratios
-        for k = 1:m.nphases
-            phase_ratios.vertex[i,j][k] = phase_ratios.vertex[i,j][k] / (phase_weights.vertex[i,j][k] == 0.0 ? 1 : phase_weights.vertex[i,j][k])
-        end
-    end
-end
-
-function compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v, nphases)
-    sum       = (c  =  ones(size_c...), v  =  ones(size_v...) )
-
-    for I in CartesianIndices(β.c) 
-        i, j = I[1], I[2]
-        β.c[i,j] = 0.0
-        G.c[i,j] = 0.0
-        sum.c[i,j] = 0.0
-        for p = 1:nphases # loop on phases
-            if i>1 && j>1 && i<nc.x+2 && j<nc.y+2 
-                phase_ratio = phase_ratios.center[i,j][p]
-                β.c[i,j]   += phase_ratio * materials.β[p]
-                G.c[i,j]   += phase_ratio * materials.G[p]
-                sum.c[i,j] += phase_ratio
-            end
-        end
-    end
-    G.c[[1 end],:] .=  G.c[[2 end-1],:]
-    G.c[:,[1 end]] .=  G.c[:,[2 end-1]]
-    β.c[[1 end],:] .=  β.c[[2 end-1],:]
-    β.c[:,[1 end]] .=  β.c[:,[2 end-1]]
-
-    for I in CartesianIndices(G.v) 
-        i, j = I[1], I[2]
-        G.v[i,j]   = 0.0
-        sum.v[i,j] = 0.0
-        for p = 1:nphases # loop on phases
-            if i>1 && j>1 && i<nc.x+3 && j<nc.y+3 
-                phase_ratio = phase_ratios.vertex[i,j][p]
-                G.v[i,j]   += phase_ratio * materials.G[p]
-                sum.v[i,j] += phase_ratio
-            end
-        end
-    end
-    G.v[[1 end],:] .=  G.v[[2 end-1],:]
-    G.v[:,[1 end]] .=  G.v[:,[2 end-1]]
-    @show extrema(sum.c[2:end-1,2:end-1]),  extrema(sum.v[2:end-1,2:end-1])
-end
-
 @views function main(BC_template, D_template)
     #--------------------------------------------#
 
     # Resolution
     nc = (x = 50, y = 50) # number of cells
-    nmpc = (x = 3, y =3)  # markers per cell
+    nmpc = (x = 4, y = 4)  # markers per cell
     mnoise = false         # noise in marker distribution
 
     # Boundary loading type
@@ -143,6 +21,7 @@ end
     materials = ( 
         compressible = false,
         plasticity   = :none,
+        phase_avg    = :arithmetic,
         n    = [1.0    1.0  ],
         η0   = [1e0    1e5  ], 
         G    = [1e6    1e6  ],
@@ -273,24 +152,25 @@ end
 
     # --------------------------------------------#
     # Initialise marker field
-    m = InitialiseMarkerField(nc, nmpc, L, Δ, materials, mnoise)
+    m = InitialiseParticleField(nc, nmpc, L, Δ, materials, mnoise)
     mphase = ones(Int64, m.num...)
     phase_ratios, phase_weights = InitialisePhaseRatios(m, ε̇)
 
-    # Set material geometry 
-    # incl = Hexagon((0.8, -0.3), 0.2; θ = π / 10)
-    rad = 0.1 + 1e-13
-    mphase[(m.xm.^2 .+ (m.ym)'.^2) .<= rad^2] .= 2
-    # for I in CartesianIndices(mphase)
-    #     𝐱 = SVector(m.Xm[I], m.Ym[I])
-    #     if inside(𝐱, incl)
-    #         mphase[I] = 2
-    #     end
-    # end
-    mp = (c= zeros(size_c...), v= zeros(size_v...))
+    # Set material geometry
+    # rad = 0.1 + 1e-13
+    # mphase[(m.xm.^2 .+ (m.ym)'.^2) .<= rad^2] .= 2
+    incl = Hexagon((0.0, 0.0), 0.2; θ = π / 10)
+    for I in CartesianIndices(mphase)
+        i,j = I[1], I[2]
+        𝐱 = SVector(m.xm[i], m.ym[j])
+        isin = inside(𝐱, incl)
+        if isin
+            mphase[I] = 2
+        end
+    end
 
     # Set phase ratios on grid
-    PhaseRatios!(phase_ratios, phase_weights, m, mphase, xce, yce, xve, yve, Δ, mp)
+    PhaseRatios!(phase_ratios, phase_weights, m, mphase, xce, yce, xve, yve, Δ)
 
     for I in CartesianIndices(phase_ratios.center)
         s = sum(phase_ratios.center[I])
@@ -299,18 +179,11 @@ end
         end
     end
 
-    #DEBUG: plot phase ratios
-    phase_ratio1 = zeros(size_c...)
-    phase_ratio2 = zeros(size_c...)
-    for ind in eachindex(phase_ratios.center) 
-        phase_ratio1[ind] = phase_ratios.center[ind][1]
-        phase_ratio2[ind] = phase_ratios.center[ind][2]
-    end
-    heatmap(xce, yce, phase_ratio1', aspect_ratio=1, xlim=extrema(xc), ylim=extrema(yc), title="Phase 1 ratio at centroids", color=:vik) |> display
-    # heatmap(xce, yce, phase_ratio2', aspect_ratio=1, xlim=extrema(xc), ylim=extrema(yc), title="Phase 2 ratio at centroids", color=:vik) |> display
-    
-    # heatmap(xce, yce, mp.c', aspect_ratio=1, xlim=extrema(xce), title="Markers per centroid", color=:vik) |> display
-    # heatmap(xve, yve, mp.v', aspect_ratio=1, xlim=extrema(xve), title="Markers per vertex", color=:vik) |> display
+    # Cut away ghost cells
+    phase_ratios = (
+        center   = phase_ratios.center[2:end-1,2:end-1],
+        vertex   = phase_ratios.vertex[2:end-1,2:end-1],
+    )
 
     #--------------------------------------------#
 
