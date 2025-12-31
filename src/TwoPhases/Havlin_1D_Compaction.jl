@@ -41,6 +41,58 @@ function momemtum_local(Vy, Pt, Pf, ϕ0, tag, p, Δy, Δt)
     return - (∂τyy∂y - ∂Pt∂y + ρt*p.gy)
 end
 
+function continuity_local(Vy, Pt, Pf, ϕ0, tag, p, Δy, Δt)
+
+    dlnρsdt = @SVector zeros(3)
+   
+    # Phi 
+    dϕdt    = SVector{3}( porosity_rate(Pt[i], Pf[i], ϕ0[i], p) for i in 1:3 )
+    ϕ       = SVector{3}( @. ϕ0 + Δt * dϕdt )
+
+    # Solid divergence
+    divVs   = (Vy[2] - Vy[1]) / Δy
+
+    return dlnρsdt[2] - dϕdt[2]/(1-ϕ[2]) + divVs
+end
+
+function fluid_continuity_local(Vy, Pt, Pf, ϕ0, tag, p, Δy, Δt)
+
+    dlnρfdt = @SVector zeros(3)
+
+    # Phi 
+    dϕdt    = SVector{3}( porosity_rate(Pt[i], Pf[i], ϕ0[i], p) for i in 1:3 )
+    ϕ       = SVector{3}( @. ϕ0 + Δt * dϕdt )
+
+    # Buoyancy
+    ρlg     = p.ρl * p.gy
+
+    # BC
+    if tag[end] == 2 # Top: no flux
+       Pf[end] = Pf[end-1] + ρlg * Δy
+    end
+    if tag[1] == 1 # Bottom: try to set Pf = Pt such that ϕ = ϕ0 
+        # ϕS      = (ϕ[1] + ϕ[2])/2
+        # ρtg     = ((1-ϕS)*p.ρs + ϕS*p.ρl) * p.gy
+        # Pt_bot = -30e3*ρtg
+        # Pt[1] = 2*Pt_bot - Pt[2]
+        # Pf[2] =  (Pt[1]+Pt[2])/2 / 2 # ????????
+        Pf[2] =  Pt[2]/2 # ????????
+    end
+
+    # Darcy
+    k       = SVector{3}( perm.(ϕ, p.a) )
+    k_μ     = SVector{2}( @. (k[2:end] + k[1:end-1]) / 2 / p.μl) 
+    qy      = SVector{2}( @. -k_μ .* ((Pf[2:end] - Pf[1:end-1])/ Δy - ρlg) )
+
+    # Solid divergence
+    divVs   = (Vy[2] - Vy[1]) / Δy
+
+    # Darcy flux divergence
+    divqD   = (qy[2] - qy[1]) / Δy
+
+    return ϕ[2]*dlnρfdt[2] + dϕdt[2] + ϕ[2]*divVs + divqD
+end
+
 function momentum!(M, r, Vys, Pt, Pf, ϕ0, BC, num, p, Δy, Δt)
 
     ∂R∂Vy   = @MVector zeros(3)
@@ -92,53 +144,6 @@ function momentum!(M, r, Vys, Pt, Pf, ϕ0, BC, num, p, Δy, Δt)
         end
         
     end
-end
-
-function continuity_local(Vy, Pt, Pf, ϕ0, tag, p, Δy, Δt)
-
-    dlnρsdt = @SVector zeros(3)
-   
-    # Phi 
-    dϕdt    = SVector{3}( porosity_rate(Pt[i], Pf[i], ϕ0[i], p) for i in 1:3 )
-    ϕ       = SVector{3}( @. ϕ0 + Δt * dϕdt )
-
-    # Solid divergence
-    divVs   = (Vy[2] - Vy[1]) / Δy
-
-    return dlnρsdt[2] - dϕdt[2]/(1-ϕ[2]) + divVs
-end
-
-function fluid_continuity_local(Vy, Pt, Pf, ϕ0, tag, p, Δy, Δt)
-
-    dlnρfdt = @SVector zeros(3)
-
-    # Phi 
-    dϕdt    = SVector{3}( porosity_rate(Pt[i], Pf[i], ϕ0[i], p) for i in 1:3 )
-    ϕ       = SVector{3}( @. ϕ0 + Δt * dϕdt )
-
-    # Buoyancy
-    ρlg     = p.ρl * p.gy
-
-    # BC
-    if tag[end] == 2 # Top: no flux
-       Pf[end] = Pf[end-1] + ρlg * Δy
-    end
-    if tag[1] == 1 # Bottom: try to set Pf = Pt such that ϕ = ϕ0 
-        Pf[2] =  Pt[2]/2 # ????????
-    end
-
-    # Darcy
-    k       = SVector{3}( perm.(ϕ, p.a) )
-    k_μ     = SVector{2}( @. (k[2:end] + k[1:end-1]) / 2 / p.μl) 
-    qy      = SVector{2}( @. -k_μ .* ((Pf[2:end] - Pf[1:end-1])/ Δy - ρlg) )
-
-    # Solid divergence
-    divVs   = (Vy[2] - Vy[1]) / Δy
-
-    # Darcy flux divergence
-    divqD   = (qy[2] - qy[1]) / Δy
-
-    return ϕ[2]*dlnρfdt[2] + dϕdt[2] + ϕ[2]*divVs + divqD
 end
 
 function continuity!(M, r, Vys, Pt, Pf, ϕ0, BC, num, p, Δy, Δt)
@@ -257,16 +262,16 @@ function main_Havlin(nc)
     ϕ    = p.ϕ0*ones(nc+2)
     ϕ0   = p.ϕ0*ones(nc+2)
     dϕdt = p.ϕ0*ones(nc+2)
-    Vy   =   zeros(nc+3)
-    Pt   =   zeros(nc+2)
-    Pf   =   zeros(nc+2)
+    Vy   =     zeros(nc+3)
+    Pt   =     zeros(nc+2)
+    Pf   =     zeros(nc+2)
 
     # Boundary conditions
     BC  = ( Vy = zeros(Int64, nc+3), Pf = zeros(Int64, nc+2))  
     BC.Vy[[end]] .= 2 # set Neumann
     BC.Vy[[1]]   .= 1 # set Dirichlet
     BC.Pf[[end]] .= 2 # set Neumann
-    BC.Pf[[1]]   .= 1 # set Dirichlet
+    BC.Pf[[1]]   .= 1 # set weird lower BC
 
     # Numbering
     num = (Vy = zeros(Int64, nc+3), Pt = zeros(Int64, nc+2), Pf = zeros(Int64, nc+2))
