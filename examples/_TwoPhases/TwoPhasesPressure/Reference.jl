@@ -1,10 +1,12 @@
-using StagFDTools, StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, GLMakie, LinearAlgebra, SparseArrays, Printf, JLD2
+using StagFDTools, StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, CairoMakie, LinearAlgebra, SparseArrays, Printf, JLD2
 import Statistics:mean
 using Enzyme  # AD backends you want to use
 
 @views function main(nc, Ωl, Ωη)
 
-    Δt0 = 1.0  
+    Δt0 = 1.0   
+
+    M2Di_solver = false
 
     # Adimensionnal numbers
     Ωr     = 0.1             # Ratio inclusion radius / len
@@ -119,8 +121,8 @@ using Enzyme  # AD backends you want to use
     pattern = Fields(
         Fields(@SMatrix([0 1 0; 1 1 1; 0 1 0]),                 @SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]), @SMatrix([0 1 0;  0 1 0]),        @SMatrix([0 1 0;  0 1 0])), 
         Fields(@SMatrix([0 0 0 0; 0 1 1 0; 0 1 1 0; 0 0 0 0]),  @SMatrix([0 1 0; 1 1 1; 0 1 0]),                @SMatrix([0 0; 1 1; 0 0]),        @SMatrix([0 0; 1 1; 0 0])),
-        Fields(@SMatrix([0 1 0;  0 1 0]),                       @SMatrix([0 0; 1 1; 0 0]),                       @SMatrix([1]),                    @SMatrix([1])),
-        Fields(@SMatrix([0 1 0;  0 1 0]),                       @SMatrix([0 0; 1 1; 0 0]),                       @SMatrix([1]),                    @SMatrix([1 1 1; 1 1 1; 1 1 1])),
+        Fields(@SMatrix([0 1 0;  0 1 0]),                       @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1 1 1; 1 1 1; 1 1 1]),  @SMatrix([1 1 1; 1 1 1; 1 1 1])),
+        Fields(@SMatrix([0 1 0;  0 1 0]),                       @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1 1 1; 1 1 1; 1 1 1]),  @SMatrix([1 1 1; 1 1 1; 1 1 1])),
     )
 
     # Sparse matrix assembly
@@ -162,6 +164,9 @@ using Enzyme  # AD backends you want to use
     P       = (t=zeros(size_c...), f=zeros(size_c...))
     P0      = (t=zeros(size_c...), f=zeros(size_c...))
     ΔP      = (t=zeros(size_c...), f=zeros(size_c...))
+
+    ρ       = (s = materials.ρs[1]*ones(size_c...), f = materials.ρf[1]*ones(size_c...), t = zeros(size_c...))
+    ρ0      = (s = materials.ρs[1]*ones(size_c...), f = materials.ρf[1]*ones(size_c...), t = zeros(size_c...))
 
     P   = (t=zeros(size_c...), f=zeros(size_c...))
     xv  = LinRange(-L.x/2, L.x/2, nc.x+1)
@@ -218,6 +223,8 @@ using Enzyme  # AD backends you want to use
         Pf  = zeros(nt),
         t   = zeros(nt),
     )
+
+    r = zeros(nVx + nVy + nPt + nPf)
     
     for it=1:nt
 
@@ -227,6 +234,8 @@ using Enzyme  # AD backends you want to use
         τ0.yy .= τ.yy
         τ0.xy .= τ.xy
         Φ0.c  .= Φ.c
+        ρ0.s  .= ρ.s
+        ρ0.f  .= ρ.f
 
         Φ.c .= 1.0 .- exp.(ln1mΦ.c)
         @show extrema(Φ.c)
@@ -238,131 +247,137 @@ using Enzyme  # AD backends you want to use
             Δ   = (x=L.x/nc.x, y=L.y/nc.y, t=Δt0)
         end
 
-        # Residual check
-        TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
-        ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-        ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-        ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
-        ResidualFluidContinuity2D!(R, V, P, ΔP, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
+        for iter=1:4
 
-        # Set global residual vector
-        r = zeros(nVx + nVy + nPt + nPf)
-        SetRHS!(r, R, number, type, nc)
+            # Residual check
+            TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
+            ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+            ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+            ResidualContinuity2D!(R, V, P, (P0, Φ0, ρ0), phases, materials, number, type, BC, nc, Δ) 
+            ResidualFluidContinuity2D!(R, V, P, ΔP, (P0, Φ0, ρ0), phases, materials, number, type, BC, nc, Δ) 
 
-        #--------------------------------------------#
-        # Assembly
-        @info "Assembly, ndof  = $(nVx + nVy + nPt + nPf)"
-        AssembleMomentum2D_x!(M, V, P, P0, ΔP, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-        AssembleMomentum2D_y!(M, V, P, P0, ΔP, τ0, Φ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-        AssembleContinuity2D!(M, V, P, P0, Φ0, phases, materials, number, pattern, type, BC, nc, Δ)
-        AssembleFluidContinuity2D!(M, V, P, ΔP, P0, Φ0, phases, materials, number, pattern, type, BC, nc, Δ)
+            @info "Residuals"
+            @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
+            @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
+            @show norm(R.pt[inx_c,iny_c])/sqrt(nPt)
+            @show norm(R.pf[inx_c,iny_c])/sqrt(nPf)
 
-        # Two-phases operator as block matrix
-        𝑀 = [
-            M.Vx.Vx M.Vx.Vy M.Vx.Pt M.Vx.Pf;
-            M.Vy.Vx M.Vy.Vy M.Vy.Pt M.Vy.Pf;
-            M.Pt.Vx M.Pt.Vy M.Pt.Pt M.Pt.Pf;
-            M.Pf.Vx M.Pf.Vy M.Pf.Pt M.Pf.Pf;
-        ]
+            # Set global residual vector
+            SetRHS!(r, R, number, type, nc)
 
-        @info "System symmetry"
-        𝑀diff = 𝑀 - 𝑀'
-        dropzeros!(𝑀diff)
-        @show norm(𝑀diff)
+            #--------------------------------------------#
+            # Assembly
+            @info "Assembly, ndof  = $(nVx + nVy + nPt + nPf)"
+            AssembleMomentum2D_x!(M, V, P, P0, ΔP, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+            AssembleMomentum2D_y!(M, V, P, P0, ΔP, τ0, Φ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+            AssembleContinuity2D!(M, V, P, (P0, Φ0, ρ0), phases, materials, number, pattern, type, BC, nc, Δ)
+            AssembleFluidContinuity2D!(M, V, P, ΔP, (P0, Φ0, ρ0), phases, materials, number, pattern, type, BC, nc, Δ)
 
-        #--------------------------------------------#
-        # Direct solver 
-        # @time dx = - 𝑀 \ r
+            # Two-phases operator as block matrix
+            𝑀 = [
+                M.Vx.Vx M.Vx.Vy M.Vx.Pt M.Vx.Pf;
+                M.Vy.Vx M.Vy.Vy M.Vy.Pt M.Vy.Pf;
+                M.Pt.Vx M.Pt.Vy M.Pt.Pt M.Pt.Pf;
+                M.Pf.Vx M.Pf.Vy M.Pf.Pt M.Pf.Pf;
+            ]
 
-        # M2Di solver
-        fv    = -r[1:(nVx+nVy)]
-        fpt   = -r[(nVx+nVy+1):(nVx+nVy+nPt)]
-        fpf   = -r[(nVx+nVy+nPt+1):end]
-        dv    = zeros(nVx+nVy)
-        dpt   = zeros(nPt)
-        dpf   = zeros(nPf)
-        rv    = zeros(nVx+nVy)
-        rpt   = zeros(nPt)
-        rpf   = zeros(nPf)
-        rv_t  = zeros(nVx+nVy)
-        rpt_t = zeros(nPt)
-        s     = zeros(nPf)
-        ddv   = zeros(nVx+nVy)
-        ddpt  = zeros(nPt)
-        ddpf  = zeros(nPf)
+            @info "System symmetry"
+            𝑀diff = 𝑀 - 𝑀'
+            dropzeros!(𝑀diff)
+            @show norm(𝑀diff)
 
-        Jvv  = [M.Vx.Vx M.Vx.Vy;
-                M.Vy.Vx M.Vy.Vy]
-        Jvp  = [M.Vx.Pt;
-                M.Vy.Pt]
-        Jpv  = [M.Pt.Vx M.Pt.Vy]
-        Jpp  = M.Pt.Pt
-        Jppf = M.Pt.Pf
-        Jpfv = [M.Pf.Vx M.Pf.Vy]
-        Jpfp = M.Pf.Pt
-        Jpf  = M.Pf.Pf
-        Kvv  = Jvv
+            #--------------------------------------------#
 
-        @time begin 
-            # γ = 1e-8
-            # Γ = spdiagm(γ*ones(nPt))
-            # Pre-conditionning (~Jacobi)
-            Jpv_t  = Jpv  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfv  
-            Jpp_t  = Jpp  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfp  #.+ Γ
-            Jvv_t  = Kvv  - Jvp *spdiagm(1 ./ diag(Jpp_t))*Jpv 
-            @show typeof(SparseMatrixCSC(Jpf))
-            Jpf_h  = cholesky(Hermitian(SparseMatrixCSC(Jpf)), check = false  )        # Cholesky factors
-            Jvv_th = cholesky(Hermitian(SparseMatrixCSC(Jvv_t)), check = false)        # Cholesky factors
-            Jpp_th = spdiagm(1 ./diag(Jpp_t));             # trivial inverse
-            @views for itPH=1:15
-                rv    .= -( Jvv*dv  + Jvp*dpt             - fv  )
-                rpt   .= -( Jpv*dv  + Jpp*dpt  + Jppf*dpf - fpt )
-                rpf   .= -( Jpfv*dv + Jpfp*dpt + Jpf*dpf  - fpf )
-                s     .= Jpf_h \ rpf
-                rpt_t .= -( Jppf*s - rpt)
-                s     .=    Jpp_th*rpt_t
-                rv_t  .= -( Jvp*s  - rv )
-                ddv   .= Jvv_th \ rv_t
-                s     .= -( Jpv_t*ddv - rpt_t )
-                ddpt  .=    Jpp_th*s
-                s     .= -( Jpfp*ddpt + Jpfv*ddv - rpf )
-                ddpf  .= Jpf_h \ s
-                dv   .+= ddv
-                dpt  .+= ddpt
-                dpf  .+= ddpf
-                @printf("  --- iteration %d --- \n",itPH);
-                @printf("  ||res.v ||=%2.2e\n", norm(rv)/ 1)
-                @printf("  ||res.pt||=%2.2e\n", norm(rpt)/1)
-                @printf("  ||res.pf||=%2.2e\n", norm(rpf)/1)
-            #     if ((norm(rv)/length(rv)) < tol_linv) && ((norm(rpt)/length(rpt)) < tol_linpt) && ((norm(rpf)/length(rpf)) < tol_linpf), break; end
-            #     if ((norm(rv)/length(rv)) > (norm(rv0)/length(rv0)) && norm(rv)/length(rv) < tol_glob && (norm(rpt)/length(rpt)) > (norm(rpt0)/length(rpt0)) && norm(rpt)/length(rpt) < tol_glob && (norm(rpf)/length(rpf)) > (norm(rpf0)/length(rpf0)) && norm(rpf)/length(rpf) < tol_glob),
-            #         if noisy>=1, fprintf(' > Linear residuals do no converge further:\n'); break; end
-            #     end
-            #     rv0=rv; rpt0=rpt; rpf0=rpf; if (itPH==nPH), nfail=nfail+1; end
+            if M2Di_solver == false 
+                # Direct solver 
+                @time dx = - 𝑀 \ r
+            else
+                # M2Di solver
+                fv    = -r[1:(nVx+nVy)]
+                fpt   = -r[(nVx+nVy+1):(nVx+nVy+nPt)]
+                fpf   = -r[(nVx+nVy+nPt+1):end]
+                dv    = zeros(nVx+nVy)
+                dpt   = zeros(nPt)
+                dpf   = zeros(nPf)
+                rv    = zeros(nVx+nVy)
+                rpt   = zeros(nPt)
+                rpf   = zeros(nPf)
+                rv_t  = zeros(nVx+nVy)
+                rpt_t = zeros(nPt)
+                s     = zeros(nPf)
+                ddv   = zeros(nVx+nVy)
+                ddpt  = zeros(nPt)
+                ddpf  = zeros(nPf)
+
+                Jvv  = [M.Vx.Vx M.Vx.Vy;
+                        M.Vy.Vx M.Vy.Vy]
+                Jvp  = [M.Vx.Pt;
+                        M.Vy.Pt]
+                Jpv  = [M.Pt.Vx M.Pt.Vy]
+                Jpp  = M.Pt.Pt
+                Jppf = M.Pt.Pf
+                Jpfv = [M.Pf.Vx M.Pf.Vy]
+                Jpfp = M.Pf.Pt
+                Jpf  = M.Pf.Pf
+                Kvv  = Jvv
+
+                @time begin 
+                    # γ = 1e-8
+                    # Γ = spdiagm(γ*ones(nPt))
+                    # Pre-conditionning (~Jacobi)
+                    Jpv_t  = Jpv  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfv  
+                    Jpp_t  = Jpp  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfp  #.+ Γ
+                    Jvv_t  = Kvv  - Jvp *spdiagm(1 ./ diag(Jpp_t))*Jpv 
+                    @show typeof(SparseMatrixCSC(Jpf))
+                    Jpf_h  = cholesky(Hermitian(SparseMatrixCSC(Jpf)), check = false  )        # Cholesky factors
+                    Jvv_th = cholesky(Hermitian(SparseMatrixCSC(Jvv_t)), check = false)        # Cholesky factors
+                    Jpp_th = spdiagm(1 ./diag(Jpp_t));             # trivial inverse
+                    @views for itPH=1:15
+                        rv    .= -( Jvv*dv  + Jvp*dpt             - fv  )
+                        rpt   .= -( Jpv*dv  + Jpp*dpt  + Jppf*dpf - fpt )
+                        rpf   .= -( Jpfv*dv + Jpfp*dpt + Jpf*dpf  - fpf )
+                        s     .= Jpf_h \ rpf
+                        rpt_t .= -( Jppf*s - rpt)
+                        s     .=    Jpp_th*rpt_t
+                        rv_t  .= -( Jvp*s  - rv )
+                        ddv   .= Jvv_th \ rv_t
+                        s     .= -( Jpv_t*ddv - rpt_t )
+                        ddpt  .=    Jpp_th*s
+                        s     .= -( Jpfp*ddpt + Jpfv*ddv - rpf )
+                        ddpf  .= Jpf_h \ s
+                        dv   .+= ddv
+                        dpt  .+= ddpt
+                        dpf  .+= ddpf
+                        @printf("  --- iteration %d --- \n",itPH);
+                        @printf("  ||res.v ||=%2.2e\n", norm(rv)/ 1)
+                        @printf("  ||res.pt||=%2.2e\n", norm(rpt)/1)
+                        @printf("  ||res.pf||=%2.2e\n", norm(rpf)/1)
+                    #     if ((norm(rv)/length(rv)) < tol_linv) && ((norm(rpt)/length(rpt)) < tol_linpt) && ((norm(rpf)/length(rpf)) < tol_linpf), break; end
+                    #     if ((norm(rv)/length(rv)) > (norm(rv0)/length(rv0)) && norm(rv)/length(rv) < tol_glob && (norm(rpt)/length(rpt)) > (norm(rpt0)/length(rpt0)) && norm(rpt)/length(rpt) < tol_glob && (norm(rpf)/length(rpf)) > (norm(rpf0)/length(rpf0)) && norm(rpf)/length(rpf) < tol_glob),
+                    #         if noisy>=1, fprintf(' > Linear residuals do no converge further:\n'); break; end
+                    #     end
+                    #     rv0=rv; rpt0=rpt; rpf0=rpf; if (itPH==nPH), nfail=nfail+1; end
+                    end
+                end
+                
+                dx = zeros(nVx + nVy + nPt + nPf)
+                dx[1:(nVx+nVy)] .= dv
+                dx[(nVx+nVy+1):(nVx+nVy+nPt)] .= dpt
+                dx[(nVx+nVy+nPt+1):end] .= dpf
             end
+
+            #--------------------------------------------#
+            UpdateSolution!(V, P, dx, number, type, nc)
+
+            #--------------------------------------------#
+            # Residual check
+            TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
+            ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+            ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+            ResidualContinuity2D!(R, V, P, (P0, Φ0, ρ0), phases, materials, number, type, BC, nc, Δ) 
+            ResidualFluidContinuity2D!(R, V, P, ΔP, (P0, Φ0, ρ0), phases, materials, number, type, BC, nc, Δ) 
+
         end
-        
-        dx = zeros(nVx + nVy + nPt + nPf)
-        dx[1:(nVx+nVy)] .= dv
-        dx[(nVx+nVy+1):(nVx+nVy+nPt)] .= dpt
-        dx[(nVx+nVy+nPt+1):end] .= dpf
-
-        #--------------------------------------------#
-        UpdateSolution!(V, P, dx, number, type, nc)
-
-        #--------------------------------------------#
-        # Residual check
-        TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
-        ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-        ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-        ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
-        ResidualFluidContinuity2D!(R, V, P, ΔP, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
-
-        @info "Residuals"
-        @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
-        @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-        @show norm(R.pt[inx_c,iny_c])/sqrt(nPt)
-        @show norm(R.pf[inx_c,iny_c])/sqrt(nPf)
 
         #--------------------------------------------#
         # Post process 
@@ -389,6 +404,9 @@ using Enzyme  # AD backends you want to use
         Vxfc ./=Vf*10
         Vyfc ./=Vf*10
 
+        P.t .-= mean(P.t[inx_c,iny_c]) 
+        P.f .-= mean(P.f[inx_c,iny_c])
+
         fig = Figure(fontsize = 20, size = (600, 400) )     
         ax1 = Axis(fig[1,1], title="Pt",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
         # # p1 = heatmap(xc, yc, Vs[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Vs")
@@ -399,9 +417,9 @@ using Enzyme  # AD backends you want to use
         # p3 = quiver(Xc[1:st:end,1:st:end], Yc[1:st:end,1:st:end], quiver=(Vxsc[1:st:end,1:st:end],Vysc[1:st:end,1:st:end]), c=:black,  aspect_ratio=1, xlim=extrema(xc), title="Pt", clims=(-3,3))
         # # divV = diff(V.x[2:end-1,3:end-2], dims=1)/Δ.x  + diff(V.y[3:end-2,2:end-1], dims=2)/Δ.y
         # # p3 = heatmap(xc, yc, divV',   aspect_ratio=1, xlim=extrema(xc), title="Pt")
-        heatmap!(ax1, xc, yc, P.t[inx_c,iny_c]', colormap=(GLMakie.Reverse(:matter), 1), colorrange=(-3,3))
+        heatmap!(ax1, xc, yc, P.t[inx_c,iny_c]', colormap=(GLMakie.Reverse(:matter), 1), colorrange=(-3,3)) 
         ax2 = Axis(fig[1,2], title="Pf",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
-        hm=heatmap!(ax2, xc, yc, P.f[inx_c,iny_c]', colormap=(GLMakie.Reverse(:matter), 1), colorrange=(-3,3))
+        hm=heatmap!(ax2, xc, yc, P.f[inx_c,iny_c]', colormap=(GLMakie.Reverse(:matter), 1), colorrange=(-3,3)) 
         # p4 = quiver!(Xc[1:st:end,1:st:end], Yc[1:st:end,1:st:end], quiver=(Vxfc[1:st:end,1:st:end],Vyfc[1:st:end,1:st:end]), c=:black,  aspect_ratio=1, xlim=extrema(xc), ylim=extrema(yc), title="Pt", clims=(-3,3))
         Colorbar(fig[2, 1:2], hm, label = L"$P$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
 
@@ -438,6 +456,7 @@ end
 function Run()
 
     nc = (x=250, y=250)
+    # nc = (x=25, y=25)
 
     # Mode 0   
     Ωl = 10^(-1.7)
