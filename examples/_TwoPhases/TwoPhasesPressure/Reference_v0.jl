@@ -4,32 +4,30 @@ using Enzyme  # AD backends you want to use
 
 @views function main(nc, Ωl, Ωη)
 
-    Δt0 = 1.0   
-
     M2Di_solver = false
 
     # Adimensionnal numbers
     Ωr     = 0.1             # Ratio inclusion radius / len
-    Ωηi    = 1e-4            # Ratio (inclusion viscosity) / (matrix viscosity)
+    Ωηi    = 1e-2            # Ratio (inclusion viscosity) / (matrix viscosity)
     Ωp     = 1.              # Ratio (ε̇bg * ηs) / P0
     # Independant
-    ηs0    = 1.              # Shear viscosity
+    ηsi    = 1.              # Shear viscosity
     len    = 1.              # Box size
-    P0     = 1.              # Initial ambiant pressure
-    Φ0     = 1e-1
+    Pi     = 1.              # Initial ambiant pressure
+    Φi     = 1e-1            # Reference
+    n_CK   = 3.0             # Cozeny-Karman
     # Dependant
-    ηb0    = Ωη * ηs0        # Bulk viscosity
-    k_ηf0  = (len.^2 * Ωl^2) / (ηb0 + 4/3 * ηs0) # Permeability / fluid viscosity
+    ηbi    = Ωη * ηsi        # Bulk viscosity
+    k_ηfi  = (len.^2 * Ωl^2) / (ηbi + 4/3 * ηsi) # Permeability / fluid viscosity
     r      = Ωr * len        # Inclusion radius
-    ηs_inc = Ωηi * ηs0       # Inclusion shear viscosity
-    ε̇      = Ωp * P0 / ηs0   # Background strain rate
-
-    Φi     = Φ0
+    ηs_inc = Ωηi * ηsi       # Inclusion shear viscosity
+    ε̇      = Ωp * Pi / ηsi   # Background strain rate
+    # Time integration
     nt     = 1
-
+    Δt0    = 1 / ε̇ / nc.x / 2 
     # Velocity gradient matrix
     D_BC = @SMatrix( [ε̇ 0; 0 -ε̇] )
-
+   
     # Material parameters
     materials = ( 
         g     = [0. 0.],
@@ -38,10 +36,11 @@ using Enzyme  # AD backends you want to use
         plasticity   = :off,
         linearizeϕ   = false, 
         single_phase = false,
+        conservative = true,
         n     = [1.0  1.0],
-        n_CK  = [1.0  1.0],
-        ηs0   = [ηs0  ηs_inc], 
-        ηΦ    = [ηb0  ηb0 ]./(1-Φ0),
+        n_CK  = [n_CK n_CK],
+        ηs0   = [ηsi  ηs_inc], 
+        ηΦ    = [ηbi  ηbi ]./(1-Φi),
         G     = [1e30 1e30], 
         ρs    = [1.0  1.0 ],
         ρf    = [1.0  1.0 ],
@@ -49,10 +48,10 @@ using Enzyme  # AD backends you want to use
         Ks    = [1e30 1e30],
         KΦ    = [1e30 1e30],
         Kf    = [1e30 1e30],
-        k_ηf0 = [k_ηf0 k_ηf0],
+        k_ηf0 = [k_ηfi/Φi^n_CK k_ηfi/Φi^n_CK],
         ψ     = [10.    10.  ],
         ϕ     = [35.    35.  ],
-        C     = [1e70    1e70  ],
+        C     = [1e70    1e70],
         ηvp   = [0.0    0.0  ],
         cosϕ  = [0.0    0.0  ],
         sinϕ  = [0.0    0.0  ],
@@ -73,7 +72,7 @@ using Enzyme  # AD backends you want to use
     @show materials.ηΦ  ./ materials.KΦ
     @show materials.ηs0 ./ materials.Kf
     @show materials.ηΦ  ./ materials.Kf
-    @show r^2/k_ηf0/materials.Ks[1]
+    @show r^2/k_ηfi/materials.Ks[1]
 
     # error()
     
@@ -146,10 +145,6 @@ using Enzyme  # AD backends you want to use
     η   = (c  =  ones(size_c...), v  =  ones(size_v...) )
     Φ   = (c=Φi.*ones(size_c...), v=Φi.*ones(size_v...) )
     Φ0  = (c=Φi.*ones(size_c...), v=Φi.*ones(size_v...) )
-
-    ln1mΦ   = (c=log(1-Φi).*ones(size_c...), v=log(1-Φi).*ones(size_v...) )
-    ln1mΦ0  = (c=log(1-Φi).*ones(size_c...), v=log(1-Φi).*ones(size_v...) )
-
     ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
     τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...), f = zeros(size_c...)  )
@@ -164,7 +159,6 @@ using Enzyme  # AD backends you want to use
     P       = (t=zeros(size_c...), f=zeros(size_c...))
     P0      = (t=zeros(size_c...), f=zeros(size_c...))
     ΔP      = (t=zeros(size_c...), f=zeros(size_c...))
-
     ρ       = (s = materials.ρs[1]*ones(size_c...), f = materials.ρf[1]*ones(size_c...), t = zeros(size_c...))
     ρ0      = (s = materials.ρs[1]*ones(size_c...), f = materials.ρf[1]*ones(size_c...), t = zeros(size_c...))
 
@@ -173,11 +167,7 @@ using Enzyme  # AD backends you want to use
     yv  = LinRange(-L.y/2, L.y/2, nc.y+1)
     xc  = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
     yc  = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
-    xvx = LinRange(-L.x/2-Δ.x, L.x/2+Δ.x, nc.x+3)
-    xvy = LinRange(-L.x/2-3Δ.x/2, L.x/2+3Δ.x/2, nc.x+4)
-    yvy = LinRange(-L.y/2-Δ.y, L.y/2+Δ.y, nc.y+3)
-    yvx = LinRange(-L.y/2-3Δ.y/2, L.y/2+3Δ.y/2, nc.y+4)
-
+  
     # Initial configuration
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
     V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
@@ -228,6 +218,8 @@ using Enzyme  # AD backends you want to use
     
     for it=1:nt
 
+        @printf("\nStep %04d\n", it)
+        @info "Displacement $(2*mean(V.x[2,3:3:end-2])*Δ.t*it)"
         P0.t  .= P.t
         P0.f  .= P.f
         τ0.xx .= τ.xx
@@ -237,17 +229,9 @@ using Enzyme  # AD backends you want to use
         ρ0.s  .= ρ.s
         ρ0.f  .= ρ.f
 
-        Φ.c .= 1.0 .- exp.(ln1mΦ.c)
-        @show extrema(Φ.c)
-
-        # error(0)
-
-        if it>1
-            Δt0 = 1e4
-            Δ   = (x=L.x/nc.x, y=L.y/nc.y, t=Δt0)
-        end
-
         for iter=1:4
+
+            @printf("     Step %04d --- Iteration %04d\n", it, iter)
 
             # Residual check
             TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
@@ -299,10 +283,10 @@ using Enzyme  # AD backends you want to use
                 dv    = zeros(nVx+nVy)
                 dpt   = zeros(nPt)
                 dpf   = zeros(nPf)
-                rv    = zeros(nVx+nVy)
+                rvs   = zeros(nVx+nVy)
                 rpt   = zeros(nPt)
                 rpf   = zeros(nPf)
-                rv_t  = zeros(nVx+nVy)
+                rvs_t  = zeros(nVx+nVy)
                 rpt_t = zeros(nPt)
                 s     = zeros(nPf)
                 ddv   = zeros(nVx+nVy)
@@ -328,19 +312,25 @@ using Enzyme  # AD backends you want to use
                     Jpv_t  = Jpv  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfv  
                     Jpp_t  = Jpp  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfp  #.+ Γ
                     Jvv_t  = Kvv  - Jvp *spdiagm(1 ./ diag(Jpp_t))*Jpv 
-                    @show typeof(SparseMatrixCSC(Jpf))
                     Jpf_h  = cholesky(Hermitian(SparseMatrixCSC(Jpf)), check = false  )        # Cholesky factors
                     Jvv_th = cholesky(Hermitian(SparseMatrixCSC(Jvv_t)), check = false)        # Cholesky factors
                     Jpp_th = spdiagm(1 ./diag(Jpp_t));             # trivial inverse
-                    @views for itPH=1:15
-                        rv    .= -( Jvv*dv  + Jvp*dpt             - fv  )
+                    nrvs0, nrpt0, nrpf0 = 1.0, 1.0, 1.0
+                    @views for itPH=1:30
+                        rvs   .= -( Jvv*dv  + Jvp*dpt             - fv  )
                         rpt   .= -( Jpv*dv  + Jpp*dpt  + Jppf*dpf - fpt )
                         rpf   .= -( Jpfv*dv + Jpfp*dpt + Jpf*dpf  - fpf )
+                        nrvs = norm(rvs)/length(rvs); nrpt = norm(rpt)/length(rpt);  nrpf = norm(rpf)/length(rpf)
+                        if (itPH == 1) nrvs0, nrpt0, nrpf0 = nrvs, nrpt, nrpf end
+                        @printf("  --- iteration %d --- \n",itPH);
+                        @printf("  abs. rvs = %2.2e --- rel. rvs = %2.2e\n", nrvs, nrvs/nrvs0)
+                        @printf("  abs. rpt = %2.2e --- rel. rpt = %2.2e\n", nrpt, nrpt/nrpt0)
+                        @printf("  abs. rpf = %2.2e --- rel. rpf = %2.2e\n", nrpf, nrpf/nrpf0)
                         s     .= Jpf_h \ rpf
                         rpt_t .= -( Jppf*s - rpt)
                         s     .=    Jpp_th*rpt_t
-                        rv_t  .= -( Jvp*s  - rv )
-                        ddv   .= Jvv_th \ rv_t
+                        rvs_t .= -( Jvp*s  - rvs )
+                        ddv   .= Jvv_th \ rvs_t
                         s     .= -( Jpv_t*ddv - rpt_t )
                         ddpt  .=    Jpp_th*s
                         s     .= -( Jpfp*ddpt + Jpfv*ddv - rpf )
@@ -348,15 +338,11 @@ using Enzyme  # AD backends you want to use
                         dv   .+= ddv
                         dpt  .+= ddpt
                         dpf  .+= ddpf
-                        @printf("  --- iteration %d --- \n",itPH);
-                        @printf("  ||res.v ||=%2.2e\n", norm(rv)/ 1)
-                        @printf("  ||res.pt||=%2.2e\n", norm(rpt)/1)
-                        @printf("  ||res.pf||=%2.2e\n", norm(rpf)/1)
-                    #     if ((norm(rv)/length(rv)) < tol_linv) && ((norm(rpt)/length(rpt)) < tol_linpt) && ((norm(rpf)/length(rpf)) < tol_linpf), break; end
-                    #     if ((norm(rv)/length(rv)) > (norm(rv0)/length(rv0)) && norm(rv)/length(rv) < tol_glob && (norm(rpt)/length(rpt)) > (norm(rpt0)/length(rpt0)) && norm(rpt)/length(rpt) < tol_glob && (norm(rpf)/length(rpf)) > (norm(rpf0)/length(rpf0)) && norm(rpf)/length(rpf) < tol_glob),
-                    #         if noisy>=1, fprintf(' > Linear residuals do no converge further:\n'); break; end
-                    #     end
-                    #     rv0=rv; rpt0=rpt; rpf0=rpf; if (itPH==nPH), nfail=nfail+1; end
+                        # if ((norm(rvs)/length(rvs)) < tol_linv) && ((norm(rpt)/length(rpt)) < tol_linpt) && ((norm(rpf)/length(rpf)) < tol_linpf), break; end
+                        # if ((norm(rvs)/length(rvs)) > (norm(rv0)/length(rv0)) && norm(rvs)/length(rvs) < tol_glob && (norm(rpt)/length(rpt)) > (norm(rpt0)/length(rpt0)) && norm(rpt)/length(rpt) < tol_glob && (norm(rpf)/length(rpf)) > (norm(rpf0)/length(rpf0)) && norm(rpf)/length(rpf) < tol_glob),
+                        #     if noisy>=1, fprintf(' > Linear residuals do no converge further:\n'); break; end
+                        # end
+                        # rv0=rvs; rpt0=rpt; rpf0=rpf; if (itPH==nPH), nfail=nfail+1; end
                     end
                 end
                 
@@ -369,34 +355,15 @@ using Enzyme  # AD backends you want to use
             #--------------------------------------------#
             UpdateSolution!(V, P, dx, number, type, nc)
 
-            #--------------------------------------------#
-            # Residual check
-            TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
-            ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-            ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-            ResidualContinuity2D!(R, V, P, (P0, Φ0, ρ0), phases, materials, number, type, BC, nc, Δ) 
-            ResidualFluidContinuity2D!(R, V, P, ΔP, (P0, Φ0, ρ0), phases, materials, number, type, BC, nc, Δ) 
-
         end
 
         #--------------------------------------------#
-        # Post process 
-        @time for i in eachindex(Φ.c)
-            KΦ = materials.KΦ[phases.c[i]]
-            ηΦ = materials.ηΦ[phases.c[i]] 
-            Φ.c[i] = Φ0.c[i] .+ Δ.t*( 1/KΦ * ((P.f[i] - P0.f[i])/Δ.t - (P.t[i] - P0.t[i])/Δ.t) + 1/ηΦ*(P.f[i] - P.t[i]) )
-            # ln1mΦ.c[i] = ln1mΦ0.c[i] .+ Δ.t/(1 - Φ.c[i]) *( 1/KΦ * ((P.f[i] - P0.f[i])/Δ.t + (P.t[i] - P0.t[i])/Δ.t) + 1/ηΦ*(P.f[i] - P.t[i]) )
-            # Φ.c[i] = 1.0 - exp(ln1mΦ.c[i])
-        end
-        Φ.v[inx_v, iny_v] .= 0.25*(Φ.c[1:end-1,1:end-1] .+ Φ.c[1:end-1,2:end-0] .+ Φ.c[2:end-0,1:end-1] .+ Φ.c[2:end-0,2:end-0] )
-
-        @show extrema(Φ.c)
 
         Vxsc = 0.5*(V.x[1:end-1,2:end-1] + V.x[2:end,2:end-1])
         Vysc = 0.5*(V.y[2:end-1,1:end-1] + V.y[2:end-1,2:end])
         Vs   = sqrt.( Vxsc.^2 .+ Vysc.^2)
-        Vxf  = -k_ηf0*diff(P.f, dims=1)/Δ.x
-        Vyf  = -k_ηf0*diff(P.f, dims=2)/Δ.y
+        Vxf  = -k_ηfi*diff(P.f, dims=1)/Δ.x
+        Vyf  = -k_ηfi*diff(P.f, dims=2)/Δ.y
         Vyfc = 0.5*(Vyf[1:end-1,:] .+ Vyf[2:end,:])
         Vxfc = 0.5*(Vxf[:,1:end-1] .+ Vxf[:,2:end])
         Vf   = sqrt.( Vxfc.^2 .+ Vyfc.^2)
@@ -407,8 +374,8 @@ using Enzyme  # AD backends you want to use
         P.t .-= mean(P.t[inx_c,iny_c]) 
         P.f .-= mean(P.f[inx_c,iny_c])
 
-        fig = Figure(fontsize = 20, size = (600, 400) )     
-        ax1 = Axis(fig[1,1], title="Pt",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
+        fig = Figure(fontsize = 16, size = (600, 300) )     
+        ax1 = Axis(fig[1,1], title=L"$P^\text{t}$",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
         # # p1 = heatmap(xc, yc, Vs[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Vs")
         # p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vf")
         # p2 = heatmap(xc, yc, Φ.c[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Φ")
@@ -417,11 +384,14 @@ using Enzyme  # AD backends you want to use
         # p3 = quiver(Xc[1:st:end,1:st:end], Yc[1:st:end,1:st:end], quiver=(Vxsc[1:st:end,1:st:end],Vysc[1:st:end,1:st:end]), c=:black,  aspect_ratio=1, xlim=extrema(xc), title="Pt", clims=(-3,3))
         # # divV = diff(V.x[2:end-1,3:end-2], dims=1)/Δ.x  + diff(V.y[3:end-2,2:end-1], dims=2)/Δ.y
         # # p3 = heatmap(xc, yc, divV',   aspect_ratio=1, xlim=extrema(xc), title="Pt")
-        heatmap!(ax1, xc, yc, P.t[inx_c,iny_c]', colormap=(GLMakie.Reverse(:matter), 1), colorrange=(-3,3)) 
-        ax2 = Axis(fig[1,2], title="Pf",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
-        hm=heatmap!(ax2, xc, yc, P.f[inx_c,iny_c]', colormap=(GLMakie.Reverse(:matter), 1), colorrange=(-3,3)) 
+        heatmap!(ax1, xc, yc, P.t[inx_c,iny_c]', colormap=(CairoMakie.Reverse(:matter), 1), colorrange=(-3,3)) 
+        ax2 = Axis(fig[1,2], title=L"$P^\text{f}$",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
+        hm1=heatmap!(ax2, xc, yc, P.f[inx_c,iny_c]', colormap=(CairoMakie.Reverse(:matter), 1), colorrange=(-3,3)) 
         # p4 = quiver!(Xc[1:st:end,1:st:end], Yc[1:st:end,1:st:end], quiver=(Vxfc[1:st:end,1:st:end],Vyfc[1:st:end,1:st:end]), c=:black,  aspect_ratio=1, xlim=extrema(xc), ylim=extrema(yc), title="Pt", clims=(-3,3))
-        Colorbar(fig[2, 1:2], hm, label = L"$P$", height=30, width = 300, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
+        ax3 = Axis(fig[1,3], title=L"$\phi$",  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect())
+        hm2=heatmap!(ax3, xc, yc, Φ.c[inx_c,iny_c]', colormap=(CairoMakie.Reverse(:matter), 1)) 
+        Colorbar(fig[2, 1:2], hm1, label = L"$P$", height=30, width = 200, labelsize = 16, ticklabelsize = 12, vertical=false, valign=true, flipaxis = true )
+        Colorbar(fig[2,   3], hm2, label = L"$\phi$", height=30, width = 100, labelsize = 16, ticklabelsize = 12, vertical=false, valign=true, flipaxis = true )
 
         display(fig)
 
@@ -455,11 +425,11 @@ end
 
 function Run()
 
-    nc = (x=250, y=250)
-    # nc = (x=25, y=25)
+    nc = (x=50, y=50)
 
     # Mode 0   
     Ωl = 10^(-1.7)
+    # Ωl = 10^(-1.0)
     Ωη = 10^(2)
     main(nc,  Ωl, Ωη);
     

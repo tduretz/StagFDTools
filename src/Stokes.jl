@@ -294,7 +294,6 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materia
     return fy
 end
 
-
 function Continuity(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δ)
     invΔx = 1 / Δ.x
     invΔy = 1 / Δ.y
@@ -303,7 +302,7 @@ function Continuity(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δ)
     η     = materials.β[phase]
     comp  = materials.compressible
     f     = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy) + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
-    f    *= max(invΔx, invΔy)
+    # f    *= max(invΔx, invΔy)
     return f
 end
 

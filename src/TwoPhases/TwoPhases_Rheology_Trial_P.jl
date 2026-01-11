@@ -202,6 +202,7 @@ end
 function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
 
     _ones = @SVector ones(5)
+    s = 1
 
     # Loop over centroids
     for j=2:size(ε̇.xx,2)-1, i=2:size(ε̇.xx,1)-1
@@ -371,6 +372,27 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
         λ̇.v[i,j]  = jac.val[3]
         η.v[i,j]  = jac.val[2]
     end
+
+    # Cheap copy edges
+    for j=2:size(ε̇.xy,2)-1 
+        i = 2
+        @views 𝐷_ctl.v[i,j] .= 𝐷_ctl.v[3,j]
+        @views 𝐷.v[i,j]     .= 𝐷.v[3,j]
+        i = size(ε̇.xy,1)-1
+        @views 𝐷_ctl.v[i,j] .= 𝐷_ctl.v[end-2,j]
+        @views 𝐷.v[i,j]     .= 𝐷.v[end-2,j]
+    end
+
+    for i=2:size(ε̇.xy,1)-1 
+        j = 2
+        @views 𝐷_ctl.v[i,j] .= 𝐷_ctl.v[i,3]
+        @views 𝐷.v[i,j]     .= 𝐷.v[i,3]
+        j = size(ε̇.xy,2)-1
+        @views 𝐷_ctl.v[i,j] .= 𝐷_ctl.v[i,end-2]
+        @views 𝐷.v[i,j]     .= 𝐷.v[i,end-2]
+    end
+
+
 end
 
 # function LocalRheology(ε̇, materials, phases, Δ)

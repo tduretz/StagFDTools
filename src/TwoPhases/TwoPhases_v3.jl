@@ -215,19 +215,24 @@ function Continuity(Vx, Vy, Pt, Pf, old, phase, materials, type_loc, bcv_loc, Δ
     # if materials.oneway
     #     fp      = divVs
     # else
+    if materials.conservative == false
+        fp      = dlnρsdt[2,2] - dΦdt[2,2]/(1-Φ[2,2]) +   divVs
+    else
+        # Solid mass / immobile solid mass: ∂ρim∂t  + ∇⋅(q) with q = ρim⋅Vs
+        ρim0   = SMatrix{3, 3, Float64}( @. (1-Φ0) * ρs0 )
+        # lnρs   = SMatrix{3, 3, Float64}( @. log(ρs0) + Δt*dlnρsdt)
+        # ρs     = SMatrix{3, 3, Float64}( @. exp(lnρs) )
+        ρs     = SMatrix{3, 3, Float64}( @. ρs0 + ρs0 * Δt*dlnρsdt)
+        ρim    = SMatrix{3, 3, Float64}( @. (1-Φ ) * ρs )
+        ∂ρim∂t = (ρim[2,2] - ρim0[2,2]) / Δt
+        qx     = SVector{2, Float64}( @. (ρim[1:end-1,2] .+  ρim[2:end,2])/2 .* Vx[:,2] ) # Brucite paper, Fowler (1985)
+        qy     = SVector{2, Float64}( @. (ρim[2,1:end-1] .+  ρim[2,2:end])/2 .* Vy[2,:] ) # Brucite paper, Fowler (1985)
+        fp     = ∂ρim∂t  +  (qx[2] - qx[1]) * invΔx + (qy[2] - qy[1]) * invΔy
+
         # fp      = dlnρsdt[2,2] - dΦdt[2,2]/(1-Φ[2,2]) +   divVs
-    # end
 
-    # Solid mass / immobile solid mass: ∂ρim∂t  + ∇⋅(q) with q = ρim⋅Vs
-    ρim0   = SMatrix{3, 3, Float64}( @. (1-Φ0) * ρs0 )
-    lnρs   = SMatrix{3, 3, Float64}( @. log(ρs0) + Δt*dlnρsdt)
-    ρs     = SMatrix{3, 3, Float64}( @. exp(lnρs) )
-    ρim    = SMatrix{3, 3, Float64}( @. (1-Φ ) * ρs )
-    ∂ρim∂t = (ρim[2,2] - ρim0[2,2]) / Δt
-    qx     = SMatrix{2, 1, Float64}( @. (ρim[1:end-1,2] .+  ρim[2:end,2])/2 .* Vx[:,2] ) # Brucite paper, Fowler (1985)
-    qy     = SMatrix{1, 2, Float64}( @. (ρim[2,1:end-1] .+  ρim[2,2:end])/2 .* Vy[2,:] ) # Brucite paper, Fowler (1985)
-    fp     = ∂ρim∂t  +  (qx[2] - qx[1]) * invΔx + (qy[2] - qy[1]) * invΔy
-
+    end
+    fp    *= max(invΔx, invΔy)
     return fp
 end
 
@@ -294,30 +299,38 @@ function FluidContinuity(Vx, Vy, Pt, Pf_loc, ΔPf_loc, old, phase, materials, k�
     #     printxy(Pf)
     #     printxy(1/2*(Pf[:,1:end-1] .+ Pf[:,2:end]))
     # end
+    
 
+    
     if materials.oneway
         fp   = divqD
     else
-        # fp = (Φ[2,2]*dlnρfdt + dΦdt[2,2]       + Φ[2,2]*divVs + divqD)
+        if materials.conservative == false
+            fp = (Φ[2,2]*dlnρfdt + dΦdt[2,2]       + Φ[2,2]*divVs + divqD)
 
-        # Total mass: ∂ρt∂t + ∇⋅(q) with q = ρf⋅qD + ρt⋅qD⋅V
-        
-        lnρs   = SMatrix{3, 3, Float64}( @. log(ρs0) + Δt*dlnρsdt)
-        ρs     = SMatrix{3, 3, Float64}( @. exp(lnρs) )
-        lnρf   = SMatrix{3, 3, Float64}( @. log(ρf0) + Δt*dlnρsdt)
-        ρf     = SMatrix{3, 3, Float64}( @. exp(lnρf) )
-        ρt     = SMatrix{3, 3, Float64}( @. (1-Φ ) * ρs  + Φ  * ρf  )
-        ρt0    = SMatrix{3, 3, Float64}( @. (1-Φ0 )* ρs0 + Φ0 * ρf0 )
-        
-        ∂ρt∂t  = (ρt[2,2] - ρt0[2,2]) / Δt
-        ρfx    = SVector{2, Float64}( @. (ρf[1:end-1,2] + ρf[2:end,2])/2 )
-        ρfy    = SVector{2, Float64}( @. (ρf[2,1:end-1] + ρf[2,2:end])/2 )
-        ρtx    = SVector{2, Float64}( @. (ρt[1:end-1,2] + ρt[2:end,2])/2 )
-        ρty    = SVector{2, Float64}( @. (ρt[2,1:end-1] + ρt[2,2:end])/2 )
-        qρx    = SVector{2, Float64}( @. ρfx * qx +  ρtx * Vx[:,2] )     # Brucite paper, Fowler (1985)
-        qρy    = SVector{2, Float64}( @. ρfy * qy +  ρty * Vy[2,:] )     # Brucite paper, Fowler (1985)    
-        
-        fp     = ∂ρt∂t  +  (qρx[2] - qρx[1]) * invΔx + (qρy[2] - qρy[1]) * invΔy 
+        else
+
+            # Total mass: ∂ρt∂t + ∇⋅(q) with q = ρf⋅qD + ρt⋅qD⋅V
+            lnρs   = SMatrix{3, 3, Float64}( @. log(ρs0) + Δt*dlnρsdt)
+            ρs     = SMatrix{3, 3, Float64}( @. exp(lnρs) )
+            lnρf   = SMatrix{3, 3, Float64}( @. log(ρf0) + Δt*dlnρsdt)
+            ρf     = SMatrix{3, 3, Float64}( @. exp(lnρf) )
+            ρt     = SMatrix{3, 3, Float64}( @. (1-Φ ) * ρs  + Φ  * ρf  )
+            ρt0    = SMatrix{3, 3, Float64}( @. (1-Φ0 )* ρs0 + Φ0 * ρf0 )
+            
+            ∂ρt∂t  = (ρt[2,2] - ρt0[2,2]) / Δt
+            ρfx    = SVector{2, Float64}( @. (ρf[1:end-1,2] + ρf[2:end,2])/2 )
+            ρfy    = SVector{2, Float64}( @. (ρf[2,1:end-1] + ρf[2,2:end])/2 )
+            ρtx    = SVector{2, Float64}( @. (ρt[1:end-1,2] + ρt[2:end,2])/2 )
+            ρty    = SVector{2, Float64}( @. (ρt[2,1:end-1] + ρt[2,2:end])/2 )
+            qρx    = SVector{2, Float64}( @. ρfx * qx +  ρtx * Vx[:,2] )     # Brucite paper, Fowler (1985)
+            qρy    = SVector{2, Float64}( @. ρfy * qy +  ρty * Vy[2,:] )     # Brucite paper, Fowler (1985)    
+            
+            fp     = ∂ρt∂t  +  (qρx[2] - qρx[1]) * invΔx + (qρy[2] - qρy[1]) * invΔy 
+
+            # fp = (Φ[2,2]*dlnρfdt + dΦdt[2,2]       + Φ[2,2]*divVs + divqD)
+
+        end
     end
 
     return fp
