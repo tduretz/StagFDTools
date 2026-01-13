@@ -4,10 +4,11 @@ import Statistics:mean
 using Enzyme  # AD backends you want to use
 using TimerOutputs
 
-using JLD2
+#using JLD2
+#using Makie
 
-using Revise
 using ExactFieldSolutions
+
 
 include("stokes_variablegrid.jl")
 include("rheology_var.jl")
@@ -16,7 +17,10 @@ include("rheology_var.jl")
     #--------------------------------------------#
 
     # Resolution
-    nc = (x = 150, y = 150)
+    nc = (x = 300, y = 300)
+
+    # Setting for Schmid & Podladchikov (2003)
+    params = (mm = 1.0, mc = 100.0, rc = 0.1 + 1e-13, gr = 0.0, er = 1.0)
 
     # Boundary loading type
     config = BC_template
@@ -28,7 +32,7 @@ include("rheology_var.jl")
         plasticity   = :none,
         n    = [1.0    1.0  ],
         η0   = [1e0    1e2  ],
-        G    = [1e50   1e50 ],
+        G    = [1e20   1e20 ],
         C    = [150    150  ],
         ϕ    = [30.    30.  ],
         ηvp  = [0.5    0.5  ],
@@ -122,7 +126,7 @@ include("rheology_var.jl")
     # Intialize field
     L   = (x=1.0, y=1.0)
 
-    uniform_grid = true
+    uniform_grid = false
     if uniform_grid
         original = false
         if original
@@ -135,12 +139,24 @@ include("rheology_var.jl")
         else
             Δ   = (x = fill(L.x/nc.x,nc.x+2), y = fill(L.y/nc.y,nc.y+2), t=fill(Δt0,1))
 
+            xmin = -L.x/2
+            xmax = L.x/2
+            ymin = -L.y/2
+            ymax = L.y/2
+            xhalf = Δ.x[1]/2
+            yhalf = Δ.y[1]/2
             # Mesh coordinates
-            xv = LinRange(-L.x/2, L.x/2, nc.x+1)
-            yv = LinRange(-L.y/2, L.y/2, nc.y+1)
+            xv = LinRange(xmin, xmax, nc.x+1)
+            yv = LinRange(ymin, ymax, nc.y+1)
 
-            xc  = LinRange(-L.x/2+Δ.x[1]/2, L.x/2-Δ.x[end]/2, nc.x)
-            yc  = LinRange(-L.y/2+Δ.y[1]/2, L.y/2-Δ.y[end]/2, nc.y)
+            xc  = LinRange(xmin+xhalf, xmax-xhalf, nc.x)
+            yc  = LinRange(ymin+yhalf, ymax-yhalf, nc.y)
+            # With ghosts
+            xv_g = LinRange(xmin-Δ.x[1], xmax+Δ.x[1], nc.x+3)
+            yv_g = LinRange(ymin-Δ.y[1], ymax+Δ.y[1], nc.y+3)
+            xc_g = LinRange(xmin-xhalf, xmax+xhalf, nc.x+2)
+            yc_g = LinRange(ymin-yhalf, ymax+yhalf, nc.y+2)
+
         end
     else
         μ = ( x = 0.0, y = 0.0)
@@ -165,6 +181,13 @@ include("rheology_var.jl")
         xc = 0.5*(xv[2:endv] + xv[1:endv-1])
         yc = 0.5*(yv[2:endv] + yv[1:endv-1])
 
+        # With ghosts
+        xv_g = normal_linspace_interval(inflimit.x-Δ.x[1], suplimit.x+Δ.x[end], μ.x, σ.x, nc.x+3)
+        yv_g = normal_linspace_interval(inflimit.y-Δ.y[1], suplimit.y+Δ.y[end], μ.y, σ.y, nc.y+3)
+        endv_g = nc.x+3
+        xc_g = 0.5*(xv_g[2:endv_g] + xv_g[1:endv_g-1])
+        yc_g = 0.5*(yv_g[2:endv_g] + yv_g[1:endv_g-1])
+
     end
 
     
@@ -176,35 +199,47 @@ include("rheology_var.jl")
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc'
     V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
     Pt[inx_c, iny_c ]  .= 10.
-    UpdateSolution!(V, Pt, dx, number, type, nc)
+    UpdateSolution_var!(V, Pt, dx, number, type, nc)
 
-    # Boundary condition values
-    dirichlet_value_left = zeros(size(xv))
-    dirichlet_value_right = zeros(size(xv))
-    for i=inx_Vx[1]:inx_Vx[end]
-        dirichlet_value_left[i-1] = Stokes2D_Schmid2003( [xv[i-1]; yc[1]] ).V[1]
-        dirichlet_value_right[i-1] = Stokes2D_Schmid2003( [xv[i-1]; yc[end]] ).V[1]
-    end
 
+    # Boundary Conditions
     BC = ( Vx = zeros(size_x...), Vy = zeros(size_y...))
+
     BC.Vx[     2, iny_Vx] .= (type.Vx[     1, iny_Vx] .== :Neumann_normal) .* D_BC[1,1]
     BC.Vx[ end-1, iny_Vx] .= (type.Vx[   end, iny_Vx] .== :Neumann_normal) .* D_BC[1,1]
-    
-    for i=inx_Vx[1]:inx_Vx[end]
-        # left
-        BC.Vx[inx_Vx,      2] .= (type.Vx[i,      2] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[i,     2] .== dirichlet_value_left) .* (D_BC[1,1]*xv .+ D_BC[1,2]*yv[1]  )
-        #BC.Vx[inx_Vx,      2] .= (type.Vx[i,      2] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[i,     2] .== :Dirichlet_tangent) .* (D_BC[1,1]*xv .+ D_BC[1,2]*yv[1]  )
-        # right
-        BC.Vx[inx_Vx,  end-1] .= (type.Vx[i,  end-1] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[i, end-1] .== dirichlet_value_right) .* (D_BC[1,1]*xv .+ D_BC[1,2]*yv[end])
-        #BC.Vx[inx_Vx,  end-1] .= (type.Vx[i,  end-1] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[i, end-1] .== :Dirichlet_tangent) .* (D_BC[1,1]*xv .+ D_BC[1,2]*yv[end])   
-    end
-    
+
+    # left
+    BC.Vx[inx_Vx,      2] .= (type.Vx[inx_Vx,      2] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[inx_Vx,     2] .== :Dirichlet_tangent) .* (D_BC[1,1]*xv .+ D_BC[1,2]*yv[1]  )
+    # right
+    BC.Vx[inx_Vx,  end-1] .= (type.Vx[inx_Vx,  end-1] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[inx_Vx, end-1] .== :Dirichlet_tangent) .* (D_BC[1,1]*xv .+ D_BC[1,2]*yv[end])
+
     BC.Vy[inx_Vy,     2 ] .= (type.Vy[inx_Vy,     1 ] .== :Neumann_normal) .* D_BC[2,2]
     BC.Vy[inx_Vy, end-1 ] .= (type.Vy[inx_Vy,   end ] .== :Neumann_normal) .* D_BC[2,2]
     #north
     BC.Vy[     2, iny_Vy] .= (type.Vy[     2, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[    2, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[1]   .+ D_BC[2,2]*yv)
     # south
     BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
+
+    # compute analytic solution and set BC Dirichlet for X and Y
+    p_ana = zeros(nc.x, nc.y)
+    for i=1:nc.x, j=1:nc.y
+        sol       = Stokes2D_Schmid2003( [xc[i]; yc[j]] )
+        p_ana[i,j]    = sol.p
+    end
+    Vx_ana = zero(BC.Vx)
+    for i=1:size(BC.Vx,1), j=2:size(BC.Vx,2)-1
+        sol       = Stokes2D_Schmid2003( [xv_g[i]; yc_g[j-1]] ; params )
+        Vx_ana[i,j]   = sol.V[1]
+        V.x[i,j] = sol.V[1]
+        BC.Vx[i,j]    = sol.V[1]
+    end
+    Vy_ana = zero(BC.Vy)
+    for i=2:size(BC.Vy,1)-1, j=1:size(BC.Vy,2)
+        sol       = Stokes2D_Schmid2003( [xc_g[i-1]; yv_g[j]] ; params)
+        Vy_ana[i,j]   = sol.V[2]
+        V.y[i,j] = sol.V[2]
+        BC.Vy[i,j]    = sol.V[2]
+    end
 
     # Set material geometry
     rad = 0.1 + 1e-13
@@ -219,7 +254,7 @@ include("rheology_var.jl")
 
     #--------------------------------------------#
 
-    for it=1:nt
+    for it=1:1#nt
 
         @printf("Step %04d\n", it)
         err.x .= 0.
@@ -239,7 +274,7 @@ include("rheology_var.jl")
             #--------------------------------------------#
             # Residual check        
             @timeit to "Residual" begin
-                TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
+                TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
                 ResidualContinuity2D_var!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
                 ResidualMomentum2D_x_var!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
                 ResidualMomentum2D_y_var!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
@@ -264,21 +299,12 @@ include("rheology_var.jl")
 
             #--------------------------------------------# 
             # Stokes operator as block matrices
+            #println(M.Vx.Vx[90:100,90])
             𝐊  .= [M.Vx.Vx M.Vx.Vy; M.Vy.Vx M.Vy.Vy]
             𝐐  .= [M.Vx.Pt; M.Vy.Pt]
             𝐐ᵀ .= [M.Pt.Vx M.Pt.Vy]
-            𝐏  .= [M.Pt.Pt;]             
-            
-            #=K_ref = load("/Users/msirdey/Documents/FGSE/StefanSchmalholz/StagFDTools_commitb5a7ed1/StagFDTools/K_ref_base.jld")["data"]
-            Q_ref = load("/Users/msirdey/Documents/FGSE/StefanSchmalholz/StagFDTools_commitb5a7ed1/StagFDTools/Q_ref_base.jld")["data"]
-            QT_ref = load("/Users/msirdey/Documents/FGSE/StefanSchmalholz/StagFDTools_commitb5a7ed1/StagFDTools/QT_ref_base.jld")["data"]
-            P_ref = load("/Users/msirdey/Documents/FGSE/StefanSchmalholz/StagFDTools_commitb5a7ed1/StagFDTools/P_ref_base.jld")["data"]
+            𝐏  .= [M.Pt.Pt;]
 
-            println("  *******    Comparaison MATRICES    *******")
-            println(findmax(K_ref .- 𝐊))
-            println(findmax(Q_ref .- 𝐐))
-            println(findmax(QT_ref .- 𝐐ᵀ))
-            println(findmax(P_ref .- 𝐏))=#
             #--------------------------------------------#
      
             # Direct-iterative solver
@@ -291,97 +317,82 @@ include("rheology_var.jl")
             #--------------------------------------------#
             # Line search & solution update
             @timeit to "Line search" imin = LineSearch_var!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
-            UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
-            TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
+            UpdateSolution_var!(V, Pt, α[imin]*dx, number, type, nc)
+            TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
         end
-
-        # Norme L2
-        normeL2_Pt = norm(Pt) / sqrt(size(Pt,1))
-        println("norme L2 Pt = ", normeL2_Pt)
-        normeL2_Vx = norm(V.x) / sqrt(size(V.x,1))
-        println("norme L2 Vx = ", normeL2_Vx)
-        normeL2_Vy = norm(V.y) / sqrt(size(V.y,1))
-        println("norme L2 Vy = ", normeL2_Vy)
 
         # Update pressure
-        Pt .+= ΔPt.c
+        Pt .+= ΔPt.c 
 
-        # Evaluate analytical solution
-        p_ana = zeros(nc.x, nc.y)
-        for i=1:nc.x, j=1:nc.y
-            sol       = Stokes2D_Schmid2003( [xc[i]; yc[j]] )
-            p_ana[i,j]    = sol.p
-        end
-        println("Max diff of Pt")
-        println(findmax(p_ana - Pt[inx_c,iny_c]))
-        Vy_ana = zeros(nc.x, nc.y+1)
-        for i=1:nc.x, j=1:nc.y+1
-            sol       = Stokes2D_Schmid2003( [xc[i]; yv[j]] )
-            Vy_ana[i,j]   = sol.V[2]
-        end
-        println("Max diff of V.y")
-        println(findmax(Vy_ana - V.y[inx_Vy,iny_Vy]))
-        Vx_ana = zeros(nc.x+1, nc.y)
-        for i=1:nc.x+1, j=1:nc.y
-            sol       = Stokes2D_Schmid2003( [xv[i]; yc[j]] )
-            Vx_ana[i,j]   = sol.V[1]
-        end
-        println("Max diff of V.x")
-        println(findmax(Vx_ana - V.x[inx_Vx,iny_Vx]))
+        # Remove mean 
+        Pt[inx_c,iny_c]' .-= mean(Pt[inx_c,iny_c])
 
+        ϵV = (
+        x   = zero(BC.Vx),
+        y   = zero(BC.Vy),
+        )
+        ϵP   = zero(Pt)
+
+        # Compute errors
+        for I in eachindex(Pt[inx_c,iny_c])        
+            ϵP[I] = abs(p_ana[I] - Pt[inx_c,iny_c][I])
+        end
+
+        for I in eachindex(V.x)
+            ϵV.x[I] = abs(Vx_ana[I] - V.x[I])
+        end
+
+        for I in eachindex(V.y)
+            ϵV.y[I] = abs(Vy_ana[I] - V.y[I])
+        end
+
+        @info mean(abs.(ϵV.x))
+        @info mean(abs.(ϵV.y))
+        @info mean(abs.(ϵP))
+
+        # Visualisation Analytical solutions V.x V.y Pt
+        p3 = heatmap(xv, yc, Vx_ana[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv_g), title="Vx analytic", color=:vik)
+        p4 = heatmap(xc, yv, Vy_ana[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc_g), title="Vy analytic", color=:vik)
+        p2 = heatmap(xc, yc, p_ana'.-mean(p_ana), aspect_ratio=1, xlim=extrema(xc), title="Pt analytic", color=:vik, clim=extrema(p_ana))
+        p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright, title=BC_template)
+        p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
+        p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
+        p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
+        display(plot(p1, p2, p3, p4, layout=(2,2)))
+        sleep(6)
+
+        # Solution V.x V.y Pt
         p3 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Vx", color=:vik)
         p4 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy", color=:vik)
         p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]'.-mean( Pt[inx_c,iny_c]), aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik, clim=extrema(p_ana))
-        
         p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright, title=BC_template)
         p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
         p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
         p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
-        
         display(plot(p1, p2, p3, p4, layout=(2,2)))
-        sleep(20)
+        sleep(6)
 
-        p3 = heatmap(xv, yc, Vx_ana', aspect_ratio=1, xlim=extrema(xv), title="Vx", color=:vik)
-        p4 = heatmap(xc, yv, Vy_ana', aspect_ratio=1, xlim=extrema(xc), title="Vy", color=:vik)
-        p2 = heatmap(xc, yc,  p_ana'.-mean(p_ana), aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik, clim=extrema(p_ana))
-        
+        # Visulisation Epsi
+        p3 = heatmap(xv, yc, ϵV.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Vx Epsi", color=:vik)
+        p4 = heatmap(xc, yv, ϵV.y[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vy Epsi", color=:vik)
+        p2 = heatmap(xc, yc, ϵP[inx_c,iny_c], aspect_ratio=1, xlim=extrema(xc_g), title="Pt Epsi", color=:vik)
+        p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright, title="Convergence")
+        p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
+        p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
+        p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
+        display(plot(p1, p2, p3, p4, layout=(2,2)))
+        sleep(6)
+
+        # Visualisation of difference between analytical solution and numerical solution
+        p3 = heatmap(xv, yc, (V.x[inx_Vx,iny_Vx]'-Vx_ana[inx_Vx,iny_Vx]') / sqrt(size(Vx_ana[inx_Vx,iny_Vx]',1)), aspect_ratio=1, xlim=extrema(xv_g), title="Vx diff", color=:vik)
+        p4 = heatmap(xc, yv, (V.y[inx_Vx,iny_Vx]'-Vy_ana[inx_Vx,iny_Vx]') / sqrt(size(Vy_ana[inx_Vx,iny_Vx]',1)), aspect_ratio=1, xlim=extrema(xc_g), title="Vy diff", color=:vik)
+        p2 = heatmap(xc, yc, ((Pt'[inx_c,iny_c].-mean( Pt[inx_c,iny_c])) - (p_ana'.-mean(p_ana))) / sqrt(size(p_ana,1)), aspect_ratio=1, xlim=extrema(xc), title="Pt diff", color=:vik)
         p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright, title=BC_template)
         p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
         p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
         p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
-        
-        # Norme L2
-        normeL2_Pt = norm(p_ana) / sqrt(size(p_ana,1))
-        println("norme L2 Pt ana = ", normeL2_Pt)
-        normeL2_Vx = norm(Vx_ana) / sqrt(size(Vx_ana,1))
-        println("norme L2 Vx ana = ", normeL2_Vx)
-        normeL2_Vy = norm(Vy_ana) / sqrt(size(Vy_ana,1))
-        println("norme L2 Vy ana = ", normeL2_Vy)
-
         display(plot(p1, p2, p3, p4, layout=(2,2)))
-        sleep(20)
-
-
-        p3 = heatmap(xv, yc, (V.x[inx_Vx,iny_Vx]'-Vx_ana') / sqrt(size(Vx_ana',1)), aspect_ratio=1, xlim=extrema(xv), title="Vx", color=:vik)
-        p4 = heatmap(xc, yv, (V.y[inx_Vy,iny_Vy]'-Vy_ana') / sqrt(size(Vy_ana',1)), aspect_ratio=1, xlim=extrema(xc), title="Vy", color=:vik)
-        p2 = heatmap(xc, yc, ((Pt[inx_c,iny_c]'.-mean( Pt[inx_c,iny_c])) - (p_ana'.-mean(p_ana))) / sqrt(size(p_ana,1)), aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik)
-        
-        p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright, title=BC_template)
-        p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
-        p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
-        p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
-        
-        # Norme L2
-        normeL2_Pt = norm((Pt[inx_c,iny_c]'-p_ana')) / sqrt(size(p_ana,1))
-        println("norme L2 Pt diff= ", normeL2_Pt)
-        normeL2_Vx = norm(V.x[inx_Vx,iny_Vx]'-Vx_ana') / sqrt(size(Vx_ana',1))
-        println("norme L2 Vx diff= ", normeL2_Vx)
-        normeL2_Vy = norm(V.y[inx_Vy,iny_Vy]'-Vy_ana') / sqrt(size(Vy_ana',1))
-        println("norme L2 Vy diff= ", normeL2_Vy)
-
-        display(plot(p1, p2, p3, p4, layout=(2,2)))
-        sleep(20)
-
+        sleep(6)
 
     end
 
@@ -392,25 +403,23 @@ end
 
 let
     # # Boundary condition templates
-    BCs = [
-        :free_slip,
-    ]
+    #BCs = [
+    #    :free_slip,
+    #]
 
     # # Boundary deformation gradient matrix
     # D_BCs = [
     #     @SMatrix( [1 0; 0 -1] ),
     # ]
 
-    # BCs = [
+    BCs = [
     #     # :EW_periodic,
-    #     :all_Dirichlet,
-    # ]
+         :all_Dirichlet,
+     ]
 
     # Boundary deformation gradient matrix
     D_BCs = [
-        #  @SMatrix( [0 1; 0  0] ),
-         @SMatrix( [-1 0; 0 1] ),
-        # @SMatrix( [1 0; 0 -1] ),
+         @SMatrix( [1 0; 0 -1] ),
     ]
 
     # Run them all

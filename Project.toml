@@ -28,6 +28,7 @@ UnPack = "3a884ed6-31ef-47d7-9d2a-63182c4928ed"
 [compat]
 DifferentiationInterface = "0.6.27"
 Distributions = "0.25.120"
+Enzyme = "0.13.93"
 ExactFieldSolutions = "0.1.6"
 ForwardDiff = "0.10.38"
 GridGeometryUtils = "0.1.7"

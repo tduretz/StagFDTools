@@ -10,7 +10,7 @@ function normal_linspace_interval(inflimit::Float64, suplimit::Float64, μ::Floa
 end
 
 
-function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, ΔPt, type, BC, materials, phases, Δ)
+function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
 
     _ones = @SVector ones(4)
 
@@ -105,12 +105,11 @@ function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, �
 
             # Visco-elasticity
             G     = materials.G[phases.c[i,j]]
-            #τ̄xy0  = av(τxy0)
             ε̇vec  = @SVector([ε̇xx[1]+τ0.xx[i,j]/(2*G[1]*Δ.t[1]), ε̇yy[1]+τ0.yy[i,j]/(2*G[1]*Δ.t[1]), ε̇̄xy[1]+τ̄xy0[1]/(2*G[1]*Δ.t[1]), Pt[i,j]])
             # Tangent operator used for Newton Linearisation
             Δt =  Δ.t[1]
-            jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_var!, ε̇vec, Const(materials), Const(phases.c[i,j]), Const(Δt))
-            
+            jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_var!, ε̇vec, Const(Dkk[1]), Const(Pt0[i,j]), Const(materials), Const(phases.c[i,j]), Const(Δt))
+
             # Why the hell is enzyme breaking the Jacobian into vectors??? :D
             # jac.derivs = ∂ (output StressVector) / ∂ε̇vec -> (Tuple(4) * (Svector{4}, Float, Float), nothing, nothing, nothing)
             # jac.derivs[1] = tuple from enzyme, Tuple(4) * (Svector{4}, Float, Float), containing the 4 derivatives with respect to each variable
@@ -233,21 +232,15 @@ function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, �
             τ̄xx0[i] = mean(τxx0[i,:])
             τ̄yy0[i] = mean(τyy0[i,:])
         end
-
-        #ε̇̄xx   = av(ε̇xx)
-        #ε̇̄yy   = av(ε̇yy)
         
         # Visco-elasticity
         G     = materials.G[phases.v[i+1,j+1]]
-        #τ̄xx0  = av(τxx0)
-        #τ̄yy0  = av(τyy0)
-        #P̄     = av(   P)
 
         ε̇vec  = @SVector([ε̇̄xx[1]+τ̄xx0[1]/(2*G[1]*Δ.t[1]), ε̇̄yy[1]+τ̄yy0[1]/(2*G[1]*Δ.t[1]), ε̇xy[1]+τ0.xy[i+1,j+1]/(2*G[1]*Δ.t[1]), P̄[1]])
         
         # Tangent operator used for Newton Linearisation
         Δt = Δ.t[1]
-        jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_var!, ε̇vec, Const(materials), Const(phases.v[i+1,j+1]), Const(Δt))
+        jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_var!, ε̇vec, Const(Dkk[1]), Const(Pt0[i,j]),Const(materials), Const(phases.v[i+1,j+1]), Const(Δt))
 
         # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
         @views 𝐷_ctl.v[i+1,j+1][:,1] .= jac.derivs[1][1][1]
@@ -302,6 +295,7 @@ function SetBCVx1_var(Vx, typex, bcx, Δx, Δy)
             MVx[end,jj] = fma(2,-Δx[end]*bcx[end,jj], Vx[end-1,jj])
         end
     end
+
     return SMatrix(MVx)
 end
 
@@ -421,14 +415,14 @@ function ResidualMomentum2D_x_var!(R, V, P, P0, ΔP, τ0, 𝐷, phases, material
                 Δy_loc     = SVector{4}(Δ.y[jj] for jj in j-2:j+1)
             end
 
-            R.x[i,j]   = SMomentum_x_Generic_var(Vx_loc, Vy_loc, P_loc, ΔP_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δx_loc, Δy_loc, Δ.t[1])
+            R.x[i,j]   = SMomentum_x_Generic_var(Vx_loc, Vy_loc, P_loc, ΔP_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δx_loc, Δy_loc, Δ.t[1], i, j)
         end
     end
     return nothing
 end
 
 
-function SMomentum_x_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δx, Δy, Δt)
+function SMomentum_x_Generic_var(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δx, Δy, Δt, i, j)
 
     # BC
     Vx = SetBCVx1_var(Vx_loc, type.x, bcv.x, Δx, Δy)
@@ -780,7 +774,7 @@ function AssembleMomentum2D_x_var!(K, V, P, P0, ΔP, τ0, 𝐷, phases, material
             fill!(∂R∂Vy, 0e0)
             fill!(∂R∂Pt, 0e0)
             
-            autodiff(Enzyme.Reverse, SMomentum_x_Generic_var, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ΔP_loc), Const(τ0_loc), Const(D), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δx_loc), Const(Δy_loc), Const(Δt_loc))
+            autodiff(Enzyme.Reverse, SMomentum_x_Generic_var, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ΔP_loc), Const(τ0_loc), Const(D), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δx_loc), Const(Δy_loc), Const(Δt_loc), Const(i), Const(j))
             # Vx --- Vx
             Local = SMatrix{3,3}(num.Vx[ii, jj] for ii in i-1:i+1, jj in j-1:j+1) .* pattern[1][1]
             for jj in axes(Local,2), ii in axes(Local,1)
@@ -932,8 +926,8 @@ function LineSearch_var!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, �
         V.x .= Vi.x 
         V.y .= Vi.y
         Pt  .= Pti
-        UpdateSolution!(V, Pt, α[i].*dx, number, type, nc)
-        TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, ΔPt, type, BC, materials, phases, Δ)
+        UpdateSolution_var!(V, Pt, α[i].*dx, number, type, nc)
+        TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
         ResidualContinuity2D_var!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
         ResidualMomentum2D_x_var!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
         ResidualMomentum2D_y_var!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
@@ -944,4 +938,74 @@ function LineSearch_var!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, �
     V.y .= Vi.y
     Pt  .= Pti
     return imin
+end
+
+
+function UpdateSolution_var!(V, Pt, dx, number, type, nc)
+
+    nVx, nVy   = maximum(number.Vx), maximum(number.Vy)
+
+    for j=1:size(V.x,2), i=1:size(V.x,1)
+        if type.Vx[i,j] == :in
+            ind = number.Vx[i,j]
+            V.x[i,j] += dx[ind]
+        end
+    end
+ 
+    for j=1:size(V.y,2), i=1:size(V.y,1)
+        if type.Vy[i,j] == :in
+            ind = number.Vy[i,j] + nVx
+            V.y[i,j] += dx[ind]
+        end
+    end
+    
+    for I in eachindex(Pt)
+        if type.Pt[I] == :in
+            ind = number.Pt[I] + nVx + nVy
+            Pt[I] += dx[ind]
+        end
+    end
+
+    # Set E/W periodicity
+    for j=2:nc.y+3-1
+        if type.Vx[nc.x+3-1,j] == :periodic
+            V.x[nc.x+3-1,j] = V.x[2,j]
+            V.x[nc.x+3-0,j] = V.x[3,j]
+            V.x[       1,j] = V.x[nc.x+3-2,j]
+        end
+        if type.Vy[nc.x+3,j] == :periodic
+            V.y[nc.x+3-0,j] = V.y[3,j]
+            V.y[nc.x+3+1,j] = V.y[4,j]
+            V.y[1,j]        = V.y[nc.x+3-2,j]
+            V.y[2,j]        = V.y[nc.x+3-1,j]
+        end
+        if j<=nc.y+2
+            if type.Pt[nc.x+2,j] == :periodic
+                Pt[nc.x+2,j] = Pt[2,j]
+                Pt[1,j]      = Pt[nc.x+1,j]
+            end
+        end
+    end 
+
+    # Set S/N periodicity
+    for i=2:nc.x+3-1
+        if type.Vx[i,nc.y+3] == :periodic
+            V.x[i,nc.y+3-0] = V.x[i,3]
+            V.x[i,nc.y+3+1] = V.x[i,4]
+            V.x[i,1]        = V.x[i,nc.y+3-2]
+            V.x[i,2]        = V.x[i,nc.y+3-1]
+        end
+        if type.Vy[i,nc.y+3-1] == :periodic
+            V.y[i,nc.y+3-1] = V.y[i,2]
+            V.y[i,nc.y+3-0] = V.y[i,3]
+            V.y[i,       1] = V.y[i,nc.y+3-2]
+        end
+        if i<=nc.x+2
+            if type.Pt[i,nc.y+2] == :periodic
+                Pt[i,nc.y+2] = Pt[i,2]
+                Pt[i,1]      = Pt[i,nc.y+1]
+            end
+        end
+    end
+
 end
