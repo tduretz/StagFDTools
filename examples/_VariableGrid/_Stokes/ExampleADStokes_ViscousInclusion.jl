@@ -254,7 +254,7 @@ include("rheology_var.jl")
 
     #--------------------------------------------#
 
-    for it=1:1#nt
+    for it=1:nt
 
         @printf("Step %04d\n", it)
         err.x .= 0.
