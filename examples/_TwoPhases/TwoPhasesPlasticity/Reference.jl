@@ -6,7 +6,7 @@ using Enzyme  # AD backends you want to use
 
     sc = (σ=1e7, t=1e10, L=1e3)
 
-    homo   = true
+    homo   = false
 
     # Time steps
     nt     = 30
@@ -31,15 +31,19 @@ using Enzyme  # AD backends you want to use
 
     # Material parameters
     materials = ( 
+        g     = [0. 0.] / (sc.L/sc.t^2),
         oneway       = false,
         compressible = true,
         plasticity   = :off,
         linearizeϕ   = false,              # !!!!!!!!!!!
         single_phase = false,
         n     = [1.0    1.0  ],
+        n_CK  = [1.0    1.0   1.0  ],
         ηs0   = [1e22   1e19 ]/sc.σ/sc.t, 
         ηΦ    = [2e22   2e22 ]/sc.σ/sc.t,
         G     = [3e10   3e10 ]./sc.σ, 
+        ρs    = [2800   2800 ]/(sc.σ*sc.t^2/sc.L^2),
+        ρf    = [1000   1000 ]/(sc.σ*sc.t^2/sc.L^2),
         Kd    = [1e30   1e30 ]./sc.σ,  # not needed
         Ks    = [1e11   1e11 ]./sc.σ,
         KΦ    = [1e10   1e10  ]./sc.σ,
@@ -176,22 +180,6 @@ using Enzyme  # AD backends you want to use
         @views phases.v[inx_v, iny_v][(X.v.x.^2 .+ (X.v.y').^2) .<= rad^2] .= 2
     end
 
-    # Xc = xc .+ 0*yc'
-    # Yc = 0*xc .+ yc'
-    # Xv = xv .+ 0*yv'
-    # Yv = 0*xv .+ yv'
-    # α  = 30.
-    # # ax = 2
-    # # ay = 1/2
-    # ax = 1
-    # ay = 1
-    # X_tilt = cosd(α).*Xc .- sind(α).*Yc
-    # Y_tilt = sind(α).*Xc .+ cosd(α).*Yc
-    # phases.c[inx_c, iny_c][(X_tilt.^2 ./ax.^2 .+ (Y_tilt).^2 ./ay^2) .< r^2 ] .= 2
-    # X_tilt = cosd(α).*Xv .- sind(α).*Yv
-    # Y_tilt = sind(α).*Xv .+ cosd(α).*Yv
-    # phases.v[inx_v, iny_v][(X_tilt.^2 ./ax.^2 .+ (Y_tilt).^2 ./ay^2) .< r^2 ] .= 2
-
     # Boundary condition values
     BC = ( Vx = zeros(size_x...), Vy = zeros(size_y...), Pt = zeros(size_c...), Pf = zeros(size_c...))
     BC.Vx[     2, iny_Vx] .= (type.Vx[     1, iny_Vx] .== :Neumann_normal) .* D_BC[1,1]
@@ -246,7 +234,7 @@ using Enzyme  # AD backends you want to use
             # Residual check
             TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
             ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-            ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+            ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
             ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
             ResidualFluidContinuity2D!(R, V, P, ΔP, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
 
@@ -278,7 +266,7 @@ using Enzyme  # AD backends you want to use
             # Assembly
             @info "Assembly, ndof  = $(nVx + nVy + nPt + nPf)"
             AssembleMomentum2D_x!(M, V, P, P0, ΔP, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-            AssembleMomentum2D_y!(M, V, P, P0, ΔP, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+            AssembleMomentum2D_y!(M, V, P, P0, ΔP, τ0, Φ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
             AssembleContinuity2D!(M, V, P, P0, Φ0, phases, materials, number, pattern, type, BC, nc, Δ)
             AssembleFluidContinuity2D!(M, V, P, ΔP, P0, Φ0, phases, materials, number, pattern, type, BC, nc, Δ)
 
@@ -382,7 +370,8 @@ using Enzyme  # AD backends you want to use
         # Residual check
         TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
         ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-        ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+                    ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+
         ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
         ResidualFluidContinuity2D!(R, V, P, ΔP, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
 
@@ -527,7 +516,7 @@ end
 
 function Run()
 
-    nc = (x=10, y=10)
+    nc = (x=150, y=100)
 
     # Mode 0   
     main(nc);

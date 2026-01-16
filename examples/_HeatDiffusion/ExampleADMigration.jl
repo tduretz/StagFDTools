@@ -1,4 +1,5 @@
-using StagFDTools, StagFDTools.Poisson, ExtendableSparse, StaticArrays, LinearAlgebra, Statistics, UnPack, Plots, ExactFieldSolutions
+using StagFDTools, StagFDTools.Poisson, ExtendableSparse, StaticArrays, LinearAlgebra, Statistics, UnPack, Plots
+using GridGeometryUtils
 using TimerOutputs
 # using Enzyme
 using ForwardDiff, Enzyme  # AD backends you want to use 
@@ -74,8 +75,8 @@ function Diffusion2D(u_loc, k, s, type_loc, bcv_loc, Δ, u0, ρ, cp)
     # Heat flux for each face based on finite differences
     qxW = -k.xx[1]*(uC - uW)/Δ.x  # West
     qxE = -k.xx[2]*(uE - uC)/Δ.x  # East
-    qyS = -k.yy[1]*(uC - uS)/Δ.y  # South
-    qyN = -k.yy[2]*(uN - uC)/Δ.y  # North
+    qyS = -k.yy[1]*((uC - uS)/Δ.y + 1)  # South
+    qyN = -k.yy[2]*((uN - uC)/Δ.y + 1)  # North
 
     # Return the residual function based on finite differences
     # r(u) = ∇⋅𝐪 - s + ρc*dudt --> r(u) = 0    
@@ -235,10 +236,10 @@ function RunDiffusion(n)
     # Define node types 
     type = Fields( fill(:out, (nc.x+2, nc.y+2)) )   # Achtung: geist nodes
     type.u[2:end-1,2:end-1].= :in                   # inside nodes are all type :in
-    @views type.u[end,:]          .= :Dirichlet     # East
-    @views type.u[:,1]            .= :Dirichlet     # South
-    @views type.u[:,end]          .= :Dirichlet     # North
-    @views type.u[1,:]            .= :Dirichlet     # one BC type is :Dirichlet # West
+    @views type.u[end,:]          .= :Neumann     # East
+    @views type.u[:,1]            .= :Neumann     # South
+    @views type.u[:,end]          .= :Neumann     # North
+    @views type.u[1,:]            .= :Neumann     # one BC type is :Dirichlet # West
 
     # Define values of the boundary conditions
     bc_val = Fields( fill(0., (nc.x+2, nc.y+2)) )   # Achtung: geist nodes
@@ -255,14 +256,10 @@ function RunDiffusion(n)
     printxy(number.u) 
 
     # Parameters
-    K          = 1.0   # diffusivity (kappa), it is constant and isotropic in the solution
-    σ          = 0.2
-    T0         = 50.0
-    params     = (T0 = T0, K = K, σ = σ) # Tuple of values  
     L          = 1.                      # Domain extent
     total_time = 0.2
     nout       = 20 
-    Δt0        = 0.01/n
+    Δt0        = 0.0001/n
     nt         = Int64(ceil(total_time/Δt0))
     t          = 0.
 
@@ -290,21 +287,46 @@ function RunDiffusion(n)
     s      = zeros(nc.x+2, nc.y+2)     # forcing term
     u      = zeros(nc.x+2, nc.y+2)     # solution
     u0     = zeros(nc.x+2, nc.y+2)     # solution of the previous time step
-    u_ana  = zeros(nc.x+2, nc.y+2)     # analytical solution
-    u_devi = zeros(nc.x+2, nc.y+2)     # difference between the numerical and the analytic solution
-    k      = (x = (xx= ones(nc.x+1,nc.y), xy=zeros(nc.x+1,nc.y)), # conductivity tensor (can be simplidied)
+    k      = (x = (xx= ones(nc.x+1,nc.y), xy=zeros(nc.x+1,nc.y)), # conductivity tensor (can be simplified)
               y = (yx=zeros(nc.x,nc.y+1), yy= ones(nc.x,nc.y+1)))
     Δ      = (x=L/nc.x, y=L/nc.y, t=Δt0)
-    xc     = LinRange(-L/2-Δ.x/2, L/2+Δ.x/2, nc.x+2)
-    yc     = LinRange(-L/2-Δ.y/2, L/2+Δ.y/2, nc.y+2)
+    xce    = LinRange(-L/2-Δ.x/2, L/2+Δ.x/2, nc.x+2)
+    yce    = LinRange(-L/2-Δ.y/2, L/2+Δ.y/2, nc.y+2)
+    xc     = LinRange(-L/2+Δ.x/2, L/2-Δ.x/2, nc.x)
+    yc     = LinRange(-L/2+Δ.y/2, L/2-Δ.y/2, nc.y)
+    xv     = LinRange(-L/2, L/2, nc.x+1)
+    yv     = LinRange(-L/2, L/2, nc.y+1)
     b      = zeros(nc.x*nc.y)
 
     # Initial condititon
-    AnalyticalDiffusion2D(u, xc, yc, t, nc, params) 
-    u_ana .= u
     ρ     .= 1.0
     cp    .= 1.0
     s     .= 0.0 # no source in the solution (just diffusion of initial Gaussian)
+
+    layer =  Rectangle((-0.0, 35.), 10., 0.15; θ = 0.0)
+    dyke  =  Rectangle((-0.0, -.0), 0.1, 0.6; θ = 0.0)
+    
+    for i in inx, j in iny
+        x = xce[i]
+        y = yce[j]+0.3
+        u[i,j] = exp(- (x^2)/0.2^2 - (y^2)/0.1^2 )
+    end
+
+    for i in 1:size(k.x.xx,1), j in 1:size(k.x.xx,2)
+        𝐱 = @SVector( [xv[i]; yc[j]] )
+        if inside(𝐱, layer) || inside(𝐱, dyke)
+            k.x.xx[i,j] = 1e1
+        end
+    end
+
+    for i in 1:size(k.y.yy,1), j in 1:size(k.y.yy,2)
+        𝐱 = @SVector( [xc[i]; yv[j]] )
+        if inside(𝐱, layer) || inside(𝐱, dyke)
+            k.y.yy[i,j] = 1e1
+        end
+    end
+
+    @show sum(u)
     
     # Sparse matrix assembly
     nu  = maximum(number.u)
@@ -315,9 +337,6 @@ function RunDiffusion(n)
         t += Δ.t
 
         u0 .= u  # store the previous solution
-
-        # Update BC
-        BC_Analytical(bc_val, xc, yc, t, L, params)
 
         # Residual check: div( q ) - s = r
         @timeit to "Residual" ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ, u0, ρ, cp) 
@@ -341,27 +360,20 @@ function RunDiffusion(n)
         ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ, u0, ρ, cp)     
         @info norm(r)/sqrt(length(r))
 
-        # Analytic solution
-        AnalyticalDiffusion2D(u_ana, xc, yc, t, nc, params)
-
-        # Calculate error
-        @views u_devi[inx,iny] .= u[inx,iny] .- u_ana[inx,iny]    # Deviation between the numerical and analtical solution
-
         # Visualization
         if mod(it, nout) == 0
-            p1 = heatmap(xc[inx], yc[iny], u[inx,iny]', aspect_ratio=1, xlim=extrema(xc), title="u")
-            p2 = heatmap(xc[inx], yc[iny], u_ana[inx,iny]', aspect_ratio=1, xlim=extrema(xc), title="u_exact")
-            p3 = heatmap(xc[inx], yc[iny], u_devi[inx,iny]', aspect_ratio=1, xlim=extrema(xc), title="u - u_exact")
+            p1 = heatmap(xce[inx], yce[iny], u[inx,iny]', aspect_ratio=1, xlim=extrema(xc), title="u")
+            p2 = heatmap(xv, yce[iny], k.x.xx', aspect_ratio=1, xlim=extrema(xc), title="u")
             qx = -diff(u[inx,iny],dims=1)/Δ.x
             qy = -diff(u[inx,iny],dims=2)/Δ.y
-            heatmap(xc[1:end-3], yc[iny], qx')
-            heatmap(xc[inx], yc[1:end-3], qy')
-            display(plot(p1,p2,p3, layout=(2,2)))
+            heatmap(xce[1:end-3], yce[iny], qx')
+            heatmap(xce[inx], yce[1:end-3], qy')
+            display(plot(p1, p2, layout=(2,1)))
             display(to)
         end
-
-        @info "Error = ", mean(u .- u_ana)
     end
+
+    @show sum(u)
 
 end
 

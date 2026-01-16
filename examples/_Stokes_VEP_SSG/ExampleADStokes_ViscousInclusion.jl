@@ -18,6 +18,8 @@ using TimerOutputs
     materials = ( 
         compressible = false,
         plasticity   = :none,
+        g    = [0.0    0.0  ],
+        ρ    = [1.0    1.0  ],
         n    = [1.0    1.0  ],
         η0   = [1e0    1e5  ], 
         G    = [1e6    1e6  ],
@@ -30,7 +32,7 @@ using TimerOutputs
         cosϕ = [0.0    0.0  ],
         sinϕ = [0.0    0.0  ],
         sinψ = [0.0    0.0  ],
-    )
+    )           # 1     # 2
     materials.B   .= (2*materials.η0).^(-materials.n)
 
     # Time steps
@@ -255,10 +257,13 @@ let
     #     :all_Dirichlet,
     # ]
 
-    # Boundary deformation gradient matrix
+    # Boundary velocity gradient matrix
+    er    = -1
+    # ∂𝐕∂𝐱 - velocity gradient tensor 
     D_BCs = [
         #  @SMatrix( [0 1; 0  0] ),
-        @SMatrix( [1 0; 0 -1] ),
+        @SMatrix( [er 0;        #    ∂Vx∂x ∂Vx∂y
+                   0 -er] ),    #    ∂Vy∂x ∂Vy∂y  div(V) = 0 = ∂Vx∂x + ∂Vy∂y --> ∂Vy∂y = - ∂Vx∂x
     ]
 
     # Run them all

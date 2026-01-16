@@ -185,8 +185,7 @@ function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, P
             Δx_Vx_loc     = SVector{3}(Δ.x[ii] for ii in i:i+2)
             Δy_Vy_loc     = SVector{3}(Δ.y[jj] for jj in j:j+2)
         end
-    
-        
+           
         Vx     = SetBCVx1_var(Vx, typex, bcx, Δx_loc, Δy_loc)
         Vy     = SetBCVy1_var(Vy, typey, bcy, Δx_loc, Δy_loc)
 

@@ -1,4 +1,5 @@
-using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, GLMakie, LinearAlgebra, SparseArrays, Printf
+using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, GLMakie, LinearAlgebra, SparseArrays, Printf, JLD2
+using GridGeometryUtils
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
@@ -8,7 +9,7 @@ using TimerOutputs
     #--------------------------------------------#
 
     # Resolution
-    nc = (x = 20, y = 40)
+    nc = (x = 128, y = 128)
 
     # Boundary loading type
     config = BC_template
@@ -16,29 +17,59 @@ using TimerOutputs
 
     # Material parameters
     materials = ( 
-        compressible = true,
+        compressible = false,
         plasticity   = :none,
-        n    = [1.0    1.0  ],
-        η0   = [1e2    1e-1 ], 
-        G    = [1e1    1e1  ],
-        C    = [150    150  ],
-        ϕ    = [30.    30.  ],
-        ηvp  = [0.5    0.5  ],
-        β    = [1e-2   1e-2 ],
-        ψ    = [3.0    3.0  ],
-        B    = [0.     0.   ],
-        cosϕ = [0.0    0.0  ],
-        sinϕ = [0.0    0.0  ],
-        sinψ = [0.0    0.0  ],
-    )
+        n    = [1.0    1.0    1.0  ],
+        η0   = [1e0    1e-3   1e+3 ], 
+        G    = [1e6    1e6    1e6  ],
+        C    = [150    150    150  ],
+        ϕ    = [30.    30.    30.  ],
+        ηvp  = [0.5    0.5    0.5  ],
+        β    = [1e-2   1e-2   1e-2 ],
+        ψ    = [3.0    3.0    3.0  ],
+        B    = [0.     0.     0.   ],
+        cosϕ = [0.0    0.0    0.0  ],
+        sinϕ = [0.0    0.0    0.0  ],
+        sinψ = [0.0    0.0    0.0  ],
+    )           # 1     # 2
     materials.B   .= (2*materials.η0).^(-materials.n)
+    
+    phase = (3,2,2,3,2,3,2,3,3,2)
+ 
+    L   = (x=1.0, y=1.0)
+    inclusions = (
+        Ellipse((0.0 , 0.0 ), 0.2 , 0.2 ; θ = 0.0),
+        Ellipse((0.2 , 0.4 ), 0.09, 0.09; θ = 0.0),
+        Ellipse((-0.3, 0.4 ), 0.05, 0.05; θ = 0.0),
+        Ellipse((-0.4, -0.3), 0.08, 0.08; θ = 0.0),
+        Ellipse((0.0 , -0.2), 0.08, 0.08; θ = 0.0),
+        Ellipse((-0.3, 0.2 ), 0.1 , 0.1 ; θ = 0.0),
+        Ellipse((0.4 , -0.2), 0.07, 0.07; θ = 0.0),
+        Ellipse((0.3 , -0.4), 0.08, 0.08; θ = 0.0),
+        Ellipse((0.35, 0.2 ), 0.07, 0.07; θ = 0.0),
+        Ellipse((-0.1, -0.4), 0.07, 0.07; θ = 0.0),
+    )
+
+    # With little shift upward to make inclusion cross boundary
+    # inclusions = (
+    #     Ellipse((0.0 , 0.0 ), 0.2 , 0.2 ; θ = 0.0),
+    #     Ellipse((0.2 , 0.5 ), 0.09, 0.09; θ = 0.0),
+    #     Ellipse((-0.3, 0.5 ), 0.05, 0.05; θ = 0.0),
+    #     Ellipse((-0.4, -0.3), 0.08, 0.08; θ = 0.0),
+    #     Ellipse((0.0 , -0.2), 0.08, 0.08; θ = 0.0),
+    #     Ellipse((-0.3, 0.2 ), 0.1 , 0.1 ; θ = 0.0),
+    #     Ellipse((0.4 , -0.2), 0.07, 0.07; θ = 0.0),
+    #     Ellipse((0.3 , -0.4), 0.08, 0.08; θ = 0.0),
+    #     Ellipse((0.35, 0.2 ), 0.07, 0.07; θ = 0.0),
+    #     Ellipse((-0.1, -0.4), 0.07, 0.07; θ = 0.0),
+    # )
 
     # Time steps
     Δt0   = 0.5
     nt    = 1
 
     # Newton solver
-    niter = 3
+    niter = 2
     ϵ_nl  = 1e-8
     α     = LinRange(0.05, 1.0, 10)
 
@@ -91,7 +122,6 @@ using TimerOutputs
 
     #--------------------------------------------#
     # Intialise field
-    L   = (x=1.0, y=1.0)
     Δ   = (x=L.x/nc.x, y=L.y/nc.y, t = Δt0)
 
     # Allocations
@@ -103,7 +133,6 @@ using TimerOutputs
     ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
     τ       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
-
     Pt      = zeros(size_c...)
     Pti     = zeros(size_c...)
     Pt0     = zeros(size_c...)
@@ -121,7 +150,7 @@ using TimerOutputs
     yv = LinRange(-L.y/2, L.y/2, nc.y+1)
     xc = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
     yc = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
-    phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...))  # phase on velocity points
+    phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...)) 
 
     # Initial velocity & pressure field
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
@@ -133,16 +162,32 @@ using TimerOutputs
     BC = ( Vx = zeros(size_x...), Vy = zeros(size_y...))
     BC.Vx[     2, iny_Vx] .= (type.Vx[     1, iny_Vx] .== :Neumann_normal) .* D_BC[1,1]
     BC.Vx[ end-1, iny_Vx] .= (type.Vx[   end, iny_Vx] .== :Neumann_normal) .* D_BC[1,1]
-    BC.Vx[inx_Vx,      2] .= (type.Vx[inx_Vx,      2] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[inx_Vx,     2] .== :Dirichlet_tangent) .* (D_BC[1,1]*xv .+ D_BC[1,2]*yv[1]  )
-    BC.Vx[inx_Vx,  end-1] .= (type.Vx[inx_Vx,  end-1] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[inx_Vx, end-1] .== :Dirichlet_tangent) .* (D_BC[1,1]*xv .+ D_BC[1,2]*yv[end])
+    BC.Vx[inx_Vx,      2] .= (type.Vx[inx_Vx,      2] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[inx_Vx,     2] .== :Dirichlet_tangent) .* (D_BC[1,1]*xv .+ D_BC[1,2]*yv[1]  )*1
+    BC.Vx[inx_Vx,  end-1] .= (type.Vx[inx_Vx,  end-1] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[inx_Vx, end-1] .== :Dirichlet_tangent) .* (D_BC[1,1]*xv .+ D_BC[1,2]*yv[end])*1
     BC.Vy[inx_Vy,     2 ] .= (type.Vy[inx_Vy,     1 ] .== :Neumann_normal) .* D_BC[2,2]
     BC.Vy[inx_Vy, end-1 ] .= (type.Vy[inx_Vy,   end ] .== :Neumann_normal) .* D_BC[2,2]
-    BC.Vy[     2, iny_Vy] .= (type.Vy[     2, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[    2, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[1]   .+ D_BC[2,2]*yv)
-    BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
+    BC.Vy[     2, iny_Vy] .= (type.Vy[     2, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[    2, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[1]   .+ D_BC[2,2]*yv)*1
+    BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)*1
 
     # Set material geometry 
-    phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
-    phases.v[inx_v, iny_v][(xv.^2 .+ (yv').^2) .<= 0.1^2] .= 2
+    for i in inx_c, j in iny_c   # loop on centroids
+        𝐱 = @SVector([xc[i-1], yc[j-1]])
+        for inc in eachindex(inclusions)
+            if  inside(𝐱, inclusions[inc])
+                phases.c[i, j] = phase[inc]
+            end
+        end
+    end
+
+    for i in inx_v, j in iny_v   # loop on centroids
+        𝐱 = @SVector([xv[i-1], yv[j-1]])
+        for inc in eachindex(inclusions)
+            if  inside(𝐱, inclusions[inc])
+                phases.v[i, j] = phase[inc]
+            end
+        end
+    end
+
 
     #--------------------------------------------#
 
@@ -173,8 +218,6 @@ using TimerOutputs
             # Residual check        
             @timeit to "Residual" begin
                 TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
-                @show extrema(λ̇.c)
-                @show extrema(λ̇.v)
                 ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
                 ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
                 ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
@@ -218,7 +261,6 @@ using TimerOutputs
             @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
             UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
             TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
-
         end
 
         # Update pressure
@@ -226,26 +268,24 @@ using TimerOutputs
 
         #--------------------------------------------#
 
-        #-----------  
-        fig = Figure(size=(600, 600))
-        #-----------
-        ax  = Axis(fig[1,1], aspect=DataAspect(), title="Vx", xlabel="x", ylabel="y")
-        heatmap!(ax, xv, yc, (V.x[inx_Vx,iny_Vx]))
-        ax  = Axis(fig[1,2], aspect=DataAspect(), title="Vy", xlabel="x", ylabel="y")
-        heatmap!(ax, xc, yv, V.y[inx_Vy,iny_Vy])
-        ax  = Axis(fig[2,1], aspect=DataAspect(), title="Exx", xlabel="x", ylabel="y")
-        # heatmap!(ax, xc, yc,  Pt[inx_c,iny_c])
-        heatmap!(ax, xc, yc,  ε̇.xx[inx_c,iny_c])
-        ExxW = ε̇.xx[2,Int64(floor(nc.y/2))]
-        ExxE = ε̇.xx[end-1,Int64(floor(nc.y/2))]
-        @show ExxW, ExxE
-        ax  = Axis(fig[2,2], aspect=DataAspect(), title="Convergence", xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error")
-        scatter!(ax, 1:niter, log10.(err.x[1:niter]), label="Vx")
-        scatter!(ax, 1:niter, log10.(err.y[1:niter]), label="Vy")
-        scatter!(ax, 1:niter, log10.(err.p[1:niter]), label="Pt")
-        #-----------
+        fig = Figure()
+        ax = Axis(fig[1,1], title="Pt", aspect=DataAspect())
+        heatmap!(ax, xc, yc,  Pt[inx_c,iny_c].-mean( Pt[inx_c,iny_c]), colormap=:turbo, colorrange=(-5,5))                
+        # heatmap!(ax, xc, yc,  Pt[inx_c,iny_c].-mean( Pt[inx_c,iny_c]), colormap=:bluesreds, colorrange=(-10,10))
         display(fig)
-        #-----------
+
+        # Psave = Pt[inx_c,iny_c].-mean( Pt[inx_c,iny_c])
+        # @save "MultiInclusions_StagFD.jld2" P=Psave
+
+        # p3 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xv), title="Vx", color=:vik)
+        # p4 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy", color=:vik)
+        # p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]'.-mean( Pt[inx_c,iny_c]), aspect_ratio=1, xlim=extrema(xc), title="Pt", color=:vik)
+        # p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright, title=BC_template)
+        # p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
+        # p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
+        # p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
+        # display(plot(p1, p2, p3, p4, layout=(2,2)))
+
     end
 
     display(to)
@@ -254,24 +294,29 @@ end
 
 
 let
-    # Boundary condition templates
+    # # Boundary condition templates
     BCs = [
-        # :all_Dirichlet,
-        # :free_slip,
-        # :NS_Neumann,
-        :EW_Neumann,
-        # :NS_periodic,
-        # :EW_periodic,
+        :free_slip,
+        # :no_slip,
     ]
 
+    # # Boundary deformation gradient matrix
+    # D_BCs = [
+    #     @SMatrix( [1 0; 0 -1] ),
+    # ]
+
+    # BCs = [
+    #     # :EW_periodic,
+    #     :all_Dirichlet,
+    # ]
+
     # Boundary velocity gradient matrix
+    er    = -1
+    # ∂𝐕∂𝐱 - velocity gradient tensor 
     D_BCs = [
-        # @SMatrix( [1 0; 0 -1] ),
-        # @SMatrix( [1 0; 0 -1] ),
-        # @SMatrix( [1 0; 0 -1] ),
-        @SMatrix( [1 0; 0 -1] ),
-        # @SMatrix( [0 0; 1  0] ),
-        # @SMatrix( [0 1; 0  0] ),
+        #  @SMatrix( [0 1; 0  0] ),
+        @SMatrix( [er 0;        #    ∂Vx∂x ∂Vx∂y
+                   0 -er] ),    #    ∂Vy∂x ∂Vy∂y  div(V) = 0 = ∂Vx∂x + ∂Vy∂y --> ∂Vy∂y = - ∂Vx∂x
     ]
 
     # Run them all

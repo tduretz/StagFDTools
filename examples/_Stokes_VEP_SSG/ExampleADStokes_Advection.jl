@@ -78,6 +78,8 @@ end
     materials = ( 
         compressible = false,
         plasticity   = :none,
+        g    = [0.0    0.0  ],
+        ρ    = [1.0    1.0  ],
         n    = [1.0    1.0  ],
         η0   = [1e0    1e5  ], 
         G    = [1e60   2e60 ],
@@ -415,7 +417,7 @@ let
     #     :all_Dirichlet,
     # ]
 
-    # Boundary deformation gradient matrix
+    # Boundary velocity gradient matrix
     D_BCs = [
         #  @SMatrix( [0 1; 0  0] ),
         @SMatrix( [1 0; 0 -1] ),

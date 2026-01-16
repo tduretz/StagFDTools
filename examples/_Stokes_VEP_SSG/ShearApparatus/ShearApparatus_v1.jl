@@ -18,7 +18,9 @@ using TimerOutputs, CairoMakie
     materials = ( 
         compressible = true,
         plasticity   = :DruckerPrager,
-        #       rock   gouge  salt 
+        g    = [0. 0.],
+        #      rock   gouge  salt 
+        ρ    = [0.0    0.0    0.0 ],
         n    = [1.0    1.0    1.0 ],      # Power law exponent
         η0   = [1e3    1e3    1e-3],      # Reference viscosity 
         G    = [1e1    2e1    1e1 ],      # Shear modulus

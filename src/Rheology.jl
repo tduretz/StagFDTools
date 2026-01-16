@@ -1,3 +1,9 @@
+abstract type AbstractYield end
+struct DruckerPrager1 <: AbstractYield end
+struct Hyperbolic     <: AbstractYield end
+struct GolchinMCC     <: AbstractYield end
+export DruckerPrager1, Hyperbolic, GolchinMCC
+
 function line(p, K, dt, η_ve, ψ, p1, t1)
     p2 = p1 + K*dt*sind(ψ)  # introduce sinϕ ?
     t2 = t1 - η_ve  
@@ -62,53 +68,97 @@ function Kiss2023(τ, P, η_ve, comp, β, Δt, C, φ, ψ, ηvp, σ_T, δσ_T, pc
     return τc, Pc, λ̇
 end
 
-function F_DP_v1(x, C, σT, cosΨ, sinΨ, ηvp)  
+DruckerPrager(τ, P, C, cosΨ, sinΨ) = τ - C * cosΨ - P*sinΨ
+
+function Yield(x, p, model::DruckerPrager1)  
+    C, cosϕ, sinϕ, cosψ, sinψ, ηvp = p
     ϵ = -1e-13
-    τ = x[1]
-    P = x[2] 
-    λ̇ = x[3]
-    F = τ - C * cosΨ - P*sinΨ
+    τ, P, λ̇ = x[1], x[2], x[3]
+    F = DruckerPrager(τ, P, C, cosϕ, sinϕ)
     return (F - λ̇*ηvp)*(F>ϵ) + (F<ϵ)*λ̇*ηvp
 end
 
-function F_DP_hyperbolic_v1(x, C, σT, cosΨ, sinΨ, ηvp)  
+function Potential(x, p, model::DruckerPrager1)  
+    C, cosϕ, sinϕ, cosψ, sinψ, ηvp = p
     ϵ = -1e-13
-    τ = x[1] 
-    P = x[2] 
-    λ̇ = x[3]
-    F = sqrt( τ^2 + (C * cosΨ - σT*sinΨ)^2) - (P * sinΨ + C * cosΨ) 
+    τ, P, λ̇ = x[1], x[2], x[3]
+    Q = DruckerPrager(τ, P, C, cosψ, sinψ)
+    return Q
+end
+
+Hyperbolic(τ, P, C, cosΨ, sinΨ, σT) = sqrt( τ^2 + (C * cosΨ - σT*sinΨ)^2) - (P * sinΨ + C * cosΨ) 
+
+function Yield(x, p, model::Hyperbolic)  
+    C, cosϕ, sinϕ, cosΨ, sinΨ, σT, ηvp = p
+    ϵ = -1e-13
+    τ, P, λ̇ = x[1], x[2], x[3]
+    F = Hyperbolic(τ, P, C, cosϕ, sinϕ, σT) 
     return (F - λ̇*ηvp)*(F>=ϵ) + (F<ϵ)*λ̇*ηvp
 end
 
-function F_shear(x, τ_trial, ε̇_eff, ηve, C, σT, cosΨ, sinΨ, ηvp)
-    τ    = x[1]
-    λ̇    = x[3]
-    ∂Q∂σ = Enzyme.gradient(Enzyme.Forward, F_DP_hyperbolic_v1, x, Const(C), Const(σT), Const(cosΨ), Const(sinΨ), Const(ηvp))
+function Potential(x, p, model::Hyperbolic)  
+    C, cosϕ, sinϕ, cosΨ, sinΨ, σT, ηvp = p
+    ϵ = -1e-13
+    τ, P, λ̇ = x[1], x[2], x[3]
+    Q = Hyperbolic(τ, P, C, cosΨ, sinΨ, σT) 
+    return Q
+end
+
+@inline Af(p, pc, pt, γ)       = (pc - pt)/(2*π) *(2*atan(γ*(pc+pt-2p)/(2*pc))+π)
+@inline Bf(p, pc, pt, M, C, α) = M*C*exp(α*(p - C)/(pc - pt))
+@inline Cf(pc, pt, γ)          = (pc - pt)/π * atan(γ/2) + (pc + pt)/2  
+
+GolchinMCC(τ, P, A, B, C, β, λ̇, ηvp) =  B*(P - λ̇*ηvp - C)^2/A + A*(τ - λ̇*ηvp - β*(P - λ̇*ηvp))^2/B - A*B
+
+function Yield(x, p, model::GolchinMCC)  
+    M, N, Pt, Pc, α, β, γ, ηvp = p
+    ϵ = -1e-13
+    τ, P, λ̇ = x[1], x[2], x[3]
+    C  = Cf(Pc, Pt, γ) 
+    B  = Bf(P, Pc, Pt, M, C, α) 
+    A  = Af(P, Pc, Pt, γ) 
+    F  = GolchinMCC(τ, P, A, B, C, β, λ̇, 0*ηvp) 
+    return (F - λ̇*ηvp)*(F>=ϵ) + (F<ϵ)*λ̇*ηvp
+    # return (F)*(F>=ϵ) + (F<ϵ)*λ̇*ηvp
+end
+
+function Potential(x, p, model::GolchinMCC)  
+    M, N, Pt, Pc, α, β, γ, ηvp = p
+    ϵ = -1e-13
+    τ, P, λ̇ = x[1], x[2], x[3]
+    C  = Cf(Pc, Pt, γ) 
+    B  = Bf(P, Pc, Pt, N, C, α) 
+    A  = Af(P, Pc, Pt, γ)
+    Q  = GolchinMCC(τ, P, A, B, C, β, λ̇, 0*ηvp) 
+    return Q 
+end
+
+function ResidualDeviator( x, τ_trial, ε̇_eff, ηve, p, model)
+    τ, P, λ̇ = x[1], x[2], x[3]
+    ∂Q∂σ = Enzyme.gradient(Enzyme.Forward, Potential, x, Const(p), Const(model))
     # return ε̇_eff -  τ/2/ηve  - λ̇/2*∂Q∂σ[1][1]
     return τ - τ_trial + ηve*λ̇*∂Q∂σ[1][1]
 end  
 
-function F_vol(x, P_trial, Dkk, P0, K, Δt, C, σT, cosΨ, sinΨ, ηvp)
-    P    = x[2]
-    λ̇    = x[3]
-    ∂Q∂σ = Enzyme.gradient(Enzyme.Forward, F_DP_hyperbolic_v1, x, Const(C), Const(σT), Const(cosΨ), Const(sinΨ), Const(ηvp))
-    # return Dkk + (P - P0)/K/Δt + λ̇*∂Q∂σ[1][2]
+function ResidualVolume( x, P_trial, Dkk, P0, K, Δt, p, model)
+    τ, P, λ̇ = x[1], x[2], x[3]
+    ∂Q∂σ = Enzyme.gradient(Enzyme.Forward, Potential, x, Const(p), Const(model))
     return P - P_trial + K*Δt*λ̇*∂Q∂σ[1][2]
 end  
 
-function RheologyResidual(x, τ_trial, ε̇_eff, P_trial, Dkk, P0, ηve, K, Δt, C, σT, cosΨ, sinΨ, cosϕ, sinϕ, ηvp)
+function RheologyResidual(x, trial, plastic, model)
+    τ_trial, ε̇_eff, P_trial, Dkk, P0, ηve, K, Δt = trial
     return @SVector([
-        F_shear(x, τ_trial, ε̇_eff, ηve, C, σT, cosΨ, sinΨ, ηvp),
-        F_vol(x, P_trial, Dkk, P0, K, Δt, C, σT, cosΨ, sinΨ, ηvp),
-        F_DP_hyperbolic_v1(x,  C, σT, cosϕ, sinϕ, ηvp),
-        # F_DP_v1(x,  C, σT, cosϕ, sinϕ, ηvp),
+        ResidualDeviator(x, τ_trial, ε̇_eff, ηve, plastic, model),
+        ResidualVolume(x, P_trial, Dkk, P0, K, Δt, plastic, model),
+        Yield(x, plastic, model),
     ])
 end
 
-function bt_line_search(Δx, J, x, r, params; α = 1.0, ρ = 0.5, c = 1.0e-4, α_min = 1.0e-8)
+function bt_line_search(Δx, J, x, r, trial, plastic, model; α = 1.0, ρ = 0.5, c = 1.0e-4, α_min = 1.0e-8)
     # Borrowed from RheologicalCalculator
     perturbed_x = @. x + α * Δx
-    perturbed_r = RheologyResidual(x, params...)
+    perturbed_r = RheologyResidual(x, trial, plastic, model)
 
     J_times_Δx = - J * Δx
     while sqrt(sum(perturbed_r .^ 2)) > sqrt(sum((r + (c * α * (J_times_Δx))) .^ 2))
@@ -118,12 +168,12 @@ function bt_line_search(Δx, J, x, r, params; α = 1.0, ρ = 0.5, c = 1.0e-4, α
             break
         end
         perturbed_x = @. x + α * Δx
-        perturbed_r = RheologyResidual(x, params...)
+        perturbed_r = RheologyResidual(x, trial..., plastic, model)
     end
     return α
 end
 
-function DruckerPragerHyperbolic_v1(τII, P, ε̇_eff, Dkk, P0, ηve, β, Δt, C, cosϕ, sinϕ, cosΨ, sinΨ, σT, ηvp)
+function NonLinearReturnMapping(τII, P, ε̇_eff, Dkk, P0, ηve, β, Δt, plastic, model)
     
     tol     = 1e-5
     λ̇       = 0.0
@@ -136,48 +186,49 @@ function DruckerPragerHyperbolic_v1(τII, P, ε̇_eff, Dkk, P0, ηve, β, Δt, C
     αvec = @SVector([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1.0])
     Fvec = @MVector(zeros(length(αvec)))
 
-    R    = RheologyResidual(x, τ_trial, ε̇_eff, P_trial, Dkk, P0, ηve, K, Δt, C, σT, cosΨ, sinΨ, cosϕ, sinϕ, ηvp)
-    nR   = abs(R[3])#norm(R)
+    trial = (τ_trial, ε̇_eff, P_trial, Dkk, P0, ηve, K, Δt)
+
+    R  = RheologyResidual(x, trial, plastic, model)
+    nR = abs(R[3])#norm(R)
     iter, nR0 = 0, nR
     R0 = copy(R)
-
-    # @show R
 
     while nR>tol && (nR/nR0)>tol && iter<itermax
 
         iter += 1
         x0    = copy(x)
-        J     = Enzyme.jacobian(Enzyme.ForwardWithPrimal, RheologyResidual, x, Const(τ_trial), Const(ε̇_eff), Const(P_trial), Const(Dkk), Const(P0), Const(ηve), Const(K), Const(Δt), Const(C), Const(σT), Const(cosΨ), Const(sinΨ), Const(cosϕ), Const(sinϕ), Const(ηvp))
+        J     = Enzyme.jacobian(Enzyme.ForwardWithPrimal, RheologyResidual, x, Const(trial), Const(plastic), Const(model))
         δx    = - J.derivs[1] \ J.val
         nR    = abs(J.val[3])
 
-        # params = (τ_trial, ε̇_eff, P_trial, Dkk, P0, ηve, K, Δt, C, σT, cosΨ, sinΨ, cosϕ, sinϕ, ηvp)
-        # α = bt_line_search(δx, J.derivs[1], x0, J.val, params)
+        # α = bt_line_search(δx, J.derivs[1], x0, J.val, trial, plastic, model)
         # x .= x0 .+  α*δx
-        # # @show iter, nR,  α
 
         for ils in eachindex(αvec)
             x .= x0 .+  αvec[ils]δx
-            R = RheologyResidual(x, τ_trial, ε̇_eff, P_trial, Dkk, P0, ηve, K, Δt, C, σT, cosΨ, sinΨ, cosϕ, sinϕ, ηvp)           
+            R = RheologyResidual(x, trial, plastic, model)           
             Fvec[ils] = norm(R) 
         end
         ibest = argmin(Fvec)
         x .= x0 .+  αvec[ibest]*δx
-        # @show iter, nR,  αvec[ibest]
 
-        if isnan(norm(δx))
-            @show R0
-            @show J.val
-            @show J.derivs[1]
-            @show δx
-            @show iter, nR,  αvec[ibest]
-        end
+        # @show iter, nR,  αvec[ibest], x
+
+        # if isnan(norm(δx))
+        #     @show R0
+        #     @show J.val
+        #     @show J.derivs[1]
+        #     @show δx
+        #     @show iter, nR,  αvec[ibest]
+        #     error()
+        # end
     end
 
     if iter == itermax && (nR>tol && (nR/nR0)>tol )
-        R    = RheologyResidual(x, τ_trial, ε̇_eff, P_trial, Dkk, P0, ηve, K, Δt, C, σT, cosΨ, sinΨ, cosϕ, sinϕ, ηvp)
-        @show τ_trial, P_trial
-        @show τII, P, ε̇_eff, Dkk, P0, ηve, β, Δt, C, cosϕ, sinϕ, cosΨ, sinΨ, σT, ηvp
+        R    = RheologyResidual(x, trial, plastic, model)
+        @show τII*1e9, P*1e9 
+        @show trial
+        @show plastic
         @show R0
         @show R
         @show x
@@ -279,10 +330,26 @@ function LocalRheology(ε̇, Dkk, P0, materials, phases, Δ)
     elseif materials.plasticity === :Kiss2023
         σT   = materials.σT[phases]
         τII, P, λ̇ = Kiss2023(τII, P, ηvep, comp, β, Δ.t, C, ϕ, ψ, ηvp, materials.σT[phases], materials.δσT[phases], materials.P1[phases], materials.τ1[phases], materials.P2[phases], materials.τ2[phases])
-    elseif materials.plasticity === :DruckerPragerHyperbolic
+    elseif materials.plasticity === :Hyperbolic
+        model = Hyperbolic()
         σT   = materials.σT[phases]
-        # τII, P, λ̇ = DruckerPragerHyperbolic(τII, P, ηvep, comp, β, Δ.t, C, cosϕ, sinϕ, cosψ, sinψ, σT, ηvp)
-        τII, P, λ̇ = DruckerPragerHyperbolic_v1(τII, P, ε̇II, Dkk, P0, ηvep, β, Δ.t, C, cosϕ, sinϕ, cosψ, sinψ, σT, ηvp)
+        p = (C, cosϕ, sinϕ, cosψ, sinψ, σT, ηvp)
+        τII, P, λ̇ = NonLinearReturnMapping(τII, P, ε̇II, Dkk, P0, ηvep, β, Δ.t, p, model)
+    elseif materials.plasticity === :DruckerPrager1
+        model = DruckerPrager1()
+        p = (C, cosϕ, sinϕ, cosψ, sinψ, ηvp)
+        τII, P, λ̇ = NonLinearReturnMapping(τII, P, ε̇II, Dkk, P0, ηvep, β, Δ.t, p, model)
+    elseif materials.plasticity === :GolchinMCC
+        model = GolchinMCC()
+        Pt   =-materials.σT[phases]
+        Pc   = materials.Pc[phases]
+        a    = materials.a[phases]
+        b    = materials.b[phases]
+        c    = materials.c[phases]
+        M    = materials.M[phases]
+        N    = materials.N[phases]
+        p    = (M, N, Pt, Pc, a, b, c, ηvp)
+        τII, P, λ̇ = NonLinearReturnMapping(τII, P, ε̇II, Dkk, P0, ηvep, β, Δ.t, p, model)
     end
     # Effective viscosity
     ηvep = τII/(2*ε̇II)
@@ -293,6 +360,8 @@ end
 function LocalRheology_div(ε̇, Dkk, P0, materials, phases, Δ)
 
     eps0 = 0.0*1e-17
+
+    error()
 
     # Effective strain rate & pressure
     ε̇II  = sqrt.( (ε̇[1]^2 + ε̇[2]^2 + (-ε̇[1]-ε̇[2])^2)/2 + ε̇[3]^2 ) + eps0
@@ -344,10 +413,20 @@ function LocalRheology_div(ε̇, Dkk, P0, materials, phases, Δ)
     elseif materials.plasticity === :Kiss2023
         σT   = materials.σT[phases]
         τII, P, λ̇ = Kiss2023(τII, P, ηvep, comp, β, Δ.t, C, ϕ, ψ, ηvp, materials.σT[phases], materials.δσT[phases], materials.P1[phases], materials.τ1[phases], materials.P2[phases], materials.τ2[phases])
-    elseif materials.plasticity === :DruckerPragerHyperbolic
+    elseif materials.plasticity === :Hyperbolic
+        model = Hyperbolic()
         σT   = materials.σT[phases]
-        # τII, P, λ̇ = DruckerPragerHyperbolic(τII, P, ηvep, comp, β, Δ.t, C, cosϕ, sinϕ, cosψ, sinψ, σT, ηvp)
-        τII, P, λ̇ = DruckerPragerHyperbolic_v1(τII, P, ε̇II, Dkk, P0, ηvep, β, Δ.t, C, cosϕ, sinϕ, cosψ, sinψ, σT, ηvp)
+        p = (C, cosϕ, sinϕ, cosψ, sinψ, σT, ηvp)
+        τII, P, λ̇ = NonLinearReturnMapping(τII, P, ε̇II, Dkk, P0, ηvep, β, Δ.t, p, model)
+    elseif materials.plasticity === :DruckerPrager1
+        model = DruckerPrager1()
+        p = (C, cosϕ, sinϕ, cosψ, sinψ, ηvp)
+        τII, P, λ̇ = NonLinearReturnMapping(τII, P, ε̇II, Dkk, P0, ηvep, β, Δ.t, p, model)
+    elseif materials.plasticity === :GolchinMCC
+        model = GolchinMCC()
+        error("2")
+        # p = (C, cosϕ, sinϕ, cosψ, sinψ, ηvp)
+        # τII, P, λ̇ = NonLinearReturnMapping(τII, P, ε̇II, Dkk, P0, ηvep, β, Δ.t, p, model)
     end
     # Effective viscosity
     ηvep = τII/(2*ε̇II)

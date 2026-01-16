@@ -23,37 +23,56 @@ end
     height    = 1.0/sc.L
     thickness = 0.2/sc.L
     θgouge    = (90-θgouge) /180*π
-    Δt0       = 5e0/sc.t
     ε̇xx       = 1e-6*sc.t
-    Pbg       = 5e7/sc.σ
+    Pbg       = 1/2*5e7/sc.σ
 
     # Boundary loading type
-    # config = :EW_Neumann
+    # config = :NS_Neumann
     config = :free_slip
+
+    # # mode 1
+    # nt     = 85*2
+    # Δt0    = 5e0/sc.t
+    # D_BC   = @SMatrix( [  ε̇xx  0.;
+    #                       0  -ε̇xx*0 ])
+
+    # mode 2
+    nt     = 85
+    Δt0       = 5e1/sc.t
     D_BC   = @SMatrix( [  ε̇xx  0.;
-                          0  -ε̇xx*0 ])
+                          0  -ε̇xx ])
 
     # Material parameters
     materials = ( 
         compressible = true,
         # plasticity   = :tensile,
-        plasticity   = :DruckerPragerHyperbolic,
+        # plasticity   = :DruckerPrager1,
+        plasticity   = :GolchinMCC,
+        # plasticity   = :Hyperbolic,
         # plasticity   = :DruckerPrager,
         # plasticity   = :Kiss2023,
+        g    = [0. 0.],
         #      rock   gouge  salt 
+        ρ    = [0.0    0.0    0.0 ],
         n    = [1.0    1.0    1.0 ],      # Power law exponent
         η0   = [1e48   1e28   1e13]./sc.σ./sc.t,      # Reference viscosity 
         G    = [1e10   1e9    1e60]./sc.σ,      # Shear modulus
         C    = [10e6   10e6   15e60]./sc.σ,      # Cohesion
-        ϕ    = [35.    35.    35. ],      # Friction angle
-        ψ    = [10.0   10.0   0.0 ],      # Dilation angle
-        ηvp  = [1e14   1e14   1e14].*1e-4/sc.σ./sc.t, # Viscoplastic regularisation
+        ϕ    = [1.0    1.0    1.0 ]*35,      # Friction angle
+        ψ    = [1.0    1.0    1.0 ]*15 ,      # Dilation angle
+        ηvp  = [1.0    1.0    1.0 ].*5e9/sc.σ./sc.t, # Viscoplastic regularisation
         β    = [1e-11  1e-10 1e-12].*sc.σ,      # Compressibility
         B    = [0.0    0.0    0.0 ],      # (calculated after) power-law creep pre-factor
         cosϕ = [0.0    0.0    0.0 ],      # (calculated after) frictional parameters
         sinϕ = [0.0    0.0    0.0 ],      # (calculated after) frictional parameters
         cosψ = [0.0    0.0    0.0 ],      # (calculated after) frictional parameters
         sinψ = [0.0    0.0    0.0 ],      # (calculated after) frictional parameters
+        M    = [0.0    0.0    0.0 ],
+        N    = [0.0    0.0    0.0 ],
+        Pc   = [6e7    6e7    6e7 ]./sc.σ,  
+        a    = [0.5    0.5    0.5 ],
+        b    = [0.0    0.0    0.0 ],
+        c    = [0.5    0.5    0.5 ],
         σT   = [5e6   5.0e6  5.0e6]./sc.σ, # Kiss2023 / Tensile / Hyperbolic
         δσT  = [1e6   1.0e6  1e6  ]./sc.σ, # Kiss2023
         P1   = [0.0   0.0    0.0  ], # Kiss2023
@@ -75,15 +94,14 @@ end
     @. materials.cosψ  = cosd(materials.ψ)
     @. materials.sinϕ  = sind(materials.ϕ)
     @. materials.sinψ  = sind(materials.ψ)
+    @. materials.M     = 6*sind(materials.ϕ) / (3 - sind(materials.ϕ))
+    @. materials.N     = 6*sind(materials.ψ) / (3 - sind(materials.ψ))
     
     # Geometry
     L     = (x=width/sc.L, y=height/sc.L)
 
-    # Time steps
-    nt    = 85
-
     # Newton solver
-    niter = 15
+    niter = 25
     ϵ_nl  = 1e-9
     α     = LinRange(0.05, 1.0, 10)
 
@@ -122,6 +140,7 @@ end
     nVx   = maximum(number.Vx)
     nVy   = maximum(number.Vy)
     nPt   = maximum(number.Pt)
+    # Newton
     M = Fields(
         Fields(ExtendableSparseMatrix(nVx, nVx), ExtendableSparseMatrix(nVx, nVy), ExtendableSparseMatrix(nVx, nPt)), 
         Fields(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt)), 
@@ -131,6 +150,17 @@ end
     𝐐  = ExtendableSparseMatrix(nVx + nVy, nPt)
     𝐐ᵀ = ExtendableSparseMatrix(nPt, nVx + nVy)
     𝐏  = ExtendableSparseMatrix(nPt, nPt)
+    # Picard
+    M1 = Fields(
+        Fields(ExtendableSparseMatrix(nVx, nVx), ExtendableSparseMatrix(nVx, nVy), ExtendableSparseMatrix(nVx, nPt)), 
+        Fields(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt)), 
+        Fields(ExtendableSparseMatrix(nPt, nVx), ExtendableSparseMatrix(nPt, nVy), ExtendableSparseMatrix(nPt, nPt))
+    )
+    𝐊1  = ExtendableSparseMatrix(nVx + nVy, nVx + nVy)
+    𝐐1  = ExtendableSparseMatrix(nVx + nVy, nPt)
+    𝐐ᵀ1 = ExtendableSparseMatrix(nPt, nVx + nVy)
+    𝐏1  = ExtendableSparseMatrix(nPt, nPt)
+    # Vectors
     dx = zeros(nVx + nVy + nPt)
     r  = zeros(nVx + nVy + nPt)
 
@@ -247,6 +277,12 @@ end
                 AssembleMomentum2D_y!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
             end
 
+             @timeit to "Assembly" begin
+                AssembleContinuity2D!(M1, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, pattern, type, BC, nc, Δ)
+                AssembleMomentum2D_x!(M1, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, pattern, type, BC, nc, Δ)
+                AssembleMomentum2D_y!(M1, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, pattern, type, BC, nc, Δ)
+            end
+
             #--------------------------------------------# 
             # Stokes operator as block matrices
             𝐊  .= [M.Vx.Vx M.Vx.Vy; M.Vy.Vx M.Vy.Vy]
@@ -254,12 +290,23 @@ end
             𝐐ᵀ .= [M.Pt.Vx M.Pt.Vy]
             𝐏  .= M.Pt.Pt
             
+
+            # Stokes operator as block matrices
+            𝐊1  .= [M1.Vx.Vx M1.Vx.Vy; M1.Vy.Vx M1.Vy.Vy]
+            𝐐1  .= [M1.Vx.Pt; M1.Vy.Pt]
+            𝐐ᵀ1 .= [M1.Pt.Vx M1.Pt.Vy]
+            𝐏1  .= M1.Pt.Pt
+            
             #--------------------------------------------#
      
             # Direct-iterative solver
             fu   = @views -r[1:size(𝐊,1)]
             fp   = @views -r[size(𝐊,1)+1:end]
-            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu, ηb=1e3, niter_l=10, ϵ_l=1e-11)
+            if it==22
+                u, p = DecoupledSolver(𝐊1, 𝐐1, 𝐐ᵀ1, 𝐏1, fu, fp; fact=:chol, ηb=1e3, niter_l=10, ϵ_l=1e-11)
+            else
+                u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu, ηb=1e3, niter_l=10, ϵ_l=1e-11)
+            end
             @views dx[1:size(𝐊,1)]     .= u
             @views dx[size(𝐊,1)+1:end] .= p
 
@@ -346,16 +393,40 @@ end
             # τ_ax_rock = materials.C[1]*materials.cosϕ[1] .+ P_ax.*materials.sinϕ[1]
             # lines!(ax, P_ax*sc.σ/1e6, τ_ax_rock*sc.σ/1e6, color=:black)
             
-            P_ax       = LinRange(-materials.σT[1]+1e-4, 20/1e3, 100)
-            τ_ax_rock = @. sqrt(materials.sinϕ[1]*(P_ax + materials.σT[1])*(2*materials.C[1]*materials.cosϕ[1] + P_ax*materials.sinϕ[1] - materials.sinϕ[1]*materials.σT[1]))
-            lines!(ax, P_ax*sc.σ/1e6, τ_ax_rock*sc.σ/1e6, color=:black)
-            # τ_ax_rock = @. materials.σT[1] + P_ax
-            # lines!(ax, P_ax*sc.σ/1e6, τ_ax_rock*sc.σ/1e6, color=:black)
-            
+            # Plot yield
+            P_ax       = LinRange(-materials.σT[1]+1e-4, 80/1e3, 100)
+            τ_ax       = LinRange( 0, 60/1e3, 100)
+            f_max       = zeros(length(P_ax), length(τ_ax))
+            f_min       = zeros(length(P_ax), length(τ_ax))
+            q          = zeros(length(P_ax), length(τ_ax))
+            for i in eachindex(P_ax), j in eachindex(τ_ax)
+                m = materials
+                if m.plasticity == :DruckerPrager1 
+                    yieldf = DruckerPrager1()
+                    p = (m.C[1], m.cosϕ[1], m.sinϕ[1], m.cosψ[1], m.sinψ[1], 0*m.ηvp[1])
+                elseif m.plasticity == :GolchinMCC     
+                    yieldf = GolchinMCC()
+                    p = (m.M[1], m.N[1], -m.σT[1], m.Pc[1], m.a[1], m.b[1], m.c[1], m.ηvp[1])
+                elseif m.plasticity == :Hyperbolic    
+                    yieldf = Hyperbolic()
+                    p = (m.C[1], m.cosϕ[1], m.sinϕ[1], m.cosψ[1], m.sinψ[1], m.σT[1], 0*m.ηvp[1])
+                end
+                f_max[i,j] = Yield(@SVector([τ_ax[j], P_ax[i], maximum(λ̇.c)]), p, yieldf)
+                f_min[i,j] = Yield(@SVector([τ_ax[j], P_ax[i], 0.0]), p, yieldf)
+
+                # f[i,j] = Yield(@SVector([τ_ax[j], P_ax[i], 0.0]), p, yieldf)
+                q[i,j] = Potential(@SVector([τ_ax[j], P_ax[i], 0.0]), p, yieldf)
+            end
+            contour!(ax, P_ax*sc.σ/1e6, τ_ax*sc.σ/1e6, f_max*sc.σ./1e6, levels=[0., 0.0], color=:red)
+            contour!(ax, P_ax*sc.σ/1e6, τ_ax*sc.σ/1e6, f_min*sc.σ./1e6, levels=[0., 0.0], color=:black)
+            contour!(ax, P_ax*sc.σ/1e6, τ_ax*sc.σ/1e6, q*sc.σ./1e6, levels=[0., 0.0], color=:red, linestyle=:dash)
+
+            # contour!(ax, P_ax*sc.σ/1e6, τ_ax*sc.σ/1e6, q*sc.σ./1e6, levels=[0., 0.0], color=:red, linestyle=:dash)
+
             cosΨ, sinΨ, C, σT = materials.cosϕ[1], materials.sinϕ[1], materials.sinϕ[1], materials.σT[1]
             B = C * cosΨ - σT*sinΨ
             dQdtau = @. τII_rock /sqrt(τII_rock^2 + B^2) 
-            scatter!(ax, (P_rock .+ 0*sinΨ .* λ̇_rock.*materials.ηvp[1])*sc.σ/1e6, (τII_rock .+ dQdtau.*λ̇_rock.*materials.ηvp[1])*sc.σ/1e6, color=:black )
+            scatter!(ax, (P_rock .+ 0*sinΨ .* λ̇_rock.*materials.ηvp[1])*sc.σ/1e6, (τII_rock .+ 0*dQdtau.*λ̇_rock.*materials.ηvp[1])*sc.σ/1e6, color=:black )
                     
             # τ_ax_gouge = materials.C[2]*materials.cosϕ[2] .+ P_ax.*materials.sinϕ[2]
             # lines!(ax, P_ax*sc.σ/1e6, τ_ax_gouge*sc.σ/1e6, color=:red)
