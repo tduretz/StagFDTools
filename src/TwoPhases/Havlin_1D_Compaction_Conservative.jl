@@ -1,4 +1,4 @@
-using CairoMakie, Enzyme, StaticArrays, ExtendableSparse, LinearAlgebra, Printf
+using CairoMakie, Enzyme, StaticArrays, ExtendableSparse, LinearAlgebra, Printf, JLD2
 
 yr  = 365.25*24*3600
 cmy = 100*yr
@@ -6,6 +6,12 @@ cmy = 100*yr
 perm(ϕ, a) = a^2*ϕ^2.7 / 58
 
 bulk(ϕ, ηs, m) = ηs*ϕ^m
+
+function compaction_length(ϕ0, p)
+    k0 = perm(ϕ0, p.a)
+    χ0 = bulk(ϕ0, p.ηs, p.m)
+    return sqrt((k0/p.μl) * (χ0 + 4/3*p.ηs)) 
+end
 
 function porosity_rate(Pt, Pf, ϕ0, p)
     χ       = bulk(ϕ0, p.ηs, p.m)
@@ -85,12 +91,13 @@ function fluid_continuity_local(Vy, Pt, Pf, ϕ0, ρs0, ρf0, tag, p, Δy, Δt)
        Pf[end] = Pf[end-1] + ρlg * Δy
     end
     if tag[1] == 1 # Bottom: try to set Pf = Pt such that ϕ = ϕ0 
-        # ϕS      = (ϕ[1] + ϕ[2])/2
-        # ρtg     = ((1-ϕS)*p.ρs + ϕS*p.ρl) * p.gy
-        # Pt_bot = -30e3*ρtg
-        # Pt[1] = 2*Pt_bot - Pt[2]
-        # Pf[2] =  (Pt[1]+Pt[2])/2 / 2 # ????????
-        Pf[2] =  Pt[2]/2 # ????????
+        ϕS     = (ϕ[1] + ϕ[2])/2
+        ρtg    = ((1-ϕS)*p.ρs + ϕS*p.ρl) * p.gy
+        lc     = compaction_length(p.ϕ0, p)
+        y_base = -p.yfact*lc
+        Pt_bot = (y_base+Δy)*ρtg
+        Pt[1]  = 2*Pt_bot - Pt[2]
+        Pf[2]  =  (Pt[1]+Pt[2])/2 / 2 
     end
 
     # Darcy
@@ -279,14 +286,19 @@ function main_Havlin(nc)
         ρl = 3000.0,
         gy = -9.8,
         conservative = true,
+        yfact = 10, # model size relative to compaction length
     )
+
+    # Compaction length
+    lc = compaction_length(p.ϕ0, p)
+    @info "Compaction length: $(lc) m --- Model size: $(p.yfact*lc) m"
 
     # Time domain
     nt = 1000
     Δt = 1e6
 
     # Space domain
-    y   = (min=-30e3, max=0.0)
+    y   = (min=-p.yfact*lc, max=0.0)
     Δy  = (y.max - y.min)/nc
     yce = LinRange(y.min-Δy/2, y.max+Δy/2, nc+2)
     yv  = LinRange(y.min, y.max, nc+1)
@@ -367,7 +379,7 @@ function main_Havlin(nc)
         if mod(it, 50) == 0 || it==1
             fig = Figure()
             
-            ax1 = Axis(fig[1,1], xlabel=L"$Pt, Pf$ (MPa)", ylabel=L"$y$ (km)")
+            ax1 = Axis(fig[1,1], xlabel=L"$Pt$, $Pf$ (MPa)", ylabel=L"$y$ (km)")
             lines!(ax1, Pt[2:end-1]./1e6, yce[2:end-1]./1e3)
             lines!(ax1, Pf[2:end-1]./1e6, yce[2:end-1]./1e3, linestyle=:dash)
             
@@ -378,12 +390,16 @@ function main_Havlin(nc)
             lines!(ax3, Vy[2:end-1]*cmy, yv./1e3)
 
             ax4 = Axis(fig[2,2], xlabel=L"$\phi$", ylabel=L"$y$ (km)")
-            lines!(ax4, ϕ[2:end-1], yce[2:end-1]./1e3)
-            # spy!(ax1, M)
+            @load "havlin_ac.jld2" por_snapshot z
+            lines!(ax4, por_snapshot[2:end-1], -z[2:end-1]./1e3, color=:green, label=L"$\phi$ Paris")
+            step = 20
+            scatter!(ax4, ϕ[2:step:end-1], yce[2:step:end-1]./1e3, label=L"$\phi$ Frankfurt")
+            axislegend(position=:rb)
+
             display(fig)
         end
     end
 
 end
 
-main_Havlin(100)
+main_Havlin(500)
