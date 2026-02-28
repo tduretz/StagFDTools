@@ -1,4 +1,4 @@
-using StagFDTools, StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, GLMakie, LinearAlgebra, SparseArrays, Printf, JLD2
+using StagFDTools, StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, CairoMakie, LinearAlgebra, SparseArrays, Printf, JLD2
 import Statistics:mean
 using Enzyme  # AD backends you want to use
 
@@ -37,6 +37,7 @@ using Enzyme  # AD backends you want to use
         plasticity   = :off,
         linearizeϕ   = false,              # !!!!!!!!!!!
         single_phase = false,
+        conservative = false,
         n     = [1.0    1.0  ],
         n_CK  = [1.0    1.0   1.0  ],
         ηs0   = [1e22   1e19 ]/sc.σ/sc.t, 
@@ -155,6 +156,8 @@ using Enzyme  # AD backends you want to use
     Pi      = (t = Pt_ini.*ones(size_c...), f = Pf_ini.*ones(size_c...))
     P0      = (t = zeros(size_c...), f = zeros(size_c...))
     ΔP      = (t = zeros(size_c...), f = zeros(size_c...))
+    ρ       = (s = materials.ρs[1]*ones(size_c...), f = materials.ρf[1]*ones(size_c...), t = zeros(size_c...))
+    ρ0      = (s = materials.ρs[1]*ones(size_c...), f = materials.ρf[1]*ones(size_c...), t = zeros(size_c...))
 
     # Generate grid coordinates 
     x = (min=-L.x/2, max=L.x/2)
@@ -222,6 +225,8 @@ using Enzyme  # AD backends you want to use
         τ0.yy .= τ.yy
         τ0.xy .= τ.xy
         Φ0.c  .= Φ.c 
+        ρ0.s  .= ρ.s
+        ρ0.f  .= ρ.f
 
         for iter=1:niter
 
@@ -361,7 +366,7 @@ using Enzyme  # AD backends you want to use
             # dx[(nVx+nVy+nPt+1):end] .= dpf
 
             #--------------------------------------------#
-            imin = LineSearch!(rvec, α, dx, R, V, P, ε̇, τ, Vi, Pi, ΔP, P0, Φ, Φ0, τ0, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+            imin = LineSearch!(rvec, α, dx, R, V, P, ε̇, τ, Vi, Pi, ΔP, Φ, (τ0, P0, Φ0, ρ0), λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
             UpdateSolution!(V, P, α[imin]*dx, number, type, nc)
         end
 

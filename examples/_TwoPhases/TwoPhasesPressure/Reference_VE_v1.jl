@@ -41,7 +41,7 @@ end
     ηsi    = 1.              # Shear viscosity
     L      = 1.              # Box size
     Pi     = 1.              # Initial ambiant pressure
-    Φi     = 1e-2            # Reference
+    Φi     = 1e-1            # Reference
     n_CK   = 3.0
     # Dependant
     @show Ωl, Ωr, L
@@ -52,10 +52,11 @@ end
     ηs_inc = Ωηi * ηsi       # Inclusion shear viscosity
     ε̇      = Ωp * Pi / ηsi   # Background strain rate
     # Time integration
-    nt     = 1
-    Δt0    = 1 / ε̇ / nc.x / 2  
+    nt     = 100
+    Δt0    = 1 / ε̇ / nc.x / 2  * 4
 
     @show Δt0
+    error()
     
     # Velocity gradient matrix
     D_BC = @SMatrix( [ε̇ 0; 0 -ε̇] )
@@ -68,22 +69,22 @@ end
         plasticity   = :off,
         linearizeϕ   = false, 
         single_phase = false,
-        conservative = true,
+        conservative = false,
         n     = [1.0  1.0],
         n_CK  = [n_CK n_CK],
         ηs0   = [ηsi  ηs_inc], 
         ηΦ    = [ηbi  ηbi],
-        G     = [1e30 1e30], 
+        G     = [1e0 1e0], 
         ρs    = [1.0  1.0 ],
         ρf    = [1.0  1.0 ],
-        Kd    = [1e30 1e30],
-        Ks    = [1e30 1e30],
-        KΦ    = [1e30 1e30],
-        Kf    = [1e30 1e30],
+        Kd    = [1e0 1e0]*1,
+        Ks    = [1e0 1e0]*8,
+        KΦ    = [1e0 1e0]*5,
+        Kf    = [1e0 1e0]*2,
         k_ηf0 = [k_ηΦ/Φi^n_CK k_ηΦ/Φi^n_CK],
         ψ     = [10.    10.  ],
         ϕ     = [35.    35.  ],
-        C     = [1e70    1e70],
+        C     = [1e70   1e70],
         ηvp   = [0.0    0.0  ],
         cosϕ  = [0.0    0.0  ],
         sinϕ  = [0.0    0.0  ],
@@ -228,6 +229,9 @@ end
     #--------------------------------------------#
 
     probes = (
+        maxPt = zeros(nt),
+        maxPf = zeros(nt),
+        maxτ  = zeros(nt),
         Pti = zeros(nt),
         Pfi = zeros(nt),
         Pei = zeros(nt),
@@ -385,6 +389,8 @@ end
 
         #--------------------------------------------#
 
+
+
         k_ηΦ_x = materials.k_ηf0[1] .* ((Φ.c[2:end,:] .+ Φ.c[1:end-1,:]) / 2).^ materials.n_CK[1]
         k_ηΦ_y = materials.k_ηf0[1] .* ((Φ.c[:,2:end] .+ Φ.c[:,1:end-1]) / 2).^ materials.n_CK[1]
 
@@ -457,24 +463,36 @@ end
 
         # save("./figures/benchmark_v2.png", f, px_per_unit=4)
 
-        save("./examples/_TwoPhases/TwoPhasesPressure/PoroviscousReference.jld2", "Ωl", Ωl, "Ωη", Ωη,"x", (c=xc, v=xv), "y", (c=yc, v=yv), "P", P, "dΦdt", dΦdt, "Φ", Φ, "τ", τ, "Vs", (x=Vxsc, y=Vysc), "Vf", (x=Vxfc, y=Vyfc))
+        # save("./examples/_TwoPhases/TwoPhasesPressure/PoroviscousReference.jld2", "Ωl", Ωl, "Ωη", Ωη,"x", (c=xc, v=xv), "y", (c=yc, v=yv), "P", P, "dΦdt", dΦdt, "Φ", Φ, "τ", τ, "Vs", (x=Vxsc, y=Vysc), "Vf", (x=Vxfc, y=Vyfc))
 
         # P.t .-= mean(P.t)
         # P.f .-= mean(P.f)
 
-        probes.Pti[it]  = mean(P.t[phases.c.==2])
-        probes.Pfi[it]  = mean(P.f[phases.c.==2])
-        probes.Pei[it]  = mean(P.t[phases.c.==2] .- P.f[phases.c.==2])
-        probes.ΔPt[it]  = maximum(P.t) - minimum(P.t)
-        probes.ΔPf[it]  = maximum(P.f) - minimum(P.f)
-        probes.ΔPe[it]  = maximum(P.t .- P.f) - minimum(P.t .- P.f) 
-        probes.Pe[it]   = norm(P.t .- P.f)
-        probes.Pt[it]   = norm(P.t)
-        probes.Pf[it]   = norm(P.f)
-        probes.t[it]    = it*Δ.t
+        probes.Pti[it]   = mean(P.t[phases.c.==2])
+        probes.Pfi[it]   = mean(P.f[phases.c.==2])
+        probes.Pei[it]   = mean(P.t[phases.c.==2] .- P.f[phases.c.==2])
+        probes.ΔPt[it]   = maximum(P.t) - minimum(P.t)
+        probes.ΔPf[it]   = maximum(P.f) - minimum(P.f)
+        probes.ΔPe[it]   = maximum(P.t .- P.f) - minimum(P.t .- P.f) 
+        probes.Pe[it]    = norm(P.t .- P.f)
+        probes.Pt[it]    = norm(P.t)
+        probes.Pf[it]    = norm(P.f)
+        probes.t[it]     = it*Δ.t
+        probes.maxPt[it] = maximum(P.t)
+        probes.maxPf[it] = maximum(P.f)
+        probes.maxτ[it]  = maximum(τ.II)
 
         @show mean(P.t[phases.c.==2])
         @show mean(P.f[phases.c.==2])
+
+        fig = Figure(fontsize = 14, size = (600, 600) )  
+        ax = Axis(fig[1,1], xlabelsize=20, ylabelsize=20, aspect=DataAspect(), title=L"$\text{max} P^t, P^f, \tau_\text{II}$", xlabel = L"$t$ [-]", ylabel = L"$P, \tau$ [-]")
+        lines!(ax,  probes.t[1:it], probes.maxPt[1:it], label=L"$$P^t")
+        lines!(ax,  probes.t[1:it], probes.maxPf[1:it], label=L"$$P^f")
+        lines!(ax,  probes.t[1:it], probes.maxτ[1:it],  label=L"$$\tau_\text{II}")
+        axislegend(framevisible = false, position=:lt)
+        display(fig)
+
     end
 
     #--------------------------------------------#
@@ -489,7 +507,7 @@ end
 
 function Run()
 
-    nc = (x=300, y=300)
+    nc = (x=50, y=50)
 
     # Mode 0   
     # Ωl = 10^(-1.7) # ---> δ/r

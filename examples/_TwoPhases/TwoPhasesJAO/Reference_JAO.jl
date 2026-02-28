@@ -1,4 +1,4 @@
-using StagFDTools, StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, GLMakie, LinearAlgebra, SparseArrays, Printf, JLD2, GridGeometryUtils
+using StagFDTools, StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, CairoMakie, LinearAlgebra, SparseArrays, Printf, JLD2, GridGeometryUtils
 import Statistics:mean
 using Enzyme  # AD backends you want to use
 
@@ -8,7 +8,7 @@ using Enzyme  # AD backends you want to use
     cmy = 100*3600*25*365.25
 
     # Time steps
-    nt     = 200
+    nt     = 20
     Δt0    = 1*3e5/sc.t 
 
     # Newton solver
@@ -40,6 +40,7 @@ using Enzyme  # AD backends you want to use
         plasticity   = :off,
         linearizeϕ   = false,              # !!!!!!!!!!!
         single_phase = false,
+        conservative = false,
         #        UC     LC    mush
         Φ0    = [1e-4   1e-4  1e-2 ],
         n     = [1.0    1.0   1.0  ],
@@ -135,8 +136,8 @@ using Enzyme  # AD backends you want to use
     V   = (x=zeros(size_x...), y=zeros(size_y...))
     Vi  = (x=zeros(size_x...), y=zeros(size_y...))
     η   = (c  =  ones(size_c...), v  =  ones(size_v...) )
-    Φ   = (c=zeros(size_c...), v=zeros(size_v...) )
-    Φ0  = (c=zeros(size_c...), v=zeros(size_v...) )
+    Φ   = (c=materials.Φ0[1]*ones(size_c...), v=materials.Φ0[1]*ones(size_v...) )
+    Φ0  = (c=materials.Φ0[1]*ones(size_c...), v=materials.Φ0[1]*ones(size_v...) )
     εp  = zeros(size_c...)
     ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     τ0      = (xx = ones(size_c...), yy = ones(size_c...), xy = zeros(size_v...) )
@@ -153,7 +154,8 @@ using Enzyme  # AD backends you want to use
     Pi      = (t = ones(size_c...), f = ones(size_c...))
     P0      = (t = zeros(size_c...), f = zeros(size_c...))
     ΔP      = (t = zeros(size_c...), f = zeros(size_c...))
-    ρ       = (t = zeros(size_c...), f = zeros(size_c...))
+    ρ       = (t = zeros(size_c...), f = zeros(size_c...), s = zeros(size_c...))
+    ρ0      = (t = zeros(size_c...), f = zeros(size_c...), s = zeros(size_c...))
 
     # Generate grid coordinates 
     X = GenerateGrid(x, y, Δ, nc)
@@ -262,6 +264,8 @@ using Enzyme  # AD backends you want to use
         τ0.yy .= τ.yy
         τ0.xy .= τ.xy
         Φ0.c  .= Φ.c 
+        ρ0.f  .= ρ.f
+        ρ0.s  .= ρ.s
 
         for iter=1:niter
 
@@ -328,7 +332,7 @@ using Enzyme  # AD backends you want to use
             @time dx = - 𝑀 \ r
 
             #--------------------------------------------#
-            imin = LineSearch!(rvec, α, dx, R, V, P, ε̇, τ, Vi, Pi, ΔP, P0, Φ, Φ0, τ0, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+            imin = LineSearch!(rvec, α, dx, R, V, P, ε̇, τ, Vi, Pi, ΔP, Φ, (τ0, P0, Φ0, ρ0), λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
             UpdateSolution!(V, P, α[imin]*dx, number, type, nc)
         end
 

@@ -15,27 +15,47 @@ end
 function compaction_length(ϕ0, p)
     k0 = perm(ϕ0, p.a)
     χ0 = bulk(ϕ0, p.ηs, p.m)
+    @show χ0
+    @show k0
     return sqrt((k0/p.μl) * (χ0 + 4/3*p.ηs)) 
 end
 
-function momemtum_local(Vy, Pt, Pf, ϕ0, tag, p, Δy, Δt)
+function Darcy!(qDy, Vyf, ϕ, Pf, Vys, BC, num, p, Δy, Δt)
+    for j = 2:length(qDy)-1
+
+        Pfˡ  = MVector{2}(  Pf[jj]   for jj in j-1:j   )
+        ϕˡ   = SVector{2}(   ϕ[jj]   for jj in j-1:j   )
+
+        ρlg     = p.ρl * p.gy
+
+        ∂Pf∂y = (Pfˡ[2] - Pfˡ[1]) / Δy
+        ϕav   = (ϕˡ[2]  + ϕˡ[1] ) / 2
+
+        k_μ    = perm.(ϕav, p.a) / p.μl
+        qDy[j] = -k_μ * (∂Pf∂y - ρlg) 
+        Vyf[j] =  (qDy[j] + ϕav*Vys[j]) / ϕav
+    end
+
+end
+
+function momemtum_local(Vys, Pt, Pf, ϕ0, tag, p, Δy, Δt)
 
     # Neumann BC for surface
     if tag[end] == 2
-        Vy[end] = Vy[2]
+        Vys[end] = Vys[2]
     end
 
-    # Phi on Vy points
+    # Phi on Vys points
     dϕdt    = SVector{2}( porosity_rate(Pt[i], Pf[i], ϕ0[i], p) for i in 1:2 )
     ϕ       = SVector{2}( @. ϕ0 + Δt * dϕdt )
     ϕy      = ((ϕ[2:end] + ϕ[1:end-1]) / 2)[1] 
 
     # Kinematics
-    ∂Vy∂y = SVector{2}( @. (Vy[2:end] - Vy[1:end-1]) / Δy )
+    ∂Vy∂y = SVector{2}( @. (Vys[2:end] - Vys[1:end-1]) / Δy )
     ε̇yy′  = SVector{2}( @. ∂Vy∂y - 1/3*(∂Vy∂y) )
 
     # Rheology
-    τyy   = SVector{2}( @. 2 * (1-ϕy) * p.ηs * ε̇yy′ ) 
+    τyy   = SVector{2}( @. 2 * p.ηs * ε̇yy′ )   #* (1-ϕy)
 
     # Rheology
     ∂τyy∂y = ((τyy[2:end] - τyy[1:end-1]) / Δy)[1] 
@@ -47,7 +67,7 @@ function momemtum_local(Vy, Pt, Pf, ϕ0, tag, p, Δy, Δt)
     return - (∂τyy∂y - ∂Pt∂y + ρt*p.gy)
 end
 
-function continuity_local(Vy, Pt, Pf, ϕ0, tag, p, Δy, Δt)
+function continuity_local(Vys, Pt, Pf, ϕ0, tag, p, Δy, Δt)
 
     dlnρsdt = @SVector zeros(3)
    
@@ -56,12 +76,12 @@ function continuity_local(Vy, Pt, Pf, ϕ0, tag, p, Δy, Δt)
     ϕ       = SVector{3}( @. ϕ0 + Δt * dϕdt )
 
     # Solid divergence
-    divVs   = (Vy[2] - Vy[1]) / Δy
+    divVs   = (Vys[2] - Vys[1]) / Δy
 
     return dlnρsdt[2] - dϕdt[2]/(1-ϕ[2]) + divVs
 end
 
-function fluid_continuity_local(Vy, Pt, Pf, ϕ0, tag, p, Δy, Δt)
+function fluid_continuity_local(Vys, Pt, Pf, ϕ0, tag, p, Δy, Δt)
 
     dlnρfdt = @SVector zeros(3)
 
@@ -81,9 +101,10 @@ function fluid_continuity_local(Vy, Pt, Pf, ϕ0, tag, p, Δy, Δt)
         ρtg    = ((1-ϕS)*p.ρs + ϕS*p.ρl) * p.gy
         lc     = compaction_length(p.ϕ0, p)
         y_base = -p.yfact*lc
-        Pt_bot = (y_base+Δy)*ρtg
-        Pt[1]  = 2*Pt_bot - Pt[2]
-        Pf[2]  =  (Pt[1]+Pt[2])/2 / 2 
+        Pt_bot = (y_base-3*Δy/2)*ρtg
+        # Pt[1]  = 2*Pt_bot - Pt[2]
+        # Pf[2]  =  (Pt[1]+Pt[2])/2 / 2
+        Pf[1]  = 2*Pt_bot - Pf[2]
     end
 
     # Darcy
@@ -92,7 +113,7 @@ function fluid_continuity_local(Vy, Pt, Pf, ϕ0, tag, p, Δy, Δt)
     qy      = SVector{2}( @. -k_μ .* ((Pf[2:end] - Pf[1:end-1])/ Δy - ρlg) )
 
     # Solid divergence
-    divVs   = (Vy[2] - Vy[1]) / Δy
+    divVs   = (Vys[2] - Vys[1]) / Δy
 
     # Darcy flux divergence
     divqD   = (qy[2] - qy[1]) / Δy
@@ -113,11 +134,11 @@ function momentum!(M, r, Vys, Pt, Pf, ϕ0, BC, num, p, Δy, Δt)
         Ptˡ  = MVector{2}(  Pt[jj]   for jj in j-1:j   )
         Pfˡ  = MVector{2}(  Pf[jj]   for jj in j-1:j   )
         ϕ0ˡ  = SVector{2}(  ϕ0[jj]   for jj in j-1:j   )
-        tagˡ = SVector{3}( BC.Vy[jj] for jj in j-1:j+1 )
+        tagˡ = SVector{3}( BC.Vys[jj] for jj in j-1:j+1 )
 
         # Residual
-        if num.Vy[j]>0
-            r[num.Vy[j]] = momemtum_local(Vyˡ, Ptˡ, Pfˡ, ϕ0ˡ, tagˡ, p, Δy, Δt)
+        if num.Vys[j]>0
+            r[num.Vys[j]] = momemtum_local(Vyˡ, Ptˡ, Pfˡ, ϕ0ˡ, tagˡ, p, Δy, Δt)
         end
 
         # Jacobian
@@ -126,27 +147,27 @@ function momentum!(M, r, Vys, Pt, Pf, ϕ0, BC, num, p, Δy, Δt)
         fill!(∂R∂Pf, 0.0)
         autodiff(Enzyme.Reverse, momemtum_local, Duplicated(Vyˡ, ∂R∂Vy), Duplicated(Ptˡ, ∂R∂Pt), Duplicated(Pfˡ, ∂R∂Pf), Const(ϕ0ˡ), Const(tagˡ), Const(p), Const(Δy), Const(Δt))
 
-        # Vy --- Vy
-        connect = SVector{3}( num.Vy[jj]   for jj in j-1:j+1 )
+        # Vys --- Vys
+        connect = SVector{3}( num.Vys[jj]   for jj in j-1:j+1 )
         for jj in eachindex(connect)
-            if (connect[jj]>0) && num.Vy[j]>0
-                M[num.Vy[j], connect[jj]] = ∂R∂Vy[jj] 
+            if (connect[jj]>0) && num.Vys[j]>0
+                M[num.Vys[j], connect[jj]] = ∂R∂Vy[jj] 
             end
         end
 
-        # Vy --- Pt
+        # Vys --- Pt
         connect = SVector{2}( num.Pt[jj]   for jj in j-1:j )
         for jj in eachindex(connect)
-            if (connect[jj]>0) && num.Vy[j]>0
-                M[num.Vy[j], connect[jj]] = ∂R∂Pt[jj] 
+            if (connect[jj]>0) && num.Vys[j]>0
+                M[num.Vys[j], connect[jj]] = ∂R∂Pt[jj] 
             end
         end
 
-        # Vy --- Pf
+        # Vys --- Pf
         connect = SVector{2}( num.Pf[jj]   for jj in j-1:j )
         for jj in eachindex(connect)
-            if (connect[jj]>0) && num.Vy[j]>0
-                M[num.Vy[j], connect[jj]] = ∂R∂Pf[jj] 
+            if (connect[jj]>0) && num.Vys[j]>0
+                M[num.Vys[j], connect[jj]] = ∂R∂Pf[jj] 
             end
         end
         
@@ -177,15 +198,15 @@ function continuity!(M, r, Vys, Pt, Pf, ϕ0, BC, num, p, Δy, Δt)
         fill!(∂R∂Pf, 0.0)
         autodiff(Enzyme.Reverse, continuity_local, Duplicated(Vyˡ, ∂R∂Vy), Duplicated(Ptˡ, ∂R∂Pt), Duplicated(Pfˡ, ∂R∂Pf), Const(ϕ0ˡ), Const(tagˡ), Const(p), Const(Δy), Const(Δt))
 
-        # Pt --- Vy
-        connect = SVector{2}( num.Vy[jj]   for jj in j:j+1 )
+        # Pt --- Vys
+        connect = SVector{2}( num.Vys[jj]   for jj in j:j+1 )
         for jj in eachindex(connect)
             if (connect[jj]>0) && num.Pt[j]>0
                 M[num.Pt[j], connect[jj]] = ∂R∂Vy[jj] 
             end
         end
 
-        # Vy --- Pt
+        # Vys --- Pt
         connect = SVector{3}( num.Pt[jj]   for jj in j-1:j+1 )
         for jj in eachindex(connect)
             if (connect[jj]>0) && num.Pt[j]>0
@@ -193,7 +214,7 @@ function continuity!(M, r, Vys, Pt, Pf, ϕ0, BC, num, p, Δy, Δt)
             end
         end
 
-        # Vy --- Pf
+        # Vys --- Pf
         connect = SVector{3}( num.Pf[jj]   for jj in j-1:j+1 )
         for jj in eachindex(connect)
             if (connect[jj]>0) && num.Pt[j]>0
@@ -210,15 +231,15 @@ function continuity!(M, r, Vys, Pt, Pf, ϕ0, BC, num, p, Δy, Δt)
         fill!(∂R∂Pf, 0.0)
         autodiff(Enzyme.Reverse, fluid_continuity_local, Duplicated(Vyˡ, ∂R∂Vy), Duplicated(Ptˡ, ∂R∂Pt), Duplicated(Pfˡ, ∂R∂Pf), Const(ϕ0ˡ), Const(tagˡ), Const(p), Const(Δy), Const(Δt))
 
-        # Pt --- Vy
-        connect = SVector{2}( num.Vy[jj]   for jj in j:j+1 )
+        # Pt --- Vys
+        connect = SVector{2}( num.Vys[jj]   for jj in j:j+1 )
         for jj in eachindex(connect)
             if (connect[jj]>0) && num.Pf[j]>0
                 M[num.Pf[j], connect[jj]] = ∂R∂Vy[jj] 
             end
         end
 
-        # Vy --- Pt
+        # Vys --- Pt
         connect = SVector{3}( num.Pt[jj]   for jj in j-1:j+1 )
         for jj in eachindex(connect)
             if (connect[jj]>0) && num.Pf[j]>0
@@ -226,7 +247,7 @@ function continuity!(M, r, Vys, Pt, Pf, ϕ0, BC, num, p, Δy, Δt)
             end
         end
 
-        # Vy --- Pf
+        # Vys --- Pf
         connect = SVector{3}( num.Pf[jj]   for jj in j-1:j+1 )
         for jj in eachindex(connect)
             if (connect[jj]>0) && num.Pf[j]>0
@@ -237,6 +258,8 @@ function continuity!(M, r, Vys, Pt, Pf, ϕ0, BC, num, p, Δy, Δt)
 end
 
 function main_Havlin(nc)
+
+    @load "havlin_ac.jld2" por_snapshot z
 
     # Paramaters
     p = (
@@ -267,30 +290,39 @@ function main_Havlin(nc)
 
     # Non-linear solver
     niter = 50
-    tol   = 1e-9
+    tol   = 1e-8
     nr0   = 1.0
 
     # Arrays
     ϕ    = p.ϕ0*ones(nc+2)
     ϕ0   = p.ϕ0*ones(nc+2)
     dϕdt =     zeros(nc+2)
-    Vy   =     zeros(nc+3)
+    Vys  =     zeros(nc+3)
+    Vyf  =     zeros(nc+3)
+    qDy  =     zeros(nc+3)
     Pt   =     zeros(nc+2)
     Pf   =     zeros(nc+2)
 
+    # Initial conditions
+    Pt .= -reverse(cumsum(((1 .- ϕ0).*p.ρs .+ ϕ0.*p.ρl)  * p.gy  )*Δy)
+    Pf .= Pt
+    Vys[3] = 1e-6
+
+    display(lines(Pt[:], yce./1e3))
+
     # Boundary conditions
-    BC  = ( Vy = zeros(Int64, nc+3), Pf = zeros(Int64, nc+2))  
-    BC.Vy[[end]] .= 2 # set Neumann
-    BC.Vy[[1]]   .= 1 # set Dirichlet
+    BC  = ( Vys = zeros(Int64, nc+3), Pf = zeros(Int64, nc+2))  
+    BC.Vys[[end]] .= 2 # set Neumann
+    BC.Vys[[1]]   .= 1 # set Dirichlet
     BC.Pf[[end]] .= 2 # set Neumann
     BC.Pf[[1]]   .= 1 # set weird lower BC
 
     # Numbering
-    num = (Vy = zeros(Int64, nc+3), Pt = zeros(Int64, nc+2), Pf = zeros(Int64, nc+2))
-    num.Vy[3:end-1] .= 1:nc # assumes the lower BC is conforming Dirichlet, so it's not a dof
-    num.Pt[2:end-1] .= maximum(num.Vy)+1:maximum(num.Vy)+nc 
+    num = (Vys = zeros(Int64, nc+3), Pt = zeros(Int64, nc+2), Pf = zeros(Int64, nc+2))
+    num.Vys[3:end-1] .= 1:nc # assumes the lower BC is conforming Dirichlet, so it's not a dof
+    num.Pt[2:end-1] .= maximum(num.Vys)+1:maximum(num.Vys)+nc 
     num.Pf[2:end-1] .= maximum(num.Pt)+1:maximum(num.Pt)+nc
-    ndof = (Vy=sum(num.Vy.!=0), Pt=sum(num.Pt.!=0), Pf=sum(num.Pf.!=0), tot=maximum(num.Pf))
+    ndof = (Vys=sum(num.Vys.!=0), Pt=sum(num.Pt.!=0), Pf=sum(num.Pf.!=0), tot=maximum(num.Pf))
 
     # Sparse matrices
     r = zeros(ndof.tot)
@@ -298,7 +330,7 @@ function main_Havlin(nc)
     M = ExtendableSparseMatrix(ndof.tot, ndof.tot)
     
     # Initial guess
-    x[num.Vy[num.Vy.>0]] .= Vy[num.Vy.>0]
+    x[num.Vys[num.Vys.>0]] .= Vys[num.Vys.>0]
     x[num.Pt[num.Pt.>0]] .= Pt[num.Pt.>0]
     x[num.Pf[num.Pf.>0]] .= Pf[num.Pf.>0]
     
@@ -311,8 +343,8 @@ function main_Havlin(nc)
         # Newton iterations
         for iter = 1:niter
 
-            momentum!(M, r, Vy, Pt, Pf, ϕ0, BC, num, p, Δy, Δt)
-            continuity!(M, r, Vy, Pt, Pf, ϕ0, BC, num, p, Δy, Δt)
+            momentum!(M, r, Vys, Pt, Pf, ϕ0, BC, num, p, Δy, Δt)
+            continuity!(M, r, Vys, Pt, Pf, ϕ0, BC, num, p, Δy, Δt)
            
             if iter==1 nr0 = norm(r) end
             @printf("Iteration: %3d - abs. res. = %1.4e - rel. res. = %1.4e\n", iter, norm(r)/sqrt(length(r)), norm(r)/nr0 )
@@ -320,13 +352,16 @@ function main_Havlin(nc)
 
             x -= M \ r
 
-            Vy[num.Vy.>0] .= x[num.Vy[num.Vy.>0]]
+            Vys[num.Vys.>0] .= x[num.Vys[num.Vys.>0]]
             Pt[num.Pt.>0] .= x[num.Pt[num.Pt.>0]]
             Pf[num.Pf.>0] .= x[num.Pf[num.Pf.>0]]
         end
 
         dϕdt .= [porosity_rate(Pt[j], Pf[j], ϕ0[j], p) for j in eachindex(dϕdt)]
         ϕ[2:end-1] .+= dϕdt[2:end-1] * Δt
+
+        Darcy!(qDy, Vyf, ϕ, Pf, Vys, BC, num, p, Δy, Δt)
+
 
         # ------------------------------- #
         if mod(it, 50) == 0 || it==1
@@ -336,14 +371,36 @@ function main_Havlin(nc)
             lines!(ax1, Pt[2:end-1]./1e6, yce[2:end-1]./1e3)
             lines!(ax1, Pf[2:end-1]./1e6, yce[2:end-1]./1e3, linestyle=:dash)
             
+
+            # τyy = 2 * p.ηs .* 2/3 .* diff(Vys)/Δy
+            # ϕv = 1/2*(ϕ[1:end-1] .+ ϕ[2:end])
+            # ρt = p.ρl .* ϕv .+ (1 .- ϕv) .* p.ρs
+            # ry = diff(τyy[2:end-1])/Δy .- 0*diff(Pt[2:end-1])/Δy .+ 0*ρt[2:end-1] .* p.gy
+            # # ry = zero(Vys)
+            # # ry[num.Vys.>0] = x[num.Vys[num.Vys.>0]]
+
+            # ax1 = Axis(fig[1,1], xlabel=L"$Pt$, $Pf$ (MPa)", ylabel=L"$y$ (km)")
+            # lines!(ax1, ry[1:end-0], yv[2:end-1]./1e3)
+            # # lines!(ax1, Pf[2:end-1]./1e6, yce[2:end-1]./1e3, linestyle=:dash)
+            
+
             ax2 = Axis(fig[1,2], xlabel=L"$\Delta P$ (MPa)", ylabel=L"$y$ (km)")
             lines!(ax2, ((Pf .- Pt) ./ (1 .-ϕ))[2:end-1]./1e6, yce[2:end-1]./1e3)
 
-            ax3 = Axis(fig[2,1], xlabel=L"$Vy$ (cm/y)", ylabel=L"$y$ (km)")
-            lines!(ax3, Vy[2:end-1]*cmy, yv./1e3)
+            ax3 = Axis(fig[2,1], xlabel=L"$Vys$ (cm/y)", ylabel=L"$y$ (km)")
+            # lines!(ax3, Vys[2:end-1]*cmy, yv./1e3)
+            lines!(ax3, Vyf[3:end-2]*cmy, yv[2:end-1]./1e3)
+            # lines!(ax3, [3:end-2]*cmy, yv[2:end-1]./1e3)
+
+            @show Vyf[end-3]*cmy, ϕ[end-3], qDy[end-3]*cmy
+            vs = (Vyf[end-3] - qDy[end-3]/ϕ[end-3])*cmy
+            @show vs
+
+            @show Vyf[3]*cmy, ϕ[3], qDy[3]*cmy
+            vs = (Vyf[3] - qDy[3]/ϕ[3])*cmy
+            @show vs
 
             ax4 = Axis(fig[2,2], xlabel=L"$\phi$", ylabel=L"$y$ (km)")
-            @load "havlin_ac.jld2" por_snapshot z
             lines!(ax4, por_snapshot[2:end-1], -z[2:end-1]./1e3, color=:green, label=L"$\phi$ Paris")
             step = 20
             scatter!(ax4, ϕ[2:step:end-1], yce[2:step:end-1]./1e3, label=L"$\phi$ Frankfurt")
@@ -352,9 +409,9 @@ function main_Havlin(nc)
             display(fig)
         end
 
-        # @save "Havin_test0.jld2"  yce yv Pf Pt ϕ Vy
+        # @save "Havin_test0.jld2"  yce yv Pf Pt ϕ Vys
     end
 
 end
 
-main_Havlin(500)
+main_Havlin(2000)

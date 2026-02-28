@@ -256,7 +256,6 @@ function FluidContinuity(Vx, Vy, Pt, Pf_loc, ΔPf_loc, old, phase, materials, k�
     ρfg  = SVector{2, Float64}(@. materials.g[2] * 0.5*(ρ0f[2,1:end-1] + ρ0f[2,2:end]) )
 
     Pf    = SetBCPf1(Pf_loc, type_loc, bcv_loc, Δ, ρfg)
-
     dPtdt   = SMatrix{3,3, Float64}( (Pt .- Pt0) / Δt )
     dPfdt   = SMatrix{3,3, Float64}( (Pf .- Pf0) / Δt )
     dΦdt    = SMatrix{3,3, Float64}( (dPfdt .- dPtdt)/KΦ .+ (Pf .- Pt)/ηΦ )
@@ -264,8 +263,17 @@ function FluidContinuity(Vx, Vy, Pt, Pf_loc, ΔPf_loc, old, phase, materials, k�
         Φ       = SMatrix{3,3, Float64}( Φ0 ) 
     else
         Φ       = SMatrix{3,3, Float64}( Φ0  .+ dΦdt*Δt )
-    end
+    end 
 
+    if Φ[1]<0 || Φ[2] <0 ||  Φ[3] <0
+        @show Φ
+        @show Pt
+        @show Pf
+        @show Pt0
+        @show Pf0
+    end
+    
+    
     dPsdt   = SMatrix{3, 3, Float64}( @. dΦdt*(Pt - Pf*Φ)/(1-Φ)^2 + (dPtdt - Φ*dPfdt - Pf*dΦdt) / (1 - Φ) )
     dlnρsdt = SMatrix{3, 3, Float64}( 1/Ks * ( dPsdt ) )
     dlnρfdt = dPfdt[2,2] / Kf
@@ -274,6 +282,14 @@ function FluidContinuity(Vx, Vy, Pt, Pf_loc, ΔPf_loc, old, phase, materials, k�
     Φx = SVector{2, Float64}(@. (Φ[1:end-1,2] + Φ[2:end,2])/2 )
     Φy = SVector{2, Float64}(@. (Φ[2,1:end-1] + Φ[2,2:end])/2 )
 
+      if Φy[1]<0 || Φy[2] <0
+         printxy(Φ)
+         printxy(Pt)
+         printxy(Pf)
+         printxy(Pt0)
+         printxy(Pf0)
+    end
+    
     # ΦxW = Φ_x[1]#1/2*(Φ[1,2] + Φ[2,2])
     # ΦxE = Φ_x[2]#1/2*(Φ[3,2] + Φ[2,2])
     # ΦyS = Φ_y[1]#1/2*(Φ[2,1] + Φ[2,2])
@@ -300,37 +316,37 @@ function FluidContinuity(Vx, Vy, Pt, Pf_loc, ΔPf_loc, old, phase, materials, k�
     #     printxy(1/2*(Pf[:,1:end-1] .+ Pf[:,2:end]))
     # end
     
-
-    
-    if materials.oneway
-        fp   = divqD
-    else
-        if materials.conservative == false
-            fp = (Φ[2,2]*dlnρfdt + dΦdt[2,2]       + Φ[2,2]*divVs + divqD)
-
-        else
-
-            # Total mass: ∂ρt∂t + ∇⋅(q) with q = ρf⋅qD + ρt⋅qD⋅V
-            lnρs   = SMatrix{3, 3, Float64}( @. log(ρs0) + Δt*dlnρsdt)
-            ρs     = SMatrix{3, 3, Float64}( @. exp(lnρs) )
-            lnρf   = SMatrix{3, 3, Float64}( @. log(ρf0) + Δt*dlnρsdt)
-            ρf     = SMatrix{3, 3, Float64}( @. exp(lnρf) )
-            ρt     = SMatrix{3, 3, Float64}( @. (1-Φ ) * ρs  + Φ  * ρf  )
-            ρt0    = SMatrix{3, 3, Float64}( @. (1-Φ0 )* ρs0 + Φ0 * ρf0 )
-            
-            ∂ρt∂t  = (ρt[2,2] - ρt0[2,2]) / Δt
-            ρfx    = SVector{2, Float64}( @. (ρf[1:end-1,2] + ρf[2:end,2])/2 )
-            ρfy    = SVector{2, Float64}( @. (ρf[2,1:end-1] + ρf[2,2:end])/2 )
-            ρtx    = SVector{2, Float64}( @. (ρt[1:end-1,2] + ρt[2:end,2])/2 )
-            ρty    = SVector{2, Float64}( @. (ρt[2,1:end-1] + ρt[2,2:end])/2 )
-            qρx    = SVector{2, Float64}( @. ρfx * qx +  ρtx * Vx[:,2] )     # Brucite paper, Fowler (1985)
-            qρy    = SVector{2, Float64}( @. ρfy * qy +  ρty * Vy[2,:] )     # Brucite paper, Fowler (1985)    
-            
-            fp     = ∂ρt∂t  +  (qρx[2] - qρx[1]) * invΔx + (qρy[2] - qρy[1]) * invΔy 
-
-            # fp = (Φ[2,2]*dlnρfdt + dΦdt[2,2]       + Φ[2,2]*divVs + divqD)
-
+    if materials.conservative == false
+        fp = (Φ[2,2]*dlnρfdt + dΦdt[2,2]       + Φ[2,2]*divVs + divqD)
+        if materials.oneway
+            fp   = divqD
         end
+    else
+
+        # Total mass: ∂ρt∂t + ∇⋅(q) with q = ρf⋅qD + ρt⋅qD⋅V
+        lnρs   = SMatrix{3, 3, Float64}( @. log(ρs0) + Δt*dlnρsdt)
+        ρs     = SMatrix{3, 3, Float64}( @. exp(lnρs) )
+        lnρf   = SMatrix{3, 3, Float64}( @. log(ρf0) + Δt*dlnρsdt)
+        ρf     = SMatrix{3, 3, Float64}( @. exp(lnρf) )
+        ρt     = SMatrix{3, 3, Float64}( @. (1-Φ ) * ρs  + Φ  * ρf  )
+        ρt0    = SMatrix{3, 3, Float64}( @. (1-Φ0 )* ρs0 + Φ0 * ρf0 )
+        
+        ∂ρt∂t  = (ρt[2,2] - ρt0[2,2]) / Δt
+        ρfx    = SVector{2, Float64}( @. (ρf[1:end-1,2] + ρf[2:end,2])/2 )
+        ρfy    = SVector{2, Float64}( @. (ρf[2,1:end-1] + ρf[2,2:end])/2 )
+        ρtx    = SVector{2, Float64}( @. (ρt[1:end-1,2] + ρt[2:end,2])/2 )
+        ρty    = SVector{2, Float64}( @. (ρt[2,1:end-1] + ρt[2,2:end])/2 )
+        qρx    = SVector{2, Float64}( @. ρfx * qx +  ρtx * Vx[:,2] )     # Brucite paper, Fowler (1985)
+        qρy    = SVector{2, Float64}( @. ρfy * qy +  ρty * Vy[2,:] )     # Brucite paper, Fowler (1985)    
+        
+        if materials.oneway
+            ∂ρt∂t  = 0*(ρt[2,2] - ρt0[2,2]) / Δt
+            qρx    = SVector{2, Float64}( @. ρfx * qx +  0*ρtx * Vx[:,2] )     # Brucite paper, Fowler (1985)
+            qρy    = SVector{2, Float64}( @. ρfy * qy +  0*ρty * Vy[2,:] ) 
+        end
+
+        fp     = ∂ρt∂t  +  (qρx[2] - qρx[1]) * invΔx + (qρy[2] - qρy[1]) * invΔy 
+        # fp = (Φ[2,2]*dlnρfdt + dΦdt[2,2]       + Φ[2,2]*divVs + divqD)
     end
 
     return fp
@@ -904,7 +920,7 @@ function SetBCPf1(Pf, type, bc, Δ, ρfg)
         elseif type[ii,1] === :Neumann 
             MPf[ii,1] = fma(Δ.y, bc[ii,1], Pf[ii,2])
         elseif type[ii,1] === :no_flux
-            MPf[ii,1] = Pf[ii,2] - ρfg*Δ.y
+            MPf[ii,1] = Pf[ii,2] - ρfg[1]*Δ.y
         elseif type[ii,1] === :periodic || type[ii,1] === :in || type[ii,1] === :constant
             MPf[ii,1] = Pf[ii,1]
         # else
@@ -917,7 +933,7 @@ function SetBCPf1(Pf, type, bc, Δ, ρfg)
         elseif type[ii,end] === :Neumann
             MPf[ii,end] = fma(-Δ.y, bc[ii,end], Pf[ii,end-1])
         elseif type[ii,end] === :no_flux
-            MPf[ii,end] = Pf[ii,end-1] + ρfg*Δ.y
+            MPf[ii,end] = Pf[ii,end-1] + ρfg[end]*Δ.y
         elseif type[ii,end] === :periodic || type[ii,end] === :in || type[ii,end] === :constant
             MPf[ii,end] = Pf[ii,end]
         # else
@@ -1057,7 +1073,8 @@ function Numbering!(N, type, nc)
     shift = periodic_south ? 1 : 0
     # Loop through inner nodes of the mesh
     for j=2:nc.y+3-1, i=3:nc.x+4-2
-        if type.Vy[i,j] == :Dirichlet_normal || (type.Vy[i,j] != :periodic && j==nc.y+3-1) || type.Vy[i,j] == :constant 
+        if type.Vy[i,j] == :Dirichlet_normal || (type.Vy[i,j] == :periodic && j==nc.y+3-1)
+        # if type.Vy[i,j] == :Dirichlet_normal || (type.Vy[i,j] != :periodic && j==nc.y+3-1) || type.Vy[i,j] == :constant 
             # Avoid nodes with constant velocity or redundant periodic nodes
         else
             ndof+=1
