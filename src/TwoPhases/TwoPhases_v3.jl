@@ -137,7 +137,7 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, Pf, ΔP, Pt0, Pf0, Φ0, τ0, �
 
     dPtdt   = (Ptc - Ptc0) / Δ.t
     dPfdt   = (Pfc - Pfc0) / Δ.t
-    dΦdt    = @. (dPfdt - dPtdt)/KΦ + (Pfc - Ptc)/ηΦ
+    # dΦdt    = @. (dPfdt - dPtdt)/KΦ + (Pfc - Ptc)/ηΦ
 
     # # @show size(dPtdt), size(dPfdt), size(Ptc), size(Pfc),size(KΦ),size(ηΦ), size(dΦdt)
 
@@ -145,7 +145,8 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, Pf, ΔP, Pt0, Pf0, Φ0, τ0, �
     # if materials.linearizeϕ
     #     Φ       = @. Φ0 
     # else
-        Φ       = @. Φ0 + dΦdt*Δ.t
+        # Φ       = @. Φ0 + dΦdt*Δ.t
+        Φ         = @. Porosity(Φ0, Ptc, Pfc, Ptc0, Pfc0, KΦ, ηΦ, 0., 0., Δ.t) 
     # end
 
     # Density
@@ -191,7 +192,8 @@ function Continuity(Vx, Vy, Pt, Pf, old, phase, materials, type_loc, bcv_loc, Δ
     if materials.linearizeϕ
         Φ       = SMatrix{3, 3, Float64}( Φ0*ones(3,3) ) 
     else
-        Φ       = SMatrix{3, 3, Float64}( @. Φ0 + dΦdt*Δt )
+        Φ         = SMatrix{3, 3, Float64}( @. Porosity(Φ0, Pt, Pf, Pt0, Pf0, KΦ, ηΦ, 0., 0., Δt) )
+        # Φ       = SMatrix{3, 3, Float64}( @. Φ0 + dΦdt*Δt )
     end
 
     if materials.single_phase
@@ -262,7 +264,8 @@ function FluidContinuity(Vx, Vy, Pt, Pf_loc, ΔPf_loc, old, phase, materials, k�
     if materials.linearizeϕ
         Φ       = SMatrix{3,3, Float64}( Φ0 ) 
     else
-        Φ       = SMatrix{3,3, Float64}( Φ0  .+ dΦdt*Δt )
+        Φ         = SMatrix{3,3, Float64}( @. Porosity(Φ0, Pt, Pf, Pt0, Pf0, KΦ, ηΦ, 0., 0., Δt) )
+        # Φ       = SMatrix{3,3, Float64}( Φ0  .+ dΦdt*Δt )
     end 
 
     if Φ[1]<0 || Φ[2] <0 ||  Φ[3] <0

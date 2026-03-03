@@ -41,7 +41,7 @@ end
     ηsi    = 1.              # Shear viscosity
     L      = 1.              # Box size
     Pi     = 1.              # Initial ambiant pressure
-    Φi     = 1e-1            # Reference
+    Φi     = 1e-2            # Reference
     n_CK   = 3.0
     # Dependant
     @show Ωl, Ωr, L
@@ -52,11 +52,11 @@ end
     ηs_inc = Ωηi * ηsi       # Inclusion shear viscosity
     ε̇      = Ωp * Pi / ηsi   # Background strain rate
     # Time integration
-    nt     = 100
-    Δt0    = 1 / ε̇ / nc.x / 2  * 4
+    nt     = 120
+    Δt0    = 1e-3#1 / ε̇ / nc.x / 2  * 4
 
-    @show Δt0
-    error()
+    # @show Δt0
+    # error()
     
     # Velocity gradient matrix
     D_BC = @SMatrix( [ε̇ 0; 0 -ε̇] )
@@ -74,13 +74,13 @@ end
         n_CK  = [n_CK n_CK],
         ηs0   = [ηsi  ηs_inc], 
         ηΦ    = [ηbi  ηbi],
-        G     = [1e0 1e0], 
+        G     = [1e0 1e0]*100, 
         ρs    = [1.0  1.0 ],
         ρf    = [1.0  1.0 ],
         Kd    = [1e0 1e0]*1,
-        Ks    = [1e0 1e0]*8,
-        KΦ    = [1e0 1e0]*5,
-        Kf    = [1e0 1e0]*2,
+        Ks    = [1e0 1e0]*100,
+        KΦ    = [1e0 1e0]*10,
+        Kf    = [1e0 1e0]*100,
         k_ηf0 = [k_ηΦ/Φi^n_CK k_ηΦ/Φi^n_CK],
         ψ     = [10.    10.  ],
         ϕ     = [35.    35.  ],
@@ -486,7 +486,7 @@ end
         @show mean(P.f[phases.c.==2])
 
         fig = Figure(fontsize = 14, size = (600, 600) )  
-        ax = Axis(fig[1,1], xlabelsize=20, ylabelsize=20, aspect=DataAspect(), title=L"$\text{max} P^t, P^f, \tau_\text{II}$", xlabel = L"$t$ [-]", ylabel = L"$P, \tau$ [-]")
+        ax = Axis(fig[1,1], xlabelsize=20, ylabelsize=20, title=L"$\text{max} P^t, P^f, \tau_\text{II}$", xlabel = L"$t$ [-]", ylabel = L"$P, \tau$ [-]")
         lines!(ax,  probes.t[1:it], probes.maxPt[1:it], label=L"$$P^t")
         lines!(ax,  probes.t[1:it], probes.maxPf[1:it], label=L"$$P^f")
         lines!(ax,  probes.t[1:it], probes.maxτ[1:it],  label=L"$$\tau_\text{II}")
@@ -507,7 +507,7 @@ end
 
 function Run()
 
-    nc = (x=50, y=50)
+    nc = (x=200, y=200)
 
     # Mode 0   
     # Ωl = 10^(-1.7) # ---> δ/r

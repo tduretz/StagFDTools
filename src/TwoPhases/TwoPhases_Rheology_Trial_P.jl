@@ -2,11 +2,39 @@
 
 bulk_viscosity(ϕ, η0, m) = η0*ϕ^m
 
+
 function PorosityRate(Pt, Pf, Pt0, Pf0, KΦ, ηΦ, λ̇, sinψ, Δt)    
     dPtdt   = (Pt - Pt0) / Δt
     dPfdt   = (Pf - Pf0) / Δt
     dΦdt    = (dPfdt - dPtdt)/KΦ + (Pf - Pt)/ηΦ + λ̇*sinψ
     return dΦdt
+end
+
+function PorosityResidual(Φ, Φ0, Pt, Pf, Pt0, Pf0, KΦ, ηΦ0, m, λ̇, sinψ, Δt) 
+    ηΦ   = bulk_viscosity(Φ, ηΦ0, m)
+    dΦdt = PorosityRate(Pt, Pf, Pt0, Pf0, KΦ, ηΦ, λ̇, sinψ, Δt) 
+    r    = Φ - (Φ0  + dΦdt * Δt)  
+    return r 
+end
+
+
+function Porosity(Φ0, Pt, Pf, Pt0, Pf0, KΦ, ηΦ, λ̇, sinψ, Δt) 
+
+    m       = 0.0
+
+    dΦdt    = PorosityRate(Pt, Pf, Pt0, Pf0, KΦ, ηΦ, λ̇, sinψ, Δt)   
+    Φ       = Φ0  + dΦdt * Δt
+    r0       = 1.0
+    for iter=1:2
+        J     = Enzyme.gradient(Enzyme.ForwardWithPrimal, PorosityResidual, Φ, Const(Φ0), Const(Pt), Const(Pf), Const(Pt0), Const(Pf0), Const(KΦ), Const(ηΦ), Const(m), Const(λ̇), Const(sinψ), Const(Δt) )
+        r     = J.val[1]
+        if iter==1 r0 = abs(r) + 1e-10 end
+        # @show iter, abs(r), abs(r)/r0
+        if min(abs(r), abs(r)/r0 ) < 1e-10 break end
+        Φ    -=  J.derivs[1] \ J.val[1]
+    end
+
+    return   (Φ)     
 end
 
 function ΔP_Trial(x, Pt_trial, Pf_trial, Φ, divVs, divqD, λ̇, Pt0, Pf0, Φ0, ηΦ, KΦ, Ks, Kf, sinψ, Δt )
@@ -20,7 +48,7 @@ function ΔP_Trial(x, Pt_trial, Pf_trial, Φ, divVs, divqD, λ̇, Pt0, Pf0, Φ0,
     dlnρfdt = dPfdt / Kf
     # dlnρsdt = 1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks
 
-    Φ     = Φ0  + dΦdt * Δt
+    Φ     = Porosity(Φ0, Pt, Pf, Pt0, Pf0, KΦ, ηΦ, λ̇, sinψ, Δt)  
     dPsdt = ((Pt - Φ*Pf)/(1-Φ) - (Pt0 - Φ0*Pf0)/(1-Φ0))/Δt
     # dPsdt = dΦdt*(Pt - Pf*Φ)/(1-Φ)^2 + (dPtdt - Φ*dPfdt - Pf*dΦdt) / (1 - Φ)
     dlnρsdt = 1/Ks * ( dPsdt ) 
@@ -73,8 +101,9 @@ function residual_two_phase_P(x, ηve, Δt, ε̇II_eff, Pt_trial, Pf_trial, divV
     ΔPt, ΔPf = ΔP(Pt_trial, Pf_trial, Φ_trial, divVs, divqD, λ̇, Pt0, Pf0, Φ0, ηΦ,  KΦ, Ks, Kf, sinψ, Δt)
 
     # Porosity rate
-    dΦdt = PorosityRate(Pt, Pf, Pt0, Pf0, KΦ, ηΦ, λ̇, sinψ, Δt)
-    Φ    = Φ0  + dΦdt * Δt
+    # dΦdt = PorosityRate(Pt, Pf, Pt0, Pf0, KΦ, ηΦ, λ̇, sinψ, Δt)
+    # Φ    = Φ0  + dΦdt * Δt
+    Φ     = Porosity(Φ0, Pt, Pf, Pt0, Pf0, KΦ, ηΦ, λ̇, sinψ, Δt)  
 
     # Check yield
     f       = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, α1)
@@ -172,8 +201,9 @@ function LocalRheology_P(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phas
 
     τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
 
-    dΦdt = PorosityRate(Pt, Pf, Pt0, Pf0, KΦ, ηΦ, λ̇, sinψ, Δ.t) 
-    Φ    = Φ0 + dΦdt * Δ.t
+    # dΦdt = PorosityRate(Pt, Pf, Pt0, Pf0, KΦ, ηΦ, λ̇, sinψ, Δ.t) 
+    # Φ    = Φ0 + dΦdt * Δ.t
+    Φ     = Porosity(Φ0, Pt, Pf, Pt0, Pf0, KΦ, ηΦ, λ̇, sinψ, Δ.t)  
 
     #############################
 
@@ -251,7 +281,8 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
         if materials.linearizeϕ
             Φ_loc = SMatrix{3,3, Float64}( @. Φ0_loc ) 
         else
-            Φ_loc = SMatrix{3,3, Float64}( @. Φ0_loc  + dΦdt*Δt )
+            # Φ_loc = SMatrix{3,3, Float64}( @. Φ0_loc  + dΦdt*Δt )
+            Φ_loc = SMatrix{3,3, Float64}( Porosity.(Φ0_loc, Pt, Pf, Pt0, Pf0, KΦ, ηΦ, 0.0, 0.0, Δt ) )
         end 
 
         # Kinematics
@@ -363,7 +394,8 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
         if materials.linearizeϕ
             Φ_loc = SMatrix{4,4, Float64}( @. Φ0_loc ) 
         else
-            Φ_loc = SMatrix{4,4, Float64}( @. Φ0_loc  + dΦdt*Δt )
+            # Φ_loc = SMatrix{4,4, Float64}( @. Φ0_loc  + dΦdt*Δt )
+            Φ_loc = SMatrix{4,4, Float64}( Porosity.(Φ0_loc, Pt, Pf, Pt0, Pf0, KΦ, ηΦ, 0.0, 0.0, Δt ) )
         end 
 
         # Kinematics
