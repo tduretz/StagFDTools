@@ -121,8 +121,8 @@ function LocalRheology_P(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phas
 
     # Effective strain rate & pressure
     ε̇II_eff  = invII(ε̇)
-    Pt       = ε̇[4]
-    Pf       = ε̇[5]
+    Pt_trial = ε̇[4]
+    Pf_trial = ε̇[5]
 
     # Parameters
     ϵ    = 1e-10 # tolerance
@@ -147,15 +147,15 @@ function LocalRheology_P(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phas
     α1 = materials.single_phase ? 0.0 : 1.0 
 
     # Initial guess
-    η    = (η0 .* ε̇II_eff.^(1 ./ n .- 1.0 ))[1]
-    ηve  = inv(1/η + 1/(G*Δ.t))
-    τII  = 2*ηve*ε̇II_eff
+    η         = (η0 .* ε̇II_eff.^(1 ./ n .- 1.0 ))[1]
+    ηve       = inv(1/η + 1/(G*Δ.t))
+    τII_trial = 2*ηve*ε̇II_eff
 
     # Trial porosity
-    Φ = (KΦ .* Δ.t .* (Pf - Pt) + KΦ .* Φ0 .* ηΦ + ηΦ .* (Pf - Pf0 - Pt + Pt0)) ./ (KΦ .* ηΦ)
+    Φ_trial = (KΦ .* Δ.t .* (Pf_trial - Pt_trial) + KΦ .* Φ0 .* ηΦ + ηΦ .* (Pf_trial - Pf0 - Pt_trial + Pt0)) ./ (KΦ .* ηΦ)
 
     # Check yield
-    λ̇  = 0.0
+    λ̇_trial  = 0.0
 
     # # f        = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, 0.0)
     # # if f>0
@@ -170,32 +170,36 @@ function LocalRheology_P(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phas
 
     # #############################
 
-    f_trial  = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, α1)
+    f_trial  = F(τII_trial, Pt_trial, Pf_trial, 0.0, C, cosϕ, sinϕ, λ̇_trial, ηvp, α1)
 
-    x = @SVector ([τII, Pt, Pf, 0.0])
+    x = @SVector ([τII_trial, Pt_trial, Pf_trial, 0.0])
+
+    nr   = 1.0
+    nr0  = 1.0
+    tol  = 1e-10
 
     # Return mapping
     if f_trial>-1e-13 
 
         # This is the proper return mapping with plasticity
-        r0  = 1.0
-        tol = 1e-10
+        
+        
 
         for iter=1:10
-            J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase_P, x, Const(ηve), Const(Δ.t), Const(ε̇II_eff), Const(Pt), Const(Pf), Const(divVs), Const(divqD), Const(Φ), Const(Pt0), Const(Pf0), Const(Φ0), Const(ηΦ), Const(m), Const(KΦ), Const(Ks), Const(Kf), Const(C), Const(cosϕ), Const(sinϕ), Const(sinψ), Const(ηvp), Const(materials.single_phase) )
+            J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase_P, x, Const(ηve), Const(Δ.t), Const(ε̇II_eff), Const(Pt_trial), Const(Pf_trial), Const(divVs), Const(divqD), Const(Φ_trial), Const(Pt0), Const(Pf0), Const(Φ0), Const(ηΦ), Const(m), Const(KΦ), Const(Ks), Const(Kf), Const(C), Const(cosϕ), Const(sinϕ), Const(sinψ), Const(ηvp), Const(materials.single_phase) )
             # display(J.derivs[1])
             x = x .- J.derivs[1]\J.val
             nr = mynorm(J.val)
             if iter==1 
-                r0 = nr
+                nr0 = nr
             end
-            r = nr/r0
+            r = nr/nr0
             r<tol && break
         end
 
     end
 
-    τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
+    # τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
 
     # Φ = if materials.single_phase
     #         0.0
