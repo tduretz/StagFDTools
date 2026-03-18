@@ -65,7 +65,7 @@ using Enzyme  # AD backends you want to use
     @. materials.sinψ  = sind(materials.ψ)
 
     Φ0      = 0.01
-    # Φ0 = (materials.KΦ[1] .* Δt0 .* (Pf_ini - Pt_ini)) ./ (materials.KΦ[1] .* materials.ηΦ[1])
+    # Φ0 = (materials.KΦ[1] .* Δt0 .* (Pf_ini - Pt_ini)) ./ (materials.KΦ[1] .* materials.ηΦ0[1])
     @show Φ0
     # error()
     Φ_ini   = Φ0

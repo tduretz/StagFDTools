@@ -9,9 +9,9 @@ bulk(ϕ, ηs, m) = ηs*abs(ϕ)^m
 
 function porosity_rate(dPtdt, dPfdt, Pt, Pf, ϕ0, p)
     χ       = bulk(ϕ0, p.ηs, p.m)
-    Kϕ      = p.Kϕ
+    KΦ      = p.KΦ
     #return (Pf - Pt)/χ
-    return (dPfdt - dPtdt)/Kϕ  + (Pf - Pt)/χ 
+    return (dPfdt - dPtdt)/KΦ  + (Pf - Pt)/χ 
 end
 
 function compaction_length(ϕ0, p)
@@ -284,9 +284,9 @@ function main_Havlin(nc)
         ρl = 3000.0,
         gy = -9.8,
         yfact = 10, # model size relative to compaction length
-        Kϕ  = 1e30,
-        Ks  = 1e30,
-        Kf  = 1e30,
+        KΦ  = 1e9,
+        Ks  = 1e11,
+        Kf  = 1e10,
     )
 
     # Compaction length
@@ -295,7 +295,7 @@ function main_Havlin(nc)
 
     # Time domain
     nt = 1000
-    Δt = 1e6
+    Δt = 1e5
 
     # Space domain
     y   = (min=-p.yfact*lc, max=0.0)
@@ -305,7 +305,7 @@ function main_Havlin(nc)
 
     # Non-linear solver
     niter = 50
-    tol   = 1e-9
+    tol   = 1e-5
     nr0   = 1.0
 
     # Arrays

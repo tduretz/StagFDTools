@@ -8,7 +8,7 @@ using Enzyme  # AD backends you want to use
     cmy = 100*3600*25*365.25
 
     # Time steps
-    nt     = 20
+    nt     = 1
     Δt0    = 1*3e5/sc.t 
 
     # Newton solver
@@ -44,9 +44,10 @@ using Enzyme  # AD backends you want to use
         #        UC     LC    mush
         Φ0    = [1e-4   1e-4  1e-2 ],
         n     = [1.0    1.0   1.0  ],
+        m     = [0.0    0.0   0.0 ],
         n_CK  = [1.0    1.0   1.0  ] .* 2.6,
         ηs0   = [1e25   1e19  1e16 ]./sc.σ/sc.t, 
-        ηΦ    = [2e25   2e19  2e19 ]./sc.σ/sc.t,
+        ηΦ0   = [2e25   2e19  2e19 ]./sc.σ/sc.t,
         G     = [3e10   3e10  3e10 ] .* kill_elasticity ./sc.σ, 
         ρs    = [2900   2900  2900 ]/(sc.σ*sc.t^2/sc.L^2),
         ρf    = [2600   2600  2600 ]/(sc.σ*sc.t^2/sc.L^2),

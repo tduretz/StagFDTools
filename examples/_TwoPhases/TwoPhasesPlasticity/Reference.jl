@@ -18,8 +18,8 @@ using Enzyme  # AD backends you want to use
     α     = LinRange(0.05, 1.0, 5)
 
     rad     = 2e3/sc.L 
-    Pt_ini  = 1e6/sc.σ
-    Pf_ini  = 1e6/sc.σ
+    Pt_ini  = 1e7/sc.σ
+    Pf_ini  = 1e7/sc.σ
     ε̇       = 2e-15.*sc.t
     τ_ini   = 0*(sind(35)*(Pt_ini-Pf_ini) + 0*1e7/sc.σ*cosd(35))  
 
@@ -39,9 +39,10 @@ using Enzyme  # AD backends you want to use
         single_phase = false,
         conservative = false,
         n     = [1.0    1.0  ],
+        m     = [0.0    0.0  ],
         n_CK  = [1.0    1.0   1.0  ],
         ηs0   = [1e22   1e19 ]/sc.σ/sc.t, 
-        ηΦ    = [2e22   2e22 ]/sc.σ/sc.t,
+        ηΦ0   = [2e22   2e22 ]/sc.σ/sc.t,
         G     = [3e10   3e10 ]./sc.σ, 
         ρs    = [2800   2800 ]/(sc.σ*sc.t^2/sc.L^2),
         ρf    = [1000   1000 ]/(sc.σ*sc.t^2/sc.L^2),
@@ -65,7 +66,7 @@ using Enzyme  # AD backends you want to use
     @. materials.sinψ  = sind(materials.ψ)
 
     Φ0      = 0.05
-    # Φ0 = (materials.KΦ[1] .* Δt0 .* (Pf_ini - Pt_ini)) ./ (materials.KΦ[1] .* materials.ηΦ[1])
+    # Φ0 = (materials.KΦ[1] .* Δt0 .* (Pf_ini - Pt_ini)) ./ (materials.KΦ[1] .* materials.ηΦ0[1])
     @show Φ0
     # error()
     Φ_ini   = Φ0
@@ -403,7 +404,7 @@ using Enzyme  # AD backends you want to use
         # # Post process 
         # @time for i in eachindex(Φ.c)
         #     KΦ     = materials.KΦ[phases.c[i]]
-        #     ηΦ     = materials.ηΦ[phases.c[i]] 
+        #     ηΦ     = materials.ηΦ0[phases.c[i]] 
         #     sinψ   = materials.sinψ[phases.c[i]] 
         #     dPtdt  = (P.t[i] - P0.t[i]) / Δ.t
         #     dPfdt  = (P.f[i] - P0.f[i]) / Δ.t

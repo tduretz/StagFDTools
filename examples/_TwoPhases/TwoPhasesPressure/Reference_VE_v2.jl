@@ -51,9 +51,10 @@ using Enzyme  # AD backends you want to use
         single_phase = false,
         conservative = false,
         n     = [1.0  1.0],
+        m     = [0.0  0.0],
         n_CK  = [n_CK n_CK],
         ηs0   = [ηsi  ηs_inc], 
-        ηΦ    = [ηbi  ηbi],
+        ηΦ0   = [ηbi  ηbi],
         G     = [1e0  1e0] * 2000 * make_elastic, 
         ρs    = [1.0  1.0 ],
         ρf    = [1.0  1.0 ],
@@ -77,7 +78,7 @@ using Enzyme  # AD backends you want to use
     @. materials.sinψ  = sind(materials.ψ)
 
     Φ0 =    Φi  
-    # Φ0 = (materials.KΦ[1] .* Δt0 .* (Pf_ini - Pt_ini)) ./ (materials.KΦ[1] .* materials.ηΦ[1])
+    # Φ0 = (materials.KΦ[1] .* Δt0 .* (Pf_ini - Pt_ini)) ./ (materials.KΦ[1] .* materials.ηΦ0[1])
     @show Φ0
     # error()
     Φ_ini   = Φ0

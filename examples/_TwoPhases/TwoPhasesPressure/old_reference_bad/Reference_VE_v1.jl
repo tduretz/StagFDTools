@@ -7,7 +7,7 @@ let
 
     Ωl = 0.1       # ---> δ/r
     Ωr = 0.1       # ---> r/L
-    Ωη = 10^(2)    # ---> ηϕ/ηs
+    Ωη = 10^(2)    # ---> ηΦ/ηs
 
     L  = 1.0       # box size
     ηs = 1.        # Shear viscosity
@@ -15,15 +15,15 @@ let
 
     # Compaction length 
     δ      = Ωl * Ωr * L     # δ = δ/r * r/L where L = 1
-    ηϕ     = Ωη * ηs  
+    ηΦ     = Ωη * ηs  
     n_CK   = 3.0
-    k_ηΦ   = δ^2 / (ηϕ + 4/3 * ηs) # Permeability / fluid viscosity
+    k_ηΦ   = δ^2 / (ηΦ + 4/3 * ηs) # Permeability / fluid viscosity
 
     # Reference conductivity
     k_ηf0  = k_ηΦ/Φi^n_CK 
 
     # Double check compaction length
-    δ1 = sqrt((k_ηf0 * Φi^n_CK) * (ηϕ + 4/3*ηs)) 
+    δ1 = sqrt((k_ηf0 * Φi^n_CK) * (ηΦ + 4/3*ηs)) 
 
     @show k_ηf0, δ, δ1
 
@@ -92,7 +92,7 @@ end
     )
 
     k_ηf0 = materials.k_ηf0[1]
-    lc = sqrt((k_ηf0) * (materials.ηΦ[1] + 4/3*materials.ηs0[1])) 
+    lc = sqrt((k_ηf0) * (materials.ηΦ0[1] + 4/3*materials.ηs0[1])) 
 
     # @show k_ηf0, lc
 

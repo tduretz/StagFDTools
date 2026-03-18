@@ -56,7 +56,7 @@ end
     ν        = 0.25
     K        = 2/3*G0*(1+ν)/(1-2ν)
     Ks0, Ksi, Kso = K, 1*K*1e2, 1*K/1e10 
-    Kϕ0, Kϕi, Kϕo = K, 1*K*1e2, 1*K/1e10 
+    KΦ0, KΦi, KΦo = K, 1*K*1e2, 1*K/1e10 
     Kf0, Kfi, Kfo = K, 1*K*1e2, 1*K/1e10 
 
     # Set Rozhko values for fluid pressure

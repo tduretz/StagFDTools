@@ -50,9 +50,10 @@ using Enzyme  # AD backends you want to use
         #        mat    inc  
         Φ0    = [1e-16   1e-16],
         n     = [1.0    1.0 ],
+        m     = [0.0    0.0 ],
         n_CK  = [1.0    1.0 ],
         ηs0   = [params.mm  params.mc ]./sc.σ/sc.t, 
-        ηΦ    = [1e30   1e30]./sc.σ/sc.t,
+        ηΦ0   = [1e30   1e30]./sc.σ/sc.t,
         G     = [1e30   1e30] .* kill_elasticity ./sc.σ, 
         ρs    = [2900   2900]/(sc.σ*sc.t^2/sc.L^2),
         ρf    = [2600   2600]/(sc.σ*sc.t^2/sc.L^2),
