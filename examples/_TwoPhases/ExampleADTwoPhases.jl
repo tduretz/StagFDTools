@@ -1,7 +1,6 @@
 using StagFDTools.TwoPhases_v1, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
 # import GLMakie
 
 @views function main(nc)

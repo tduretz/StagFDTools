@@ -1,7 +1,6 @@
 using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf, GridGeometryUtils, MAT
 import Statistics:mean
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
 using TimerOutputs, CairoMakie
 
 @views function main(nc)

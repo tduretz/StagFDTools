@@ -108,7 +108,7 @@ function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, P
             ε̇vec  = @SVector([ε̇xx[1]+τ0.xx[i,j]/(2*G[1]*Δ.t[1]), ε̇yy[1]+τ0.yy[i,j]/(2*G[1]*Δ.t[1]), ε̇̄xy[1]+τ̄xy0[1]/(2*G[1]*Δ.t[1]), Pt[i,j]])
             # Tangent operator used for Newton Linearisation
             Δt =  Δ.t[1]
-            jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_var!, ε̇vec, Const(Dkk[1]), Const(Pt0[i,j]), Const(materials), Const(phases.c[i,j]), Const(Δt))
+            jac   = forwarddiff_jacobian(StressVector_var!, ε̇vec, Const(Dkk[1]), Const(Pt0[i,j]), Const(materials), Const(phases.c[i,j]), Const(Δt))
 
             # Why the hell is enzyme breaking the Jacobian into vectors??? :D
             # jac.derivs = ∂ (output StressVector) / ∂ε̇vec -> (Tuple(4) * (Svector{4}, Float, Float), nothing, nothing, nothing)
@@ -239,7 +239,7 @@ function TangentOperator_var!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, P
         
         # Tangent operator used for Newton Linearisation
         Δt = Δ.t[1]
-        jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_var!, ε̇vec, Const(Dkk[1]), Const(Pt0[i,j]),Const(materials), Const(phases.v[i+1,j+1]), Const(Δt))
+        jac   = forwarddiff_jacobian(StressVector_var!, ε̇vec, Const(Dkk[1]), Const(Pt0[i,j]),Const(materials), Const(phases.v[i+1,j+1]), Const(Δt))
 
         # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
         @views 𝐷_ctl.v[i+1,j+1][:,1] .= jac.derivs[1][1][1]
@@ -682,7 +682,7 @@ function AssembleContinuity2D_var!(K, V, P, Pt0, ΔP, τ0, 𝐷, phases, materia
 
         Δt_loc        = Δ.t[1]
 
-        autodiff(Enzyme.Reverse, Continuity_var, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂P), Const(Pt0[i,j]), Const(D), Const(phases.c[i,j]), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δx_loc), Const(Δy_loc), Const(Δt_loc))
+        forwarddiff_gradients!(Continuity_var, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂P), Const(Pt0[i,j]), Const(D), Const(phases.c[i,j]), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δx_loc), Const(Δy_loc), Const(Δt_loc))
 
         # Pt --- Vx
         Local = SMatrix{2,3}(num.Vx[ii,jj] for ii in i:i+1, jj in j:j+2)# .* pattern[3][1]        
@@ -773,7 +773,7 @@ function AssembleMomentum2D_x_var!(K, V, P, P0, ΔP, τ0, 𝐷, phases, material
             fill!(∂R∂Vy, 0e0)
             fill!(∂R∂Pt, 0e0)
             
-            autodiff(Enzyme.Reverse, SMomentum_x_Generic_var, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ΔP_loc), Const(τ0_loc), Const(D), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δx_loc), Const(Δy_loc), Const(Δt_loc), Const(i), Const(j))
+            forwarddiff_gradients!(SMomentum_x_Generic_var, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ΔP_loc), Const(τ0_loc), Const(D), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δx_loc), Const(Δy_loc), Const(Δt_loc), Const(i), Const(j))
             # Vx --- Vx
             Local = SMatrix{3,3}(num.Vx[ii, jj] for ii in i-1:i+1, jj in j-1:j+1) .* pattern[1][1]
             for jj in axes(Local,2), ii in axes(Local,1)
@@ -867,7 +867,7 @@ function AssembleMomentum2D_y_var!(K, V, P, P0, ΔP, τ0, 𝐷, phases, material
             fill!(∂R∂Vy, 0.0)
             fill!(∂R∂Pt, 0.0)
             
-            autodiff(Enzyme.Reverse, SMomentum_y_Generic_var, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ΔP_loc), Const(τ0_loc), Const(D), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δx_loc), Const(Δy_loc), Const(Δt_loc))
+            forwarddiff_gradients!(SMomentum_y_Generic_var, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ΔP_loc), Const(τ0_loc), Const(D), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δx_loc), Const(Δy_loc), Const(Δt_loc))
             
             num_Vy = @inbounds num.Vy[i,j]
             bounds_Vy = num_Vy > 0

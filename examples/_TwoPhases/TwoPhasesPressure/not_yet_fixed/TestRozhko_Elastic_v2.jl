@@ -1,8 +1,7 @@
 using StagFDTools, StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf, JLD2, ExactFieldSolutions
 import Statistics:mean
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
-
+using StagFDTools: Duplicated, Const, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
 function LocalRheology(ε̇, materials, phases, Δ)
 
     # Effective strain rate & pressure
@@ -41,7 +40,7 @@ function LocalRheology(ε̇, materials, phases, Δ)
     #     r      = ε̇II - StrainRateTrial(τII, G, Δ.t, B, n)
     #     # @show abs(r)
     #     (abs(r)<ϵ) && break
-    #     ∂ε̇II∂τII = Enzyme.jacobian(Enzyme.Forward, StrainRateTrial, τII, G, Δ.t, B, n)
+    #     ∂ε̇II∂τII = forwarddiff_jacobian(StrainRateTrial, τII, G, Δ.t, B, n)
     #     ∂τII∂ε̇II = inv(∂ε̇II∂τII[1])
     #     τII     += ∂τII∂ε̇II*r
     # end
@@ -110,7 +109,7 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, t
             ε̇vec  = @SVector([ε̇xx[1]+τ0.xx[i,j]/(2*G[1]*Δ.t), ε̇yy[1]+τ0.yy[i,j]/(2*G[1]*Δ.t), ε̇̄xy[1]+τ̄xy0[1]/(2*G[1]*Δ.t), P.t[i,j], P.f[i,j]])
 
             # Tangent operator used for Newton Linearisation
-            jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector!, ε̇vec, Const(materials), Const(phases.c[i,j]), Const(Δ))
+            jac   = forwarddiff_jacobian(StressVector!, ε̇vec, Const(materials), Const(phases.c[i,j]), Const(Δ))
             
             # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
             @views 𝐷_ctl.c[i,j][:,1] .= jac.derivs[1][1][1]
@@ -172,7 +171,7 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, t
         ε̇vec  = @SVector([ε̇̄xx[1]+τ̄xx0[1]/(2*G[1]*Δ.t), ε̇̄yy[1]+τ̄yy0[1]/(2*G[1]*Δ.t), ε̇xy[1]+τ0.xy[i+1,j+1]/(2*G[1]*Δ.t), P̄t[1], P̄f[1]])
         
         # Tangent operator used for Newton Linearisation
-        jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector!, ε̇vec, Const(materials), Const(phases.v[i+1,j+1]), Const(Δ))
+        jac   = forwarddiff_jacobian(StressVector!, ε̇vec, Const(materials), Const(phases.v[i+1,j+1]), Const(Δ))
 
         # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
         @views 𝐷_ctl.v[i+1,j+1][:,1] .= jac.derivs[1][1][1]

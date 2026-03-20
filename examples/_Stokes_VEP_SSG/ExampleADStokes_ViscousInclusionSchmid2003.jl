@@ -2,7 +2,6 @@ using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology
 using JLD2, ExtendableSparse, StaticArrays, CairoMakie, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
 using TimerOutputs
 using ExactFieldSolutions
 

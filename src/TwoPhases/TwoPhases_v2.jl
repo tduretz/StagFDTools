@@ -630,7 +630,11 @@ function AssembleMomentum2D_x!(K, V, P, P0, ΔP, τ0, 𝐷, phases, materials, n
             fill!(∂R∂Pt, 0.0)
             fill!(∂R∂Pf, 0.0)
 
-            autodiff(Enzyme.Reverse, SMomentum_x_Generic, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(Pt_loc, ∂R∂Pt), Duplicated(Pf_loc, ∂R∂Pf), Const(ΔPt_loc), Const(τ0_loc), Const(D), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+            ∂Vx, ∂Vy, ∂Pt, ∂Pf = ad_partial_gradients(SMomentum_x_Generic, (Vx_loc, Vy_loc, Pt_loc, Pf_loc), ΔPt_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δ)
+            ∂R∂Vx .= ∂Vx
+            ∂R∂Vy .= ∂Vy
+            ∂R∂Pt .= ∂Pt
+            ∂R∂Pf .= ∂Pf
             # Vx --- Vx
             Local = num.Vx[i-1:i+1,j-1:j+1] .* pattern[1][1]
             for jj in axes(Local,2), ii in axes(Local,1)
@@ -738,7 +742,11 @@ function AssembleMomentum2D_y!(K, V, P, P0, ΔP, τ0, 𝐷, phases, materials, n
             fill!(∂R∂Pt, 0.0)
             fill!(∂R∂Pf, 0.0)
 
-            autodiff(Enzyme.Reverse, SMomentum_y_Generic, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(Pt_loc, ∂R∂Pt), Duplicated(Pf_loc, ∂R∂Pf), Const(ΔPt_loc), Const(τ0_loc), Const(D), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+            ∂Vx, ∂Vy, ∂Pt, ∂Pf = ad_partial_gradients(SMomentum_y_Generic, (Vx_loc, Vy_loc, Pt_loc, Pf_loc), ΔPt_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δ)
+            ∂R∂Vx .= ∂Vx
+            ∂R∂Vy .= ∂Vy
+            ∂R∂Pt .= ∂Pt
+            ∂R∂Pf .= ∂Pf
 
             Local = num.Vx[i-2:i+1,j-1:j+2] .* pattern[2][1]
             for jj in axes(Local,2), ii in axes(Local,1)
@@ -819,7 +827,11 @@ function AssembleContinuity2D!(K, V, P, P0, ϕ, phases, materials, num, pattern,
         ∂R∂Pt .= 0.
         ∂R∂Pf .= 0.
 
-        autodiff(Enzyme.Reverse, Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(Pt_loc, ∂R∂Pt), Const(P0.t[i,j]), Duplicated(Pf_loc, ∂R∂Pf), Const(Pf0), Const(ϕ.c[i,j]), Const(phases.c[i,j]), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+        ∂Vx, ∂Vy, ∂Pt, ∂Pf = ad_partial_gradients(Continuity, (Vx_loc, Vy_loc, Pt_loc, Pf_loc), P0.t[i,j], Pf0, ϕ.c[i,j], phases.c[i,j], materials, type_loc, bcv_loc, Δ)
+        ∂R∂Vx .= ∂Vx
+        ∂R∂Vy .= ∂Vy
+        ∂R∂Pt .= ∂Pt
+        ∂R∂Pf .= ∂Pf
 
         # Pt --- Vx
         Local = num.Vx[i:i+1,j:j+2] .* pattern[3][1]
@@ -902,7 +914,11 @@ function AssembleFluidContinuity2D!(K, V, P, P0, ϕ, phases, materials, num, pat
         ∂R∂Vy .= 0.
         ∂R∂Pt .= 0.
         ∂R∂Pf .= 0.
-        autodiff(Enzyme.Reverse, FluidContinuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(Pt_loc, ∂R∂Pt), Const(P0.t[i,j]), Duplicated(Pf_loc, ∂R∂Pf), Const(Pf0), Const(ϕ.c[i,j]), Const(phases.c[i,j]), Const(materials), Const(k_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
+        ∂Vx, ∂Vy, ∂Pt, ∂Pf = ad_partial_gradients(FluidContinuity, (Vx_loc, Vy_loc, Pt_loc, Pf_loc), P0.t[i,j], Pf0, ϕ.c[i,j], phases.c[i,j], materials, k_loc, type_loc, bcv_loc, Δ)
+        ∂R∂Vx .= ∂Vx
+        ∂R∂Vy .= ∂Vy
+        ∂R∂Pt .= ∂Pt
+        ∂R∂Pf .= ∂Pf
              
         # Pf --- Vx
         Local = num.Vx[i:i+1,j:j+2] .* pattern[4][1]

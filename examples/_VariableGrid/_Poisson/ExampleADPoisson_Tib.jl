@@ -1,7 +1,8 @@
 using StagFDTools, StagFDTools.Poisson, ExtendableSparse, StaticArrays, LinearAlgebra, Statistics, UnPack, Plots
 using TimerOutputs
 # using Enzyme
-using ForwardDiff, Enzyme  # AD backends you want to use 
+using ForwardDiff
+using StagFDTools: Duplicated, Const, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
 using Distributions
 using JLD2
 ######
@@ -172,7 +173,7 @@ function AssemblyPoisson_Enzyme!(K, u, k, s, number, type, pattern, bc_val, nc, 
         ∂R∂u     .= 0e0
 
         # Here the magic happens: we call a function from Enzyme that computes all, partial derivatives for the current stencil block 
-        autodiff(Enzyme.Reverse, Poisson2D, Duplicated(u_loc, ∂R∂u), Const(k_loc), Const(s[i,j]), Const(type_loc), Const(bcv_loc), Const(Δxv), Const(Δyv))
+        forwarddiff_gradients!(Poisson2D, Duplicated(u_loc, ∂R∂u), Const(k_loc), Const(s[i,j]), Const(type_loc), Const(bcv_loc), Const(Δxv), Const(Δyv))
 
         # This loops through the 2*2 stencil block and sets the coefficient ∂R∂u into the sparse matrix K.u.u
         num_ij = number.u[i,j]

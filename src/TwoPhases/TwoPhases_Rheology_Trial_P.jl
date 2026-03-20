@@ -22,12 +22,11 @@ function Porosity(Φ0, Pt, Pf, Pt0, Pf0, KΦ, ηΦ0, m, λ̇, sinψ, Δt)
     Φ        = Φ0  + dΦdt * Δt
     r0       = 1.0
     for iter=1:2
-        J     = Enzyme.gradient(Enzyme.ForwardWithPrimal, PorosityResidual, Φ, Const(Φ0), Const(Pt), Const(Pf), Const(Pt0), Const(Pf0), Const(KΦ), Const(ηΦ0), Const(m), Const(λ̇), Const(sinψ), Const(Δt) )
-        r     = J.val[1]
+        r, dresdΦ = ad_value_and_derivative(PorosityResidual, Φ, Φ0, Pt, Pf, Pt0, Pf0, KΦ, ηΦ0, m, λ̇, sinψ, Δt)
         if iter==1 r0 = abs(r) + 1e-10 end
         # @show iter, abs(r), abs(r)/r0
         # if min(abs(r), abs(r)/r0 ) < 1e-10 break end
-        Φ    -=  J.derivs[1] \ J.val[1]
+        Φ    -=  r / dresdΦ
     end
     dΦdt, ηΦ = PorosityRate(Φ, Pt, Pf, Pt0, Pf0, KΦ, ηΦ0, m, λ̇, sinψ, Δt)
     return Φ, dΦdt, ηΦ 
@@ -68,9 +67,9 @@ function ΔP(Pt_trial, Pf_trial, Φ_trial, divVs, divqD, λ̇, Pt0, Pf0, Φ0, η
     tol = 1e-13
 
     for iter=1:10
-        J  = Enzyme.jacobian(Enzyme.ForwardWithPrimal,  ΔP_Trial, x, Const(Pt_trial), Const(Pf_trial), Const(Φ_trial), Const(0*divVs), Const(0*divqD), Const(λ̇), Const(0*Pt0), Const(0*Pf0), Const(Φ0), Const(ηΦ), Const(m),  Const(KΦ), Const(Ks), Const(Kf), Const(sinψ), Const(Δt))
-        x  = x .- J.derivs[1]\J.val
-        nr = mynorm(J.val)
+        R, J = ad_value_and_jacobian(ΔP_Trial, x, Pt_trial, Pf_trial, Φ_trial, 0 * divVs, 0 * divqD, λ̇, 0 * Pt0, 0 * Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, sinψ, Δt)
+        x  = x .- J \ R
+        nr = mynorm(R)
         if iter==1 && nr>1e-17
             r0 = nr
         end
@@ -180,10 +179,9 @@ function LocalRheology_P(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phas
     if f>-1e-13
         # This is the proper return mapping with plasticity
         for iter=1:10
-            J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase_P, x, Const(ηve), Const(Δ.t), Const(ε̇II_eff), Const(Pt_trial), Const(Pf_trial), Const(divVs), Const(divqD), Const(Φ_trial), Const(Pt0), Const(Pf0), Const(Φ0), Const(ηΦ), Const(m), Const(KΦ), Const(Ks), Const(Kf), Const(C), Const(cosϕ), Const(sinϕ), Const(sinψ), Const(ηvp), Const(materials.single_phase) )
-            # # display(J.derivs[1])
-            x .= x .- J.derivs[1]\J.val
-            nr = mynorm(J.val[:])
+            R, J = ad_value_and_jacobian(residual_two_phase_P, x, ηve, Δ.t, ε̇II_eff, Pt_trial, Pf_trial, divVs, divqD, Φ_trial, Pt0, Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, materials.single_phase)
+            x .= x .- J \ R
+            nr = mynorm(R[:])
             if iter==1 
                 nr0 = nr
             end
@@ -307,38 +305,34 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
         ##################################
 
         # Tangent operator used for Newton Linearisation
-        jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_P!, ε̇vec, Const(Dkk[1]), Const(divqD), Const(P0.t[i,j]), Const(P0.f[i,j]), Const(Φ0.c[i,j]), Const(τ0_loc), Const(materials), Const(phases.c[i,j]), Const(Δ))
-        
-        # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
-        @views 𝐷_ctl.c[i,j][:,1] .= jac.derivs[1][1][1]
-        @views 𝐷_ctl.c[i,j][:,2] .= jac.derivs[1][2][1]
-        @views 𝐷_ctl.c[i,j][:,3] .= jac.derivs[1][3][1]
-        @views 𝐷_ctl.c[i,j][:,4] .= jac.derivs[1][4][1]
-        @views 𝐷_ctl.c[i,j][:,5] .= jac.derivs[1][5][1]
+        stress_state, τ_vec, jac = ad_value_and_jacobian_first(StressVector_P!, ε̇vec, Dkk[1], divqD, P0.t[i,j], P0.f[i,j], Φ0.c[i,j], τ0_loc, materials, phases.c[i,j], Δ)
+        _, η_local, λ̇_local, τII_local, Φ_local, f_local = stress_state
+
+        @views 𝐷_ctl.c[i,j] .= jac
 
         ##################################
 
         # Tangent operator used for Picard Linearisation
-        𝐷.c[i,j] .= diagm(2*jac.val[2] * _ones)
+        𝐷.c[i,j] .= diagm(2 * η_local * _ones)
         𝐷.c[i,j][4,4] = 1
         𝐷.c[i,j][5,5] = 1
 
         ##################################
 
         # Update stress
-        τ.xx[i,j] = jac.val[1][1]
-        τ.yy[i,j] = jac.val[1][2]
-        τ.II[i,j] = jac.val[4]
-        τ.f[i,j]  = jac.val[6]
+        τ.xx[i,j] = τ_vec[1]
+        τ.yy[i,j] = τ_vec[2]
+        τ.II[i,j] = τII_local
+        τ.f[i,j]  = f_local
         ε̇.xx[i,j] = ε̇xx[1]
         ε̇.yy[i,j] = ε̇yy[1]
         ε̇.II[i,j] = invII( @SVector([ε̇xx[1], ε̇yy[1], ε̇̄xy[1]]) )
-        λ̇.c[i,j]  = jac.val[3]
-        Φ.c[i,j]  = jac.val[5]
-        η.c[i,j]  = jac.val[2]
+        λ̇.c[i,j]  = λ̇_local
+        Φ.c[i,j]  = Φ_local
+        η.c[i,j]  = η_local
         if  λ̇.c[i,j] > 0
-            ΔP.t[i,j] =  (jac.val[1][4] - P.t[i,j])
-            ΔP.f[i,j] =  (jac.val[1][5] - P.f[i,j])
+            ΔP.t[i,j] =  (τ_vec[4] - P.t[i,j])
+            ΔP.f[i,j] =  (τ_vec[5] - P.f[i,j])
         end
     end
 
@@ -450,27 +444,23 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
         ##################################
 
         # Tangent operator used for Newton Linearisation
-        jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_P!, ε̇vec, Const(D̄kk[1]), Const(divqD̄), Const(P̄t0[1]), Const(P̄f0[1]), Const(ϕ̄0[1]), Const(τ0_loc), Const(materials), Const(phases.v[i,j]), Const(Δ))
+        stress_state, τ_vec, jac = ad_value_and_jacobian_first(StressVector_P!, ε̇vec, D̄kk[1], divqD̄, P̄t0[1], P̄f0[1], ϕ̄0[1], τ0_loc, materials, phases.v[i,j], Δ)
+        _, η_local, λ̇_local, _, _, _ = stress_state
 
-        # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
-        @views 𝐷_ctl.v[i,j][:,1] .= jac.derivs[1][1][1]
-        @views 𝐷_ctl.v[i,j][:,2] .= jac.derivs[1][2][1]
-        @views 𝐷_ctl.v[i,j][:,3] .= jac.derivs[1][3][1]
-        @views 𝐷_ctl.v[i,j][:,4] .= jac.derivs[1][4][1]
-        @views 𝐷_ctl.v[i,j][:,5] .= jac.derivs[1][5][1]
+        @views 𝐷_ctl.v[i,j] .= jac
 
         ##################################
 
         # Tangent operator used for Picard Linearisation
-        𝐷.v[i,j] .= diagm(2*jac.val[2] * _ones)
+        𝐷.v[i,j] .= diagm(2 * η_local * _ones)
         𝐷.v[i,j][4,4] = 1
         𝐷.v[i,j][5,5] = 1
 
         # Update stress
-        τ.xy[i,j] = jac.val[1][3]
+        τ.xy[i,j] = τ_vec[3]
         ε̇.xy[i,j] = ε̇xy[1]
-        λ̇.v[i,j]  = jac.val[3]
-        η.v[i,j]  = jac.val[2]
+        λ̇.v[i,j]  = λ̇_local
+        η.v[i,j]  = η_local
     end
 
     # # # Cheap copy edges

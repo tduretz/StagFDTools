@@ -1,4 +1,5 @@
-using GLMakie, Enzyme, LinearAlgebra, JLD2, StaticArrays
+using GLMakie, LinearAlgebra, JLD2, StaticArrays
+using StagFDTools: Duplicated, Const, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
 
 # Intends to implement constitutive updates as in RheologicalCalculator
 
@@ -79,7 +80,7 @@ function Pressures(div, Pt0, Pf0, Φ0, p)
     tol = 1e-13
 
     for iter=1:10
-        J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase_div_pressure, x, Const(divVs), Const(divqD), Const(Pt0), Const(Pf0), Const(Φ0), Const(p))
+        J = forwarddiff_jacobian(residual_two_phase_div_pressure, x, Const(divVs), Const(divqD), Const(Pt0), Const(Pf0), Const(Φ0), Const(p))
         # display(J.derivs[1])
         x .-= J.derivs[1]\J.val
         if iter==1 
@@ -173,7 +174,7 @@ function StressVector_trial(ϵ̇, divVs, divqD, τ0, Pt0, Pf0, Φ0, params)
         tol = 1e-13
 
         for iter=1:10
-            J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase_trial, x, Const(ε̇II_eff), Const(Pt_trial), Const(Pf_trial), Const(Φ_trial), Const(Pt0), Const(Pf0), Const(Φ0), Const(params))
+            J = forwarddiff_jacobian(residual_two_phase_trial, x, Const(ε̇II_eff), Const(Pt_trial), Const(Pf_trial), Const(Φ_trial), Const(Pt0), Const(Pf0), Const(Φ0), Const(params))
             # display(J.derivs[1])
             x .-= J.derivs[1]\J.val
             if iter==1 
@@ -298,7 +299,7 @@ function StressVector_div(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
         tol = 1e-13
 
         for iter=1:10
-            J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase_div, x, Const(ε̇II_eff), divVs, divqD, Const(Φ_trial), Const(Pt0), Const(Pf0), Const(Φ0), Const(params))
+            J = forwarddiff_jacobian(residual_two_phase_div, x, Const(ε̇II_eff), divVs, divqD, Const(Φ_trial), Const(Pt0), Const(Pf0), Const(Φ0), Const(params))
             # display(J.derivs[1])
             x .-= J.derivs[1]\J.val
             if iter==1 
@@ -452,7 +453,7 @@ function two_phase_return_mapping()
         @show τ, Pt, Pf, Φ
 
         # Consistent tangent
-        J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_trial, ϵ̇,  Const(divVs), Const(divqD), Const(τ0), Const(Pt0),  Const(Pf0), Const(Φ0), Const(params))
+        J = forwarddiff_jacobian(StressVector_trial, ϵ̇,  Const(divVs), Const(divqD), Const(τ0), Const(Pt0),  Const(Pf0), Const(Φ0), Const(params))
        
         @views D_ctl_trial[:,1] .= J.derivs[1][1][1]
         @views D_ctl_trial[:,2] .= J.derivs[1][2][1]
@@ -467,7 +468,7 @@ function two_phase_return_mapping()
 
         # x = @SVector[divVs, divqD]
         # Pressures(x, Pt0, Pf0, Φ0, params)
-        # J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, Pressures, x, Pt0, Pf0, Φ0, Const(params))
+        # J = forwarddiff_jacobian(Pressures, x, Pt0, Pf0, Φ0, Const(params))
         # Jp =  J.derivs[1]
         # display(Jp)
         # # error()
@@ -480,7 +481,7 @@ function two_phase_return_mapping()
         # @show τ, Pt, Pf, Φ
 
         # # Consistent tangent
-        # J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_div, ϵ̇, Const(τ0), Const(Pt0),  Const(Pf0), Const(Φ0), Const(params))
+        # J = forwarddiff_jacobian(StressVector_div, ϵ̇, Const(τ0), Const(Pt0),  Const(Pf0), Const(Φ0), Const(params))
        
         # @views D_ctl_div[:,1] .= J.derivs[1][1][1]
         # @views D_ctl_div[:,2] .= J.derivs[1][2][1]

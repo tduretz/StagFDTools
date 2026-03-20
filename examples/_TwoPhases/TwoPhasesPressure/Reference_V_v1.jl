@@ -1,8 +1,5 @@
 using StagFDTools, StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, CairoMakie, LinearAlgebra, SparseArrays, Printf, JLD2
 import Statistics:mean
-using Enzyme  # AD backends you want to use
-
-
 let 
 
     Ωl = 0.15      # ---> δ/r

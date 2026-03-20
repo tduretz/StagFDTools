@@ -1,7 +1,7 @@
 using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
+using StagFDTools: Duplicated, Const, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
 using TimerOutputs
 
 function line(p, K, Δt, η_ve, ψ, p1, t1)
@@ -313,7 +313,7 @@ end
                 F_yield = F_hyperbolic(τ_ax, P_ax, φ, C, σT) 
                 @show norm(F_yield)
 
-                # autodiff(Enzyme.Reverse, F_hyperbolic, Duplicated(τ_ax, dFdτ), Const(P_ax), Const(φ), Const(C), Const(σT) )
+                # forwarddiff_gradients!(F_hyperbolic, Duplicated(τ_ax, dFdτ), Const(P_ax), Const(φ), Const(C), Const(σT) )
                 τ_ax .-= F_yield./1
             end
 

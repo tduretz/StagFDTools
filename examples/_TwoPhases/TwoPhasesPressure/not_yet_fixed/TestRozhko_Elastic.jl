@@ -1,8 +1,6 @@
 using StagFDTools.TwoPhases_old, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf, JLD2
 import Statistics:mean
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
-
 function Rozhko2008(rho, phi, r1, rc, P0, dPf, m, G, ν)
     eta   = (1.0 - 2.0*ν)/(1.0-ν)/2.0
     kappa = 3. - 4. * ν
