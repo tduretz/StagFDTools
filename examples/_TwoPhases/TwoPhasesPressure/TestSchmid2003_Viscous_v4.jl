@@ -50,9 +50,10 @@ using Enzyme  # AD backends you want to use
         #        mat    inc  
         Φ0    = [1e-16   1e-16],
         n     = [1.0    1.0 ],
+        m     = [0.0    0.0 ],
         n_CK  = [1.0    1.0 ],
         ηs0   = [params.mm  params.mc ]./sc.σ/sc.t, 
-        ηΦ    = [1e30   1e30]./sc.σ/sc.t,
+        ηΦ0   = [1e30   1e30]./sc.σ/sc.t,
         G     = [1e30   1e30] .* kill_elasticity ./sc.σ, 
         ρs    = [2900   2900]/(sc.σ*sc.t^2/sc.L^2),
         ρf    = [2600   2600]/(sc.σ*sc.t^2/sc.L^2),
@@ -345,110 +346,11 @@ using Enzyme  # AD backends you want to use
                 M.Pf.Vx M.Pf.Vy M.Pf.Pt M.Pf.Pf;
             ]
 
-            # # Two-phases operator as block matrix
-            # 𝑀1 = [
-            #     M.Vx.Vx M.Vx.Vy M.Vx.Pt; 
-            #     M.Vy.Vx M.Vy.Vy M.Vy.Pt; 
-            #     M.Pt.Vx M.Pt.Vy M.Pt.Pt; 
-            # ]
-
-            # ndofPt = maximum(number.Pt) +  maximum(number.Vx) +  maximum(number.Vy)
-            # r1   = r[1:ndofPt]
-
-            # @show size(𝑀1), size(r1)
-
-            # @info "System symmetry"
-            # 𝑀diff = 𝑀 - 𝑀'
-            # dropzeros!(𝑀diff)
-            # @show norm(𝑀diff)
-
-            #--------------------------------------------#
-
-
-            # data = load("DebugInclusionTest.jld2")
-            # M2 = data["M"]
-            # r2 = data["r"]
-            # R2 = data["R"]
-            # V2 = data["V"]
-            # Pt2 = data["Pt"]
-
-            # 𝐊  = [M2.Vx.Vx M2.Vx.Vy; M2.Vy.Vx M2.Vy.Vy]
-            # 𝐐  = [M2.Vx.Pt; M2.Vy.Pt]
-            # 𝐐ᵀ = [M2.Pt.Vx M2.Pt.Vy]
-            # 𝐏  = [M2.Pt.Pt;] 
-
-            # 𝑀2 = [
-            #     M2.Vx.Vx M2.Vx.Vy M2.Vx.Pt; 
-            #     M2.Vy.Vx M2.Vy.Vy M2.Vy.Pt; 
-            #     M2.Pt.Vx M2.Pt.Vy M2.Pt.Pt; 
-            # ]
-
-            # @show size(M.Vx.Vx), size(M2.Vx.Vx)
-            # @show size(M.Pt.Pt), size(M2.Pt.Pt)
-
-            # # Direct-iterative solver
-            # fu   = -r2[1:size(𝐊,1)]
-            # fp   = -r2[size(𝐊,1)+1:end]
-            # u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:chol,  ηb=1e3, niter_l=10, ϵ_l=1e-11)
-            # dx = zero(r)
-
-            # @show size(u), size(dx[1:size(𝐊,1)])
-            # @show size(p), ndofPt, size(𝐊,1)+size(𝐏,1)
-            # @show size(r)
-
-            # @show norm(R.x .- R2.x)
-            # @show norm(R.y .- R2.y)
-            # @show norm(R.pt .- R2.p)
-            # @show norm(V.x .- V2.x)
-            # @show norm(V.y .- V2.y)
-            # @show norm(P.t .- Pt2)
-            # fig  = Figure(fontsize = 20, size = (900, 600) )    
-            # step = 10
-            # ftsz = 15
-            # eps  = 1e-10
-
-            # ax    = Axis(fig[1,1], aspect=DataAspect(), title=L"$P^t$ numerics", xlabel=L"x", ylabel=L"y")
-            # field = (R.x)[inx_Vx,iny_Vx].*sc.σ
-            # hm    = heatmap!(ax, X.v.x, X.c.y, field, colormap=(Makie.Reverse(:matter), 1), colorrange=(minimum(field)-eps, maximum(field)+eps))
-            # # contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
-            # hidexdecorations!(ax)
-            # Colorbar(fig[2, 1], hm, label = L"$P^t$ numerics", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
-            
-            # ax    = Axis(fig[1,2], aspect=DataAspect(), title=L"$P^t$ numerics", xlabel=L"x", ylabel=L"y")
-            # field = (R2.x)[inx_Vx,iny_Vx].*sc.σ
-            # hm    = heatmap!(ax, X.v.x, X.c.y, field, colormap=(Makie.Reverse(:matter), 1), colorrange=(minimum(field)-eps, maximum(field)+eps))
-            # # contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
-            # hidexdecorations!(ax)
-            # Colorbar(fig[2, 2], hm, label = L"$P^t$ numerics", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
-            
-            # ax    = Axis(fig[1,3], aspect=DataAspect(), title=L"$P^t$ numerics", xlabel=L"x", ylabel=L"y")
-            # field = (R.x .- R2.x)[inx_Vx,iny_Vx].*sc.σ
-            # hm    = heatmap!(ax, X.v.x, X.c.y, field, colormap=(Makie.Reverse(:matter), 1), colorrange=(minimum(field)-eps, maximum(field)+eps))
-            # # contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
-            # hidexdecorations!(ax)
-            # Colorbar(fig[2, 3], hm, label = L"$P^t$ numerics", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
-            
-
-            # display(fig)
-
-
-
-            # error()
-
-            # dx[1:size(𝐊,1)]     .= u
-            # dx[size(𝐊,1)+1:size(𝐊,1)+size(𝐏,1)] .= p
-
             # Direct solver
-            # droptol!(𝑀diff, 1e-12)
             @time dx = - 𝑀 \ r
-            
-            # @time dx1 = - 𝑀1 \ r1
-
-            # dx = zero(r)
-            # dx[1:ndofPt] .= dx1
-
-
+    
             #--------------------------------------------#
+            # Solution update
             imin = LineSearch!(rvec, α, dx, R, V, P, ε̇, τ, Vi, Pi, ΔP, Φ, (τ0, P0, Φ0, ρ0), λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
             UpdateSolution!(V, P, α[imin]*dx, number, type, nc)
         end
@@ -497,13 +399,9 @@ using Enzyme  # AD backends you want to use
         P.t .-= mean(P.t[inx_c,iny_c]) 
 
         # Compute errors
-               
         ϵP[inx_c,iny_c] .= abs.(Pt_ana[inx_c,iny_c] .- P.t[inx_c,iny_c])
-        
         ϵV.x[inx_Vx,iny_Vx] .= abs.(V_ana.x[inx_Vx,iny_Vx] .- V.x[inx_Vx,iny_Vx])
-
         ϵV.y[inx_Vy,iny_Vy] .= abs.(V_ana.y[inx_Vy,iny_Vy] .- V.y[inx_Vy,iny_Vy])
-        
 
         @info "Errors:"
         @info mean(abs.(ϵV.x))
@@ -593,5 +491,4 @@ function Run(n)
 
 end
 
-Run(200)
-# 0.27, 0.1, 0.
+Run(50)

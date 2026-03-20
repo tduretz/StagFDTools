@@ -1,18 +1,22 @@
-using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf
+using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology 
+using JLD2, ExtendableSparse, StaticArrays, CairoMakie, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 using TimerOutputs
 using ExactFieldSolutions
 
-@views function main()
+@views function main(n)
     #--------------------------------------------#
 
+    # Characteristic scales
+    sc  = (σ=1e0, t=1e0, L=1e0)
+
     # Resolution
-    nc = (x = 50, y = 50)
+    nc = (x = n, y = n)
 
     # Setting for Schmid & Podladchikov (2003)
-    params = (mm = 1.0, mc = 100.0, rc = 0.1, gr = 0.0, er = 1.0)
+    params = (mm = 1.0, mc = 100.0, rc = 2.0, gr = 0.0, er = 1.0)
 
     # Boundary velocity gradient matrix
     config = :all_Dirichlet
@@ -27,7 +31,7 @@ using ExactFieldSolutions
         ρ    = [1.0    1.0  ],
         n    = [1.0    1.0  ],
         η0   = [params.mm    params.mc], 
-        G    = [1e6    1e6  ],
+        G    = [1e50   1e50  ],
         C    = [150    150  ],
         ϕ    = [30.    30.  ],
         ηvp  = [0.5    0.5  ],
@@ -98,7 +102,7 @@ using ExactFieldSolutions
 
     #--------------------------------------------#
     # Intialise field
-    L   = (x=1.0, y=1.0)
+    L   = (x=10., y=10.)
     x   = (min=-L.x/2, max=L.x/2)
     y   = (min=-L.y/2, max=L.y/2)
     Δ   = (x=L.x/nc.x, y=L.y/nc.y, t = Δt0)
@@ -146,7 +150,7 @@ using ExactFieldSolutions
 
     # Set material geometry 
     phases = (c= ones(Int64, size_c...), v= ones(Int64, size_v...), x =ones(Int64, size_x...), y=ones(Int64, size_y...) )  # phase on velocity points
-    rad = 0.1 + 1e-13
+    rad = params.rc + 1e-13
     phases.c[(X.c_e.x.^2 .+ (X.c_e.y').^2) .<= rad^2] .= 2
     phases.v[(X.v_e.x.^2 .+ (X.v_e.y').^2) .<= rad^2] .= 2
 
@@ -162,24 +166,26 @@ using ExactFieldSolutions
     )
     ϵP   = zero(BC.Pt)
 
+    # Get P analytics 
     for i=1:size(BC.Pf,1), j=1:size(BC.Pf,2)
-        # coordinate transform
         sol = Stokes2D_Schmid2003( [X.c_e.x[i], X.c_e.y[j]]; params )
         Pt_ana[i,j] = sol.p
     end
 
+    # Get Vx analytics 
     for i=1:size(BC.Vx,1), j=2:size(BC.Vx,2)-1
-        # coordinate transform
         sol = Stokes2D_Schmid2003( [X.v_e.x[i], X.c_e.y[j-1]]; params )
-        BC.Vx[i,j] =  sol.V[1]
-        V.x[i,j] = sol.V[1]
-        V_ana.x[i,j]  = sol.V[1]
+        BC.Vx[i,j]   =  sol.V[1]
+        V.x[i,j]     = sol.V[1]
+        V_ana.x[i,j] = sol.V[1]
     end
 
+    # Get Vy analytics 
     for i=2:size(BC.Vy,1)-1, j=1:size(BC.Vy,2)
-        # coordinate transform
         sol = Stokes2D_Schmid2003( [X.c_e.x[i-1], X.v_e.y[j]]; params )
-        BC.Vy[i,j] = V.y[i,j] = V_ana.y[i,j]  = sol.V[2]
+        BC.Vy[i,j]   = sol.V[2] 
+        V.y[i,j]     = sol.V[2] 
+        V_ana.y[i,j] = sol.V[2]
     end
 
     #--------------------------------------------#
@@ -239,7 +245,9 @@ using ExactFieldSolutions
             𝐊  .= [M.Vx.Vx M.Vx.Vy; M.Vy.Vx M.Vy.Vy]
             𝐐  .= [M.Vx.Pt; M.Vy.Pt]
             𝐐ᵀ .= [M.Pt.Vx M.Pt.Vy]
-            𝐏  .= [M.Pt.Pt;]             
+            𝐏  .= [M.Pt.Pt;]   
+            
+            if iter==1 save("DebugInclusionTest.jld2", Dict("M" => M, "r" => r, "R" => R, "V" => V, "Pt" => Pt, "D" => 𝐷, "D_ctl" => 𝐷_ctl)) end
             
             #--------------------------------------------#
      
@@ -264,34 +272,114 @@ using ExactFieldSolutions
         Pt[inx_c,iny_c]' .-= mean(Pt[inx_c,iny_c])
 
         # Compute errors
-        for I in eachindex(Pt)        
-            ϵP[I] = abs(Pt_ana[I] - Pt[I])
-        end
-
-        for I in eachindex(V.x)
-            ϵV.x[I] = abs(V_ana.x[I] - V.x[I])
-        end
-
-        for I in eachindex(V.y)
-            ϵV.y[I] = abs(V_ana.y[I] - V.y[I])
-        end
+        ϵP[inx_c,iny_c] .= abs.(Pt_ana[inx_c,iny_c] .- Pt[inx_c,iny_c])
+        ϵV.x[inx_Vx,iny_Vx] .= abs.(V_ana.x[inx_Vx,iny_Vx] .- V.x[inx_Vx,iny_Vx])
+        ϵV.y[inx_Vy,iny_Vy] .= abs.(V_ana.y[inx_Vy,iny_Vy] .- V.y[inx_Vy,iny_Vy])
 
         @info mean(abs.(ϵV.x))
         @info mean(abs.(ϵV.y))
         @info mean(abs.(ϵP))
 
+        Pt_viz = copy(Pt)
+        Pt_viz[Pt.>maximum(Pt_ana)] .= maximum(Pt_ana)
+        Pt_viz[Pt.<minimum(Pt_ana)] .= minimum(Pt_ana)
+
+        Vx_viz = copy(V.x)
+        Vx_viz[V.x.>maximum(V_ana.x)] .= maximum(V_ana.x)
+        Vx_viz[V.x.<minimum(V_ana.x)] .= minimum(V_ana.x)
+
+        Vy_viz = copy(V.y)
+        Vy_viz[V.y.>maximum(V_ana.y)] .= maximum(V_ana.y)
+        Vy_viz[V.y.<minimum(V_ana.y)] .= minimum(V_ana.y)
         #--------------------------------------------#
 
-        # Visulisation
-        p3 = heatmap(X.v.x, X.c.y, ϵV.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(X.v.x), title="Vx", color=:vik)
-        p4 = heatmap(X.v.x, X.c.y, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(X.v.x), title="Vx", color=:vik)
-        # p4 = heatmap(X.c.x, X.v.y, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(X.v.x), title="Vy", color=:vik)
-        p2 = heatmap(X.c.x, X.c.y, Pt[inx_c,iny_c], aspect_ratio=1, xlim=extrema(X.v.x), title="Pt", color=:vik)
-        p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright, title="Convergence")
-        p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
-        p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
-        p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
-        display(plot(p1, p2, p3, p4, layout=(2,2)))
+        # Visualise
+        function figure()
+            fig  = Figure(fontsize = 20, size = (900, 900) )    
+            step = 10
+            ftsz = 15
+            eps  = 1e-10
+
+            ax    = Axis(fig[1,1], aspect=DataAspect(), title=L"$P$ numerics", xlabel=L"x", ylabel=L"y")
+            field = (Pt_viz)[inx_c,iny_c].*sc.σ
+            hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=(Makie.Reverse(:matter), 1), colorrange=(minimum(field)-eps, maximum(field)+eps))
+            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
+            hidexdecorations!(ax)
+            Colorbar(fig[2, 1], hm, label = L"$P$ numerics", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+            
+            ax    = Axis(fig[1,2], aspect=DataAspect(), title=L"$P$ analytics", xlabel=L"x", ylabel=L"y")
+            field = (Pt_ana)[inx_c,iny_c].*sc.σ
+            hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=(Makie.Reverse(:matter), 1), colorrange=(minimum(field)-eps, maximum(field)+eps))
+            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
+            hidexdecorations!(ax)
+            Colorbar(fig[2, 2], hm, label = L"$P$ analytics", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+
+            ax    = Axis(fig[1,3], aspect=DataAspect(), title=L"$P$ error", xlabel=L"x", ylabel=L"y")
+            field = (ϵP)[inx_c,iny_c].*sc.σ
+            hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=(Makie.Reverse(:matter), 1), colorrange=(minimum(field)-eps, maximum(field)+eps))
+            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
+            hidexdecorations!(ax)
+            Colorbar(fig[2, 3], hm, label = L"$P$ analytics", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+
+            ###########################
+            ax    = Axis(fig[3,1], aspect=DataAspect(), title=L"$V_{x}$ numerics", xlabel=L"x", ylabel=L"y")
+            field = (Vx_viz)[inx_Vx,iny_Vx].*sc.σ
+            hm    = heatmap!(ax, X.v.x, X.c.y, field, colormap=(Makie.Reverse(:matter), 1), colorrange=(minimum(field)-eps, maximum(field)+eps))
+            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
+            hidexdecorations!(ax)
+            Colorbar(fig[4, 1], hm, label = L"$V_{x}$ numerics", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+            
+            ax    = Axis(fig[3,2], aspect=DataAspect(), title=L"$V_{x}$ analytics", xlabel=L"x", ylabel=L"y")
+            field = (V_ana.x)[inx_Vx,iny_Vx].*sc.σ
+            hm    = heatmap!(ax, X.v.x, X.c.y, field, colormap=(Makie.Reverse(:matter), 1), colorrange=(minimum(field)-eps, maximum(field)+eps))
+            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
+            hidexdecorations!(ax)
+            Colorbar(fig[4, 2], hm, label = L"$V_{x}$ analytics", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+
+            ax    = Axis(fig[3,3], aspect=DataAspect(), title=L"$V_{x}$ error", xlabel=L"x", ylabel=L"y")
+            field = (ϵV.x)[inx_Vx,iny_Vx].*sc.σ
+            hm    = heatmap!(ax, X.v.x, X.c.y, field, colormap=(Makie.Reverse(:matter), 1), colorrange=(minimum(field)-eps, maximum(field)+eps))
+            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
+            hidexdecorations!(ax)
+            Colorbar(fig[4, 3], hm, label = L"$V_{x}$ analytics", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+
+            ###########################
+            ax    = Axis(fig[5,1], aspect=DataAspect(), title=L"$V_{x}$ numerics", xlabel=L"x", ylabel=L"y")
+            field = (Vy_viz)[inx_Vx,iny_Vx].*sc.σ
+            hm    = heatmap!(ax, X.v.x, X.c.y, field, colormap=(Makie.Reverse(:matter), 1), colorrange=(minimum(field)-eps, maximum(field)+eps))
+            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
+            hidexdecorations!(ax)
+            Colorbar(fig[6, 1], hm, label = L"$V_{y}$ numerics", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+            
+            ax    = Axis(fig[5,2], aspect=DataAspect(), title=L"$V_{x}$ analytics", xlabel=L"x", ylabel=L"y")
+            field = (V_ana.y)[inx_Vx,iny_Vx].*sc.σ
+            hm    = heatmap!(ax, X.c.x, X.v.y, field, colormap=(Makie.Reverse(:matter), 1), colorrange=(minimum(field)-eps, maximum(field)+eps))
+            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
+            hidexdecorations!(ax)
+            Colorbar(fig[6, 2], hm, label = L"$V_{y}$ analytics", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+
+            ax    = Axis(fig[5,3], aspect=DataAspect(), title=L"$V_{x}$ error", xlabel=L"x", ylabel=L"y")
+            field = (ϵV.y)[inx_Vy,iny_Vy].*sc.σ
+            hm    = heatmap!(ax, X.c.x, X.v.y, field, colormap=(Makie.Reverse(:matter), 1), colorrange=(minimum(field)-eps, maximum(field)+eps))
+            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
+            hidexdecorations!(ax)
+            Colorbar(fig[6, 3], hm, label = L"$V_{y}$ analytics", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+
+            display(fig) 
+            DataInspector(fig)
+        end
+        with_theme(figure, theme_latexfonts())
+
+        # # Visulisation
+        # p3 = heatmap(X.v.x, X.c.y, ϵV.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(X.v.x), title="Vx", color=:vik)
+        # p4 = heatmap(X.v.x, X.c.y, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(X.v.x), title="Vx", color=:vik)
+        # # p4 = heatmap(X.c.x, X.v.y, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(X.v.x), title="Vy", color=:vik)
+        # p2 = heatmap(X.c.x, X.c.y, Pt[inx_c,iny_c], aspect_ratio=1, xlim=extrema(X.v.x), title="Pt", color=:vik)
+        # p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright, title="Convergence")
+        # p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
+        # p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
+        # p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
+        # display(plot(p1, p2, p3, p4, layout=(2,2)))
 
     end
     display(to)
@@ -300,5 +388,5 @@ end
 
 let
     # Run 
-    main()
+    main(10)
 end

@@ -9,8 +9,8 @@ using Enzyme  # AD backends you want to use
     homo   = false
 
     # Time steps
-    nt     = 30
-    Δt0    = 1e10/sc.t 
+    nt     = 50
+    Δt0    = 1e11/sc.t 
 
     # Newton solver
     niter = 25
@@ -39,10 +39,9 @@ using Enzyme  # AD backends you want to use
         single_phase = false,
         conservative = false,
         n     = [1.0    1.0  ],
-        m     = [0.0    0.0  ],
         n_CK  = [1.0    1.0   1.0  ],
         ηs0   = [1e22   1e19 ]/sc.σ/sc.t, 
-        ηΦ0   = [2e22   2e22 ]/sc.σ/sc.t,
+        ηΦ    = [2e22   2e22 ]/sc.σ/sc.t,
         G     = [3e10   3e10 ]./sc.σ, 
         ρs    = [2800   2800 ]/(sc.σ*sc.t^2/sc.L^2),
         ρf    = [1000   1000 ]/(sc.σ*sc.t^2/sc.L^2),
@@ -53,7 +52,7 @@ using Enzyme  # AD backends you want to use
         k_ηf0 = [1e-15  1e-15]./(sc.L^2/sc.σ/sc.t),
         ϕ     = [35.    35.  ].*1,
         ψ     = [10.    10.  ].*1,
-        C     = [1e7    1e7  ]./sc.σ,
+        C     = [1e7    1e7  ]./sc.σ * 1e100,
         ηvp   = [0.0    0.0  ]./sc.σ/sc.t,
         cosϕ  = [0.0    0.0  ],
         sinϕ  = [0.0    0.0  ],
@@ -65,7 +64,7 @@ using Enzyme  # AD backends you want to use
     @. materials.sinϕ  = sind(materials.ϕ)
     @. materials.sinψ  = sind(materials.ψ)
 
-    Φ0      = 0.05
+    Φ0      = 0.01
     # Φ0 = (materials.KΦ[1] .* Δt0 .* (Pf_ini - Pt_ini)) ./ (materials.KΦ[1] .* materials.ηΦ0[1])
     @show Φ0
     # error()
@@ -133,7 +132,7 @@ using Enzyme  # AD backends you want to use
 
     #--------------------------------------------#
     # Intialise field
-    L   = (x=40e3/sc.L, y=20e3/sc.L)
+    L   = (x=20e3/sc.L, y=20e3/sc.L)
     Δ   = (x=L.x/nc.x, y=L.y/nc.y, t=Δt0)
     R   = (x=zeros(size_x...), y=zeros(size_y...), pt=zeros(size_c...), pf=zeros(size_c...), Φ=zeros(size_c...))
     V   = (x=zeros(size_x...), y=zeros(size_y...))
@@ -198,15 +197,21 @@ using Enzyme  # AD backends you want to use
     #--------------------------------------------#
 
     rvec   = zeros(length(α))
+
     probes = (
+        maxPt = zeros(nt),
+        maxPf = zeros(nt),
+        maxτ  = zeros(nt),
+        Pti = zeros(nt),
+        Pfi = zeros(nt),
+        Pei = zeros(nt),
+        ΔPt = zeros(nt),
+        ΔPf = zeros(nt),
+        ΔPe = zeros(nt),
         Pe  = zeros(nt),
         Pt  = zeros(nt),
         Pf  = zeros(nt),
-        τ   = zeros(nt),
-        Φ   = zeros(nt),
-        λ̇   = zeros(nt),
         t   = zeros(nt),
-        τII = zeros(nt),
     )
 
     err  = (x = zeros(niter), y = zeros(niter), pt = zeros(niter), pf = zeros(niter))
@@ -398,37 +403,37 @@ using Enzyme  # AD backends you want to use
         P.f .= P.f .+ ΔP.f
         εp  .+= ε̇.II*Δ.t
         
-        τxyc = av2D(τ.xy)
-        ε̇xyc = av2D(ε̇.xy)
 
-        # # Post process 
-        # @time for i in eachindex(Φ.c)
-        #     KΦ     = materials.KΦ[phases.c[i]]
-        #     ηΦ     = materials.ηΦ0[phases.c[i]] 
-        #     sinψ   = materials.sinψ[phases.c[i]] 
-        #     dPtdt  = (P.t[i] - P0.t[i]) / Δ.t
-        #     dPfdt  = (P.f[i] - P0.f[i]) / Δ.t
-        #     dΦdt   = 1/KΦ * (dPfdt - dPtdt) + 1/ηΦ * (P.f[i] - P.t[i]) + λ̇.c[i]*sinψ
-        #     Φ.c[i] = Φ0.c[i] + dΦdt*Δ.t
-        # end
+        k_ηΦ_x = materials.k_ηf0[1] .* ((Φ.c[2:end,:] .+ Φ.c[1:end-1,:]) / 2).^ materials.n_CK[1]
+        k_ηΦ_y = materials.k_ηf0[1] .* ((Φ.c[:,2:end] .+ Φ.c[:,1:end-1]) / 2).^ materials.n_CK[1]
 
-        Vxsc = 0.5*(V.x[1:end-1,2:end-1] + V.x[2:end,2:end-1])[2:end-1,2:end-1]
-        Vysc = 0.5*(V.y[2:end-1,1:end-1] + V.y[2:end-1,2:end])[2:end-1,2:end-1]
-        Vs   = sqrt.( Vxsc.^2 .+ Vysc.^2)
-        Vxf  = -materials.k_ηf0[1]*diff(P.f, dims=1)/Δ.x
-        Vyf  = -materials.k_ηf0[1]*diff(P.f, dims=2)/Δ.y
-        Vyfc = 0.5*(Vyf[1:end-1,:] .+ Vyf[2:end,:])
-        Vxfc = 0.5*(Vxf[:,1:end-1] .+ Vxf[:,2:end])
-        Vf   = sqrt.( Vxfc.^2 .+ Vyfc.^2)
+        Vxsc = 0.5*(V.x[1:end-1,2:end-1] + V.x[2:end,2:end-1])
+        Vysc = 0.5*(V.y[2:end-1,1:end-1] + V.y[2:end-1,2:end])
+        Vs   = (x=Vxsc, y=Vysc )
+        Vs_mag   = sqrt.( Vxsc.^2 .+ Vysc.^2)
+        Vxf  = -k_ηΦ_x .* diff(P.f, dims=1)/Δ.x
+        Vyf  = -k_ηΦ_y .* diff(P.f, dims=2)/Δ.y
+        Vxfc = 0.5*(Vxf[1:end-1,2:end-1] .+ Vxf[2:end,2:end-1])
+        Vyfc = 0.5*(Vyf[2:end-1,1:end-1] .+ Vyf[2:end-1,2:end])
+        Vf   = (x=Vxfc, y=Vyfc )
+        Vf_mag   = sqrt.( Vxfc.^2 .+ Vyfc.^2)
+
+        dΦdt = (Φ.c .- Φ0.c) / Δ.t
 
         #--------------------------------------------#
-        probes.Pe[it]   = mean(P.t[inx_c,iny_c] .- P.f[inx_c,iny_c])*sc.σ
-        probes.Pt[it]   = mean(P.t[inx_c,iny_c])*sc.σ
-        probes.Pf[it]   = mean(P.f[inx_c,iny_c])*sc.σ
-        probes.τ[it]    = mean(τ.II[inx_c,iny_c])*sc.σ
-        probes.Φ[it]    = mean(Φ.c[inx_c,iny_c])
-        probes.λ̇[it]    = mean(λ̇.c[inx_c,iny_c])/sc.t
-        probes.t[it]    = it*Δ.t*sc.t
+        probes.Pti[it]   = mean(P.t[phases.c.==2])
+        probes.Pfi[it]   = mean(P.f[phases.c.==2])
+        probes.Pei[it]   = mean(P.t[phases.c.==2] .- P.f[phases.c.==2])
+        probes.ΔPt[it]   = maximum(P.t) - minimum(P.t)
+        probes.ΔPf[it]   = maximum(P.f) - minimum(P.f)
+        probes.ΔPe[it]   = maximum(P.t .- P.f) - minimum(P.t .- P.f) 
+        probes.Pe[it]    = norm(P.t .- P.f)
+        probes.Pt[it]    = norm(P.t)
+        probes.Pf[it]    = norm(P.f)
+        probes.t[it]     = it*Δ.t
+        probes.maxPt[it] = maximum(P.t)
+        probes.maxPf[it] = maximum(P.f)
+        probes.maxτ[it]  = maximum(τ.II)
 
         #-------------------------------------------# 
 
@@ -437,74 +442,80 @@ using Enzyme  # AD backends you want to use
       
         # Visualise
         function figure()
-            fig  = Figure(fontsize = 20, size = (900, 600) )    
-            step = 10
-            ftsz = 15
-            eps  = 1e-10
 
-            # ax   = Axis(fig[1,1], aspect=DataAspect(), title=L"$$Plastic strain rate", xlabel=L"x", ylabel=L"y")
-            # field = log10.((λ̇.c[inx_c,iny_c] .+ eps)/sc.t )
-            ax   = Axis(fig[1,1], aspect=DataAspect(), title=L"$$von Mises strain", xlabel=L"x", ylabel=L"y")
-            field = log10.(εp[inx_c,iny_c])
-            hm = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
-            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
-            hidexdecorations!(ax)
-            Colorbar(fig[2, 1], hm, label = L"$\dot\lambda$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+            xc = X.c.x
+            yc = X.c.y
+            cmap = :jet1
+            st  = 15
+            ind = st:st:size(xc,1)-st
+
+            fig = Figure(fontsize = 14, size = (675, 600) ) 
+
+            ax1 = Axis(fig[3,1],  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect()) #, title=L"$V^\text{s}$"
+            hmVs = heatmap!(ax1, xc, yc, Vs_mag, colormap=cmap)#, colorrange=(0,0.75)) 
+            arrows2d!(ax1, xc[ind], yc[ind], Vs.x[ind,ind], Vs.y[ind,ind], lengthscale = 1e-1, color = :white)
+
+            ax2 = Axis(fig[3,2], xlabelsize=20, ylabelsize=20, aspect=DataAspect()) #, title=L"$V^\text{f} \times 1000$"
+            hmVf = heatmap!(ax2, xc, yc, Vf_mag*1000, colormap=cmap)#, colorrange=(0,0.2)) 
+            arrows2d!(ax2, xc[ind], yc[ind], Vf.x[ind,ind], Vf.y[ind,ind], lengthscale = 500, color = :white)
+            # arrowsize = V.arrow, lengthscale = V.scale)
+
+            ax2 = Axis(fig[3,3], xlabelsize=20, ylabelsize=20, aspect=DataAspect()) #, title=L"$V^\text{f} \times 1000$"
+            hmτ = heatmap!(ax2, xc, yc, τ.II[inx_c,iny_c], colormap=cmap)#, colorrange=(0,3)) 
+            # arrows2d!(ax2, xc[ind], yc[ind], σ1.x[ind,ind], σ1.y[ind,ind], lengthscale = 7e-2, color = :white, tipwidth = 0)
+
+            ax1 = Axis(fig[2,1],  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect()) #, title=L"$P^\text{t}$"
+            hm1=heatmap!(ax1, xc, yc, P.t[inx_c,iny_c], colormap=cmap)#, colorrange=(-3,3)) 
+            # hm1=heatmap!(ax1, xc, yc, Vs.x, colormap=cmap) 
+
+            ax2 = Axis(fig[2,2],  xlabel=L"$x$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect()) # , title=L"$P^\text{f}$"
+            hm2=heatmap!(ax2, xc, yc, P.f[inx_c,iny_c], colormap=cmap)#, colorrange=(-3,3)) 
             
-            # arrows2d!(ax, X.c.x[1:step:end], X.c.y[1:step:end], Vxsc[1:step:end,1:step:end], Vysc[1:step:end,1:step:end], lengthscale=10000.4, color=:white)
+            ax3 = Axis(fig[2,3],  xlabel=L"$x$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect()) # , title=L"$\dot{\phi}$"
+            hm3=heatmap!(ax3, xc, yc, dΦdt[inx_c,iny_c]*100, colormap=cmap)#, colorrange=(-10.e-1, 10.e-1)) 
 
-            ax    = Axis(fig[3,1], aspect=DataAspect(), title=L"$$Porosity", xlabel=L"x", ylabel=L"y")
-            field = Φ.c[inx_c,iny_c]
-            hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
-            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
-            hidexdecorations!(ax)
-            Colorbar(fig[4, 1], hm, label = L"$\dot\lambda$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+            # contour!( ax3, xc, yc, Pe[inx_c,iny_c], levels=[0.1], color=:white)
             
-            ax    = Axis(fig[1,2], aspect=DataAspect(), title=L"$P^t - P^f$ [MPa]", xlabel=L"x", ylabel=L"y")
-            field = (P.t .- P.f)[inx_c,iny_c].*sc.σ./1e6
-            hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
-            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
-            hidexdecorations!(ax)
-            Colorbar(fig[2, 2], hm, label = L"$P^t - P^f$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
-            
-            # arrows2d!(ax, X.c.x[1:step:end], X.c.y[1:step:end], Vxsc[1:step:end,1:step:end], Vysc[1:step:end,1:step:end], lengthscale=10000.4, color=:white)
+            Colorbar(fig[4,   1], hmVs, label = L"D) $|V^\text{s}|$ [-]", height=10, width = 150, labelsize = 16, ticklabelsize = 12, vertical=false, valign=true, flipaxis = false )
+            Colorbar(fig[4,   2], hmVf, label = L"E) $|Q^\text{f}| \times 1000$ [-]", height=10, width = 150, labelsize = 16, ticklabelsize = 12, vertical=false, valign=true, flipaxis = false )
+            Colorbar(fig[4,   3], hmτ,  label = L"F) $\tau_{II}$ [-]", height=10, width = 150, labelsize = 16, ticklabelsize = 12, vertical=false, valign=true, flipaxis = false )
 
-            τxyc0 = av2D(τ0.xy)
-            τII0  = sqrt.( 0.5.*(τ0.xx[inx_c,iny_c].^2 + τ0.yy[inx_c,iny_c].^2 + (-τ0.xx[inx_c,iny_c]-τ0.yy[inx_c,iny_c]).^2) .+ τxyc0[inx_c,iny_c].^2 )
+            Colorbar(fig[1, 1], hm1, label = L"A) $P^\text{t}$ [-]", height=10, width = 150, labelsize = 16, ticklabelsize = 12, vertical=false, valign=true, flipaxis = true )
+            Colorbar(fig[1, 2], hm2, label = L"B) $P^\text{f}$ [-]", height=10, width = 150, labelsize = 16, ticklabelsize = 12, vertical=false, valign=true, flipaxis = true )
+            Colorbar(fig[1, 3], hm3, label = L"C) $\dot{\phi} \times 100$ [-]", height=10, width = 150, labelsize = 16, ticklabelsize = 12, vertical=false, valign=true, flipaxis = true )
 
-            ax    = Axis(fig[3,2], aspect=DataAspect(), title=L"$P^e - \tau$", xlabel=L"P^e", ylabel=L"\tau")
-            Pe    = (P.t .- P.f)[inx_c,iny_c].*sc.σ
-            τII   = (τ.II)[inx_c,iny_c].*sc.σ
-            # P_ax       = LinRange(minimum(Pe), maximum(Pe), 100)
-            P_ax       = LinRange(0, 2*mean(Pe), 100)
-            τ_ax_rock = materials.C[1]*sc.σ*materials.cosϕ[1] .+ P_ax.*materials.sinϕ[1]
-            lines!(ax, P_ax/1e6, τ_ax_rock/1e6, color=:black)
-            scatter!(ax, Pe[:]/1e6, τII[:]/1e6, color=:black )
+            display(fig)
 
-            Pe    = (P0.t .- P0.f)[inx_c,iny_c].*sc.σ
-            τII   = τII0.*sc.σ
-            scatter!(ax, Pe[:]/1e6, τII[:]/1e6, color=:gray )
+            # save("./figures/benchmark_v2.png", f, px_per_unit=4)
 
-            ax    = Axis(fig[1,3], aspect=DataAspect(), title=L"$\tau_\text{II}$ [MPa]", xlabel=L"x", ylabel=L"y")
-            field = (τ.II)[inx_c,iny_c].*sc.σ./1e6
-            hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
-            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
-            hidexdecorations!(ax)
-            Colorbar(fig[2, 3], hm, label = L"$\tau_\text{II}$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
-            
-            ax  = Axis(fig[3,3], xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error")
-            scatter!(ax, 1:niter, log10.(err.x[1:niter]./err.x[1]) )
-            scatter!(ax, 1:niter, log10.(err.y[1:niter]./err.x[1]) )
-            scatter!(ax, 1:niter, log10.(err.pt[1:niter]./err.pt[1]) )
-            scatter!(ax, 1:niter, log10.(err.pf[1:niter]./err.pf[1]) )
-            ylims!(ax, -10, 1.1)
+            # save("./examples/_TwoPhases/TwoPhasesPressure/PoroviscousReference.jld2", "Ωl", Ωl, "Ωη", Ωη,"x", (c=xc, v=xv), "y", (c=yc, v=yv), "P", P, "dΦdt", dΦdt, "Φ", Φ, "τ", τ, "Vs", (x=Vxsc, y=Vysc), "Vf", (x=Vxfc, y=Vyfc))
 
-            # field = P.f.*sc.σ
-            # hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
-            # contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
-            # hidexdecorations!(ax)
-            # Colorbar(fig[4, 2], hm, label = L"$P^f$", height=20, width = 200, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
-            
+            # P.t .-= mean(P.t)
+            # P.f .-= mean(P.f)
+
+            probes.Pti[it]   = mean(P.t[phases.c.==2])
+            probes.Pfi[it]   = mean(P.f[phases.c.==2])
+            probes.Pei[it]   = mean(P.t[phases.c.==2] .- P.f[phases.c.==2])
+            probes.ΔPt[it]   = maximum(P.t) - minimum(P.t)
+            probes.ΔPf[it]   = maximum(P.f) - minimum(P.f)
+            probes.ΔPe[it]   = maximum(P.t .- P.f) - minimum(P.t .- P.f) 
+            probes.Pe[it]    = norm(P.t .- P.f)
+            probes.Pt[it]    = norm(P.t)
+            probes.Pf[it]    = norm(P.f)
+            probes.t[it]     = it*Δ.t
+            probes.maxPt[it] = maximum(P.t)
+            probes.maxPf[it] = maximum(P.f)
+            probes.maxτ[it]  = maximum(τ.II)
+
+            @show mean(P.t[phases.c.==2])
+            @show mean(P.f[phases.c.==2])
+
+            fig = Figure(fontsize = 14, size = (600, 600) )  
+            ax = Axis(fig[1,1], xlabelsize=20, ylabelsize=20, title=L"$\text{max} P^t, P^f, \tau_\text{II}$", xlabel = L"$t$ [-]", ylabel = L"$P, \tau$ [-]")
+            lines!(ax,  probes.t[1:it], probes.maxPt[1:it], label=L"$$P^t")
+            lines!(ax,  probes.t[1:it], probes.maxPf[1:it], label=L"$$P^f")
+            lines!(ax,  probes.t[1:it], probes.maxτ[1:it],  label=L"$$\tau_\text{II}")
+            axislegend(framevisible = false, position=:lt)
             display(fig) 
         end
         with_theme(figure, theme_latexfonts())
@@ -522,7 +533,7 @@ end
 
 function Run()
 
-    nc = (x=150, y=100)
+    nc = (x=50, y=50)
 
     # Mode 0   
     main(nc);

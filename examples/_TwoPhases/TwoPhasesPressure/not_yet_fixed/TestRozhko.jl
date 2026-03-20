@@ -53,7 +53,7 @@ end
     ν        = 0.49
     K        = 3*G0*(1-2ν)/(2*(1+ν)*(1-2ν))
     Ks0, Ksi = K, K*1e-3
-    Kϕ0, Kϕi = K, K*1e-3
+    KΦ0, KΦi = K, K*1e-3
     Kf0, Kfi = K, K*1e-3
 
     # Set Rozhko values for fluid pressure
