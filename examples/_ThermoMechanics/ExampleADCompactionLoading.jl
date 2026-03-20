@@ -39,6 +39,7 @@ using Enzyme
         oneway       = false,
         compressible = true,
         Dzz          = ε̇,
+        OOP          = 0.0,
         n            = [1.0  1.0],
         ηs0          = [ηi  ηinc], 
         G            = [Gi  Ginc], 

@@ -31,7 +31,7 @@ using ExactFieldSolutions
         ρ    = [1.0    1.0  ],
         n    = [1.0    1.0  ],
         η0   = [params.mm    params.mc], 
-        G    = [1e6    1e6  ],
+        G    = [1e50   1e50  ],
         C    = [150    150  ],
         ϕ    = [30.    30.  ],
         ηvp  = [0.5    0.5  ],
@@ -166,24 +166,26 @@ using ExactFieldSolutions
     )
     ϵP   = zero(BC.Pt)
 
+    # Get P analytics 
     for i=1:size(BC.Pf,1), j=1:size(BC.Pf,2)
-        # coordinate transform
         sol = Stokes2D_Schmid2003( [X.c_e.x[i], X.c_e.y[j]]; params )
         Pt_ana[i,j] = sol.p
     end
 
+    # Get Vx analytics 
     for i=1:size(BC.Vx,1), j=2:size(BC.Vx,2)-1
-        # coordinate transform
         sol = Stokes2D_Schmid2003( [X.v_e.x[i], X.c_e.y[j-1]]; params )
-        BC.Vx[i,j] =  sol.V[1]
-        V.x[i,j] = sol.V[1]
-        V_ana.x[i,j]  = sol.V[1]
+        BC.Vx[i,j]   =  sol.V[1]
+        V.x[i,j]     = sol.V[1]
+        V_ana.x[i,j] = sol.V[1]
     end
 
+    # Get Vy analytics 
     for i=2:size(BC.Vy,1)-1, j=1:size(BC.Vy,2)
-        # coordinate transform
         sol = Stokes2D_Schmid2003( [X.c_e.x[i-1], X.v_e.y[j]]; params )
-        BC.Vy[i,j] = V.y[i,j] = V_ana.y[i,j]  = sol.V[2]
+        BC.Vy[i,j]   = sol.V[2] 
+        V.y[i,j]     = sol.V[2] 
+        V_ana.y[i,j] = sol.V[2]
     end
 
     #--------------------------------------------#
@@ -270,7 +272,7 @@ using ExactFieldSolutions
         Pt[inx_c,iny_c]' .-= mean(Pt[inx_c,iny_c])
 
         # Compute errors
-        ϵP[inx_c,iny_c] .= abs.(Pt_ana[inx_c,iny_c] .- P.t[inx_c,iny_c])
+        ϵP[inx_c,iny_c] .= abs.(Pt_ana[inx_c,iny_c] .- Pt[inx_c,iny_c])
         ϵV.x[inx_Vx,iny_Vx] .= abs.(V_ana.x[inx_Vx,iny_Vx] .- V.x[inx_Vx,iny_Vx])
         ϵV.y[inx_Vy,iny_Vy] .= abs.(V_ana.y[inx_Vy,iny_Vy] .- V.y[inx_Vy,iny_Vy])
 
@@ -285,11 +287,15 @@ using ExactFieldSolutions
         Vx_viz = copy(V.x)
         Vx_viz[V.x.>maximum(V_ana.x)] .= maximum(V_ana.x)
         Vx_viz[V.x.<minimum(V_ana.x)] .= minimum(V_ana.x)
+
+        Vy_viz = copy(V.y)
+        Vy_viz[V.y.>maximum(V_ana.y)] .= maximum(V_ana.y)
+        Vy_viz[V.y.<minimum(V_ana.y)] .= minimum(V_ana.y)
         #--------------------------------------------#
 
         # Visualise
         function figure()
-            fig  = Figure(fontsize = 20, size = (900, 600) )    
+            fig  = Figure(fontsize = 20, size = (900, 900) )    
             step = 10
             ftsz = 15
             eps  = 1e-10
@@ -337,6 +343,28 @@ using ExactFieldSolutions
             hidexdecorations!(ax)
             Colorbar(fig[4, 3], hm, label = L"$V_{x}$ analytics", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
 
+            ###########################
+            ax    = Axis(fig[5,1], aspect=DataAspect(), title=L"$V_{x}$ numerics", xlabel=L"x", ylabel=L"y")
+            field = (Vy_viz)[inx_Vx,iny_Vx].*sc.σ
+            hm    = heatmap!(ax, X.v.x, X.c.y, field, colormap=(Makie.Reverse(:matter), 1), colorrange=(minimum(field)-eps, maximum(field)+eps))
+            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
+            hidexdecorations!(ax)
+            Colorbar(fig[6, 1], hm, label = L"$V_{y}$ numerics", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+            
+            ax    = Axis(fig[5,2], aspect=DataAspect(), title=L"$V_{x}$ analytics", xlabel=L"x", ylabel=L"y")
+            field = (V_ana.y)[inx_Vx,iny_Vx].*sc.σ
+            hm    = heatmap!(ax, X.c.x, X.v.y, field, colormap=(Makie.Reverse(:matter), 1), colorrange=(minimum(field)-eps, maximum(field)+eps))
+            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
+            hidexdecorations!(ax)
+            Colorbar(fig[6, 2], hm, label = L"$V_{y}$ analytics", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+
+            ax    = Axis(fig[5,3], aspect=DataAspect(), title=L"$V_{x}$ error", xlabel=L"x", ylabel=L"y")
+            field = (ϵV.y)[inx_Vy,iny_Vy].*sc.σ
+            hm    = heatmap!(ax, X.c.x, X.v.y, field, colormap=(Makie.Reverse(:matter), 1), colorrange=(minimum(field)-eps, maximum(field)+eps))
+            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
+            hidexdecorations!(ax)
+            Colorbar(fig[6, 3], hm, label = L"$V_{y}$ analytics", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+
             display(fig) 
             DataInspector(fig)
         end
@@ -360,5 +388,5 @@ end
 
 let
     # Run 
-    main(50)
+    main(10)
 end

@@ -14,7 +14,7 @@ end
     #--------------------------------------------#
 
     # Resolution
-    nc = (x = 600, y = 600)
+    nc = (x = 100, y = 100)
 
     # Boundary loading type
     config = BC_template
