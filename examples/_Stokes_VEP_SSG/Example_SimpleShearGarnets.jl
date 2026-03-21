@@ -22,11 +22,11 @@ end
     # Material parameters
     materials = ( 
         compressible = true,
-                plasticity   = :none,
-        g    = [0.0    0.0  0.0],
-        ρ    = [1.0    1.0  1.0 ],
+        plasticity   = :none,
+        g    = [0.0    0.0  0.0  ],
+        ρ    = [1.0    1.0  1.0  ],
         n    = [1.0    1.0  1.0  ],
-        η0   = [1e0    1e4  1e-1  ], 
+        η0   = [1e0    1e4  1e-1 ], 
         G    = [1e1    1e1  1e1  ],
         C    = [150    150  150  ],
         ϕ    = [30.    30.  30.  ],

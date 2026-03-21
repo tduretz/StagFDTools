@@ -4,142 +4,41 @@ using DifferentiationInterface
 using TimerOutputs
 
 
-@views function PorousMediumCircles!(phase, inx, iny, X, Y)
-    # Ellipse 1
-    x0, y0 = 0., 0.
-    α  = 30.0
-    ar = 1.0
-    r  = 0.007
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 1
-    x0, y0 = 0.25, 0.
-    α  = -80.0
-    ar = 1.0
-    r  = 0.005
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 3
-    x0, y0 = -0.15, 0.
-    α  = -30.0
-    ar = 1.0
-    r  = 0.005
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 4
-    x0, y0 = 0.35, -0.3
-    α  = 86.0
-    ar = 200.0
-    r  = 0.005
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 5
-    x0, y0 = 0.35, -0.3
-    α  = -20.0
-    ar = 1.0
-    r  = 0.01
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 5
-    x0, y0 = -0.35, -0.3
-    α  = 15.0
-    ar = 1.0
-    r  = 0.004
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-end
-
 @views function PorousMediumEllipses!(phase, inx, iny, X, Y)
 
-    # Ellipse 1
-    x0, y0 = 0., 0.
-    α  = 30.0
-    ar = 100.0
-    r  = 0.007
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 1
-    x0, y0 = 0.25, 0.
-    α  = -80.0
-    ar = 150.0
-    r  = 0.005
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 3
-    x0, y0 = -0.15, 0.
-    α  = -30.0
-    ar = 100.0
-    r  = 0.005
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 4
-    x0, y0 = 0.35, -0.3
-    α  = 86.0
-    ar = 200.0
-    r  = 0.005
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 5
-    x0, y0 = 0.35, -0.3
-    α  = -20.0
-    ar = 250.0
-    r  = 0.01
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 5
-    x0, y0 = -0.35, -0.3
-    α  = 15.0
-    ar = 200.0
-    r  = 0.004
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
+    for i=1:100
+        # Ellipse 1
+        x0, y0 = rand() - 0.5, rand() - 0.5
+        α  = rand() * 90
+        ar = rand() * 10
+        r  = rand() * 0.02
+        𝑋 = cosd(α)*X .- sind(α).*Y'
+        𝑌 = sind(α)*X .+ cosd(α).*Y'
+        phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
+    end
 end
 
 @views function main(nc)
     #--------------------------------------------#
 
     # Scales
-    sc = (σ = 1e8, L = 1e-2, t=1e12)
+    sc = (σ = 1e0, L = 1e-0, t=1e0)
 
     # Boundary loading type
     config = :free_slip
-    ε̇bg    = -1e-12*sc.t
+    ε̇bg    = -1e0*sc.t
     D_BC   = @SMatrix( [ -ε̇bg 0.;
                           0.  ε̇bg ])
 
     # Material parameters
     materials = ( 
-        compressible = true,
-        plasticity   = :DruckerPrager,
+        compressible = false,
+        plasticity   = :none,
         g    = [1.0    1.0  ],
         ρ    = [0.0    0.0  ], 
         n    = [1.0    1.0  ],
-        η0   = [1e22   1e10 ]./(sc.σ * sc.t), 
-        G    = [3e10   1e5  ]./(sc.σ),
+        η0   = [1e0    1e3 ]./(sc.σ * sc.t), 
+        G    = [3e50   1e50  ]./(sc.σ),
         C    = [50e6   1e60 ]./(sc.σ),
         ϕ    = [30.    0.   ],
         ηvp  = [1e17   0.   ]./(sc.σ * sc.t),
@@ -276,11 +175,11 @@ end
         BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
     end
 
-    # PorousMediumEllipses!(phases.c, inx_c, iny_c, xc, yc)
-    # PorousMediumEllipses!(phases.v, inx_v, iny_v, xv, yv)
+    PorousMediumEllipses!(phases.c, inx_c, iny_c, xc, yc)
+    PorousMediumEllipses!(phases.v, inx_v, iny_v, xv, yv)
 
-    PorousMediumCircles!(phases.c, inx_c, iny_c, xc, yc)
-    PorousMediumCircles!(phases.v, inx_v, iny_v, xv, yv)
+    # PorousMediumCircles!(phases.c, inx_c, iny_c, xc, yc)
+    # PorousMediumCircles!(phases.v, inx_v, iny_v, xv, yv)
 
     # # Set material geometry 
     # @views phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
@@ -337,6 +236,9 @@ end
             err.x[iter] = @views norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
             err.y[iter] = @views norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
             err.p[iter] = @views norm(R.p[inx_c,iny_c])/sqrt(nPt)
+            
+            @info err.x
+
             max(err.x[iter], err.y[iter]) < ϵ_nl ? break : nothing
 
             #--------------------------------------------#
@@ -375,7 +277,7 @@ end
             # Direct-iterative solver
             fu   = @views -r[1:size(𝐊,1)]
             fp   = @views -r[size(𝐊,1)+1:end]
-            @timeit to "Solver" u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu,  ηb=1e3, niter_l=10, ϵ_l=1e-11, 𝐊_PC=𝐊_PC)
+            @timeit to "Solver" u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu,  ηb=1e5, niter_l=10, ϵ_l=1e-10, 𝐊_PC=𝐊_PC)
             @views dx[1:size(𝐊,1)]     .= u
             @views dx[size(𝐊,1)+1:end] .= p
 
@@ -429,7 +331,7 @@ end
         probes.τt[it] = τ_total
 
         # p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
-        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]'.*sc.σ, aspect_ratio=1, xlim=extrema(xc), title="Pt")
+        p2 = heatmap(xc, yc,  (Pt[inx_c,iny_c].-mean(Pt[inx_c,iny_c]))'.*sc.σ, aspect_ratio=1, xlim=extrema(xc), title="Pt")
         # p3 = heatmap(xc, yc,  log10.(ε̇II)', aspect_ratio=1, xlim=extrema(xc), title="ε̇II", c=:coolwarm)
         p3 = plot(xlabel="time", ylabel="stress")
         p3 = plot!([1:it].*Δ.t,  probes.τf[1:it].*sc.σ, label="τ fluid")
@@ -459,5 +361,5 @@ end
 end
 
 let
-    main((x = 200, y = 200, t=100))
+    main((x = 200, y = 200, t=1))
 end

@@ -94,6 +94,8 @@ end
     materials = ( 
         compressible = true,
         plasticity   = :DruckerPrager,
+        g    = [1.0    1.0  ],
+        ρ    = [0.0    0.0  ], 
         n    = [1.0    1.0  ],
         η0   = [1e25   1e4  ]./(sc.σ * sc.t), 
         G    = [3e10   1e50 ]./(sc.σ),
