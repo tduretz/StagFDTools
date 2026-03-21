@@ -306,162 +306,162 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
 
         # Tangent operator used for Newton Linearisation
         stress_state, τ_vec, jac = ad_value_and_jacobian_first(StressVector_P!, ε̇vec, Dkk[1], divqD, P0.t[i,j], P0.f[i,j], Φ0.c[i,j], τ0_loc, materials, phases.c[i,j], Δ)
-        _, η_local, λ̇_local, τII_local, Φ_local, f_local = stress_state
+        # _, η_local, λ̇_local, τII_local, Φ_local, f_local = stress_state
 
-        @views 𝐷_ctl.c[i,j] .= jac
-
-        ##################################
-
-        # Tangent operator used for Picard Linearisation
-        𝐷.c[i,j] .= diagm(2 * η_local * _ones)
-        𝐷.c[i,j][4,4] = 1
-        𝐷.c[i,j][5,5] = 1
+        # @views 𝐷_ctl.c[i,j] .= jac
 
         ##################################
 
-        # Update stress
-        τ.xx[i,j] = τ_vec[1]
-        τ.yy[i,j] = τ_vec[2]
-        τ.II[i,j] = τII_local
-        τ.f[i,j]  = f_local
-        ε̇.xx[i,j] = ε̇xx[1]
-        ε̇.yy[i,j] = ε̇yy[1]
-        ε̇.II[i,j] = invII( @SVector([ε̇xx[1], ε̇yy[1], ε̇̄xy[1]]) )
-        λ̇.c[i,j]  = λ̇_local
-        Φ.c[i,j]  = Φ_local
-        η.c[i,j]  = η_local
-        if  λ̇.c[i,j] > 0
-            ΔP.t[i,j] =  (τ_vec[4] - P.t[i,j])
-            ΔP.f[i,j] =  (τ_vec[5] - P.f[i,j])
-        end
+        # # Tangent operator used for Picard Linearisation
+        # 𝐷.c[i,j] .= diagm(2 * η_local * _ones)
+        # 𝐷.c[i,j][4,4] = 1
+        # 𝐷.c[i,j][5,5] = 1
+
+        # ##################################
+
+        # # Update stress
+        # τ.xx[i,j] = τ_vec[1]
+        # τ.yy[i,j] = τ_vec[2]
+        # τ.II[i,j] = τII_local
+        # τ.f[i,j]  = f_local
+        # ε̇.xx[i,j] = ε̇xx[1]
+        # ε̇.yy[i,j] = ε̇yy[1]
+        # ε̇.II[i,j] = invII( @SVector([ε̇xx[1], ε̇yy[1], ε̇̄xy[1]]) )
+        # λ̇.c[i,j]  = λ̇_local
+        # Φ.c[i,j]  = Φ_local
+        # η.c[i,j]  = η_local
+        # if  λ̇.c[i,j] > 0
+        #     ΔP.t[i,j] =  (τ_vec[4] - P.t[i,j])
+        #     ΔP.f[i,j] =  (τ_vec[5] - P.f[i,j])
+        # end
     end
 
-    # Need a lazy copy at ghost boundaries in case of stress BC along that boundary
-    for i in axes(ε̇.xx, 1)
-        if type.Vy[i+1, 1] == :Neumann_normal
-            𝐷.c[i, 1] = 𝐷.c[i, 2]
-        end
-        if type.Vy[i+1, end] == :Neumann_normal
-            𝐷.c[i, end] = 𝐷.c[i, end-1]
-        end
-    end
+    # # Need a lazy copy at ghost boundaries in case of stress BC along that boundary
+    # for i in axes(ε̇.xx, 1)
+    #     if type.Vy[i+1, 1] == :Neumann_normal
+    #         𝐷.c[i, 1] = 𝐷.c[i, 2]
+    #     end
+    #     if type.Vy[i+1, end] == :Neumann_normal
+    #         𝐷.c[i, end] = 𝐷.c[i, end-1]
+    #     end
+    # end
 
-    for j in axes(ε̇.xx, 2)
-        if type.Vx[1, j+1] == :Neumann_normal
-            𝐷.c[1, j] = 𝐷.c[2, j]
-        end
-        if type.Vx[end, j+1] == :Neumann_normal
-            𝐷.c[end, j] = 𝐷.c[end-1,j]
-        end
-    end
+    # for j in axes(ε̇.xx, 2)
+    #     if type.Vx[1, j+1] == :Neumann_normal
+    #         𝐷.c[1, j] = 𝐷.c[2, j]
+    #     end
+    #     if type.Vx[end, j+1] == :Neumann_normal
+    #         𝐷.c[end, j] = 𝐷.c[end-1,j]
+    #     end
+    # end
 
-    # ########################### Loop over vertices ###########################
-    for j=3:size(ε̇.xy,2)-2, i=3:size(ε̇.xy,1)-2
-        Vx_loc  = SMatrix{3,2}(      V.x[ii,jj] for ii in i-1:i+1,   jj in j-1+1:j+1)
-        Vy_loc  = SMatrix{2,3}(      V.y[ii,jj] for ii in i-1+1:i+1, jj in j-1:j+1  )
-        bcx     = SMatrix{3,2}(    BC.Vx[ii,jj] for ii in i-1:i+1,   jj in j-1+1:j+1)
-        bcy     = SMatrix{2,3}(    BC.Vy[ii,jj] for ii in i-1+1:i+1, jj in j-1:j+1  )
-        typex   = SMatrix{3,2}(  type.Vx[ii,jj] for ii in i-1:i+1,   jj in j-1+1:j+1)
-        typey   = SMatrix{2,3}(  type.Vy[ii,jj] for ii in i-1+1:i+1, jj in j-1:j+1  )
-        τxx0    = SMatrix{2,2}(    τ0.xx[ii,jj] for ii in i-1:i+0,   jj in j-1:j+0)
-        τyy0    = SMatrix{2,2}(    τ0.yy[ii,jj] for ii in i-1:i+0,   jj in j-1:j+0)
-        Φ0_loc  = SMatrix{4,4}(     Φ0.c[ii,jj] for ii in i-2:i+1,   jj in j-2:j+1)
-        Pt0_loc = SMatrix{4,4}(     P0.t[ii,jj] for ii in i-2:i+1,   jj in j-2:j+1)
-        Pf0_loc = SMatrix{4,4}(     P0.f[ii,jj] for ii in i-2:i+1,   jj in j-2:j+1)
-        Pf_loc  = SMatrix{4,4}(      P.f[ii,jj] for ii in i-2:i+1,   jj in j-2:j+1)
-        Pt_loc  = SMatrix{4,4}(      P.t[ii,jj] for ii in i-2:i+1,   jj in j-2:j+1)
-        typept  = SMatrix{4,4}(  type.Pt[ii,jj] for ii in i-2:i+1,   jj in j-2:j+1)
-        bcpt    = SMatrix{4,4}(    BC.Pt[ii,jj] for ii in i-2:i+1,   jj in j-2:j+1)
-        typepf  = SMatrix{4,4}(  type.Pf[ii,jj] for ii in i-2:i+1,   jj in j-2:j+1)
-        bcpf    = SMatrix{4,4}(    BC.Pf[ii,jj] for ii in i-2:i+1,   jj in j-2:j+1)
-        phc     = SMatrix{4,4}( phases.c[ii,jj] for ii in i-2:i+1,   jj in j-2:j+1)
+    # # ########################### Loop over vertices ###########################
+    # for j=3:size(ε̇.xy,2)-2, i=3:size(ε̇.xy,1)-2
+    #     Vx_loc  = SMatrix{3,2}(      V.x[ii,jj] for ii in i-1:i+1,   jj in j-1+1:j+1)
+    #     Vy_loc  = SMatrix{2,3}(      V.y[ii,jj] for ii in i-1+1:i+1, jj in j-1:j+1  )
+    #     bcx     = SMatrix{3,2}(    BC.Vx[ii,jj] for ii in i-1:i+1,   jj in j-1+1:j+1)
+    #     bcy     = SMatrix{2,3}(    BC.Vy[ii,jj] for ii in i-1+1:i+1, jj in j-1:j+1  )
+    #     typex   = SMatrix{3,2}(  type.Vx[ii,jj] for ii in i-1:i+1,   jj in j-1+1:j+1)
+    #     typey   = SMatrix{2,3}(  type.Vy[ii,jj] for ii in i-1+1:i+1, jj in j-1:j+1  )
+    #     τxx0    = SMatrix{2,2}(    τ0.xx[ii,jj] for ii in i-1:i+0,   jj in j-1:j+0)
+    #     τyy0    = SMatrix{2,2}(    τ0.yy[ii,jj] for ii in i-1:i+0,   jj in j-1:j+0)
+    #     Φ0_loc  = SMatrix{4,4}(     Φ0.c[ii,jj] for ii in i-2:i+1,   jj in j-2:j+1)
+    #     Pt0_loc = SMatrix{4,4}(     P0.t[ii,jj] for ii in i-2:i+1,   jj in j-2:j+1)
+    #     Pf0_loc = SMatrix{4,4}(     P0.f[ii,jj] for ii in i-2:i+1,   jj in j-2:j+1)
+    #     Pf_loc  = SMatrix{4,4}(      P.f[ii,jj] for ii in i-2:i+1,   jj in j-2:j+1)
+    #     Pt_loc  = SMatrix{4,4}(      P.t[ii,jj] for ii in i-2:i+1,   jj in j-2:j+1)
+    #     typept  = SMatrix{4,4}(  type.Pt[ii,jj] for ii in i-2:i+1,   jj in j-2:j+1)
+    #     bcpt    = SMatrix{4,4}(    BC.Pt[ii,jj] for ii in i-2:i+1,   jj in j-2:j+1)
+    #     typepf  = SMatrix{4,4}(  type.Pf[ii,jj] for ii in i-2:i+1,   jj in j-2:j+1)
+    #     bcpf    = SMatrix{4,4}(    BC.Pf[ii,jj] for ii in i-2:i+1,   jj in j-2:j+1)
+    #     phc     = SMatrix{4,4}( phases.c[ii,jj] for ii in i-2:i+1,   jj in j-2:j+1)
 
-        k_ηf0   = materials.k_ηf0[phc]
-        ηΦ      = materials.ηΦ0[phc]
-        KΦ      = materials.KΦ[phc] 
-        n       = materials.n_CK[phc] # Carman-Kozeny
-        m       = materials.m[phc]    # Carman-Kozeny
+    #     k_ηf0   = materials.k_ηf0[phc]
+    #     ηΦ      = materials.ηΦ0[phc]
+    #     KΦ      = materials.KΦ[phc] 
+    #     n       = materials.n_CK[phc] # Carman-Kozeny
+    #     m       = materials.m[phc]    # Carman-Kozeny
 
-        # Fluid density
-        ρfgC   = SMatrix{4,4}( @. materials.ρf[phc] * materials.g[2] )
-        ρfg    = SMatrix{2, 3, Float64}(1/2 * (ρfgC[i+1,j] + ρfgC[i+1,j+1]) for i=1:2, j=1:3)
+    #     # Fluid density
+    #     ρfgC   = SMatrix{4,4}( @. materials.ρf[phc] * materials.g[2] )
+    #     ρfg    = SMatrix{2, 3, Float64}(1/2 * (ρfgC[i+1,j] + ρfgC[i+1,j+1]) for i=1:2, j=1:3)
 
-        # Set BCs
-        Vx  = SetBCVx1(Vx_loc,  typex, bcx, Δ)
-        Vy  = SetBCVy1(Vy_loc,  typey, bcy, Δ)
-        Pf  = SetBCPf1(Pf_loc,  typepf, bcpf, Δ, ρfg)
-        Pt  = SetBCPf1(Pt_loc,  typept, bcpt, Δ, ρfg)
-        Pf0 = SetBCPf1(Pf0_loc, typepf, bcpf, Δ, ρfg)
-        Pt0 = SetBCPf1(Pt0_loc, typept, bcpt, Δ, ρfg)
+    #     # Set BCs
+    #     Vx  = SetBCVx1(Vx_loc,  typex, bcx, Δ)
+    #     Vy  = SetBCVy1(Vy_loc,  typey, bcy, Δ)
+    #     Pf  = SetBCPf1(Pf_loc,  typepf, bcpf, Δ, ρfg)
+    #     Pt  = SetBCPf1(Pt_loc,  typept, bcpt, Δ, ρfg)
+    #     Pf0 = SetBCPf1(Pf0_loc, typepf, bcpf, Δ, ρfg)
+    #     Pt0 = SetBCPf1(Pt0_loc, typept, bcpt, Δ, ρfg)
 
-        # Porosity
-        Φ_loc = if materials.linearizeϕ
-                    SMatrix{4,4, Float64}( @. Φ0_loc ) 
-                else
-                    SMatrix{4,4, Float64}( Porosity(Φ0_loc[ii], Pt[ii], Pf[ii], Pt0[ii], Pf0[ii], KΦ[ii], ηΦ[ii], m[ii], 0.0, 0.0, Δt )[1] for ii in eachindex(Φ0_loc) )
-                end 
+    #     # Porosity
+    #     Φ_loc = if materials.linearizeϕ
+    #                 SMatrix{4,4, Float64}( @. Φ0_loc ) 
+    #             else
+    #                 SMatrix{4,4, Float64}( Porosity(Φ0_loc[ii], Pt[ii], Pf[ii], Pt0[ii], Pf0[ii], KΦ[ii], ηΦ[ii], m[ii], 0.0, 0.0, Δt )[1] for ii in eachindex(Φ0_loc) )
+    #             end 
 
-        # Kinematics
-        Dxx    = ∂x(Vx) / Δ.x
-        Dyy    = ∂y(Vy) / Δ.y
-        Dxy    = ∂y_inn(Vx) / Δ.y
-        Dyx    = ∂x_inn(Vy) / Δ.x
+    #     # Kinematics
+    #     Dxx    = ∂x(Vx) / Δ.x
+    #     Dyy    = ∂y(Vy) / Δ.y
+    #     Dxy    = ∂y_inn(Vx) / Δ.y
+    #     Dyx    = ∂x_inn(Vy) / Δ.x
 
-        # Strain rate
-        Dkk   = @. Dxx + Dyy
-        ε̇xx   = @. Dxx - Dkk / 3
-        ε̇yy   = @. Dyy - Dkk / 3
-        ε̇xy   = @. (Dxy + Dyx) /2
-        ε̇̄xx   = av(ε̇xx)
-        ε̇̄yy   = av(ε̇yy)
+    #     # Strain rate
+    #     Dkk   = @. Dxx + Dyy
+    #     ε̇xx   = @. Dxx - Dkk / 3
+    #     ε̇yy   = @. Dyy - Dkk / 3
+    #     ε̇xy   = @. (Dxy + Dyx) /2
+    #     ε̇̄xx   = av(ε̇xx)
+    #     ε̇̄yy   = av(ε̇yy)
 
-        # Darcy flux
-        k_μ_xx  = SMatrix{4,4, Float64}( @.  k_ηf0 * max.(Φ_loc, 1e-6).^n  )
-        kx_μ_xx = SMatrix{3,2, Float64}( (k_μ_xx[i,j+1] + k_μ_xx[i+1,j+1]) / 2 for i=1:3, j=1:2 )
-        k_μ_yy  = SMatrix{4,4, Float64}( @.  k_ηf0 * max.(Φ_loc, 1e-6).^n  )
-        ky_μ_yy = SMatrix{2,3, Float64}( (k_μ_yy[i+1,j] + k_μ_yy[i+1,j+1]) / 2 for i=1:2, j=1:3 )
-        ∂Pf∂x   = SMatrix{3,2, Float64}( (Pf[i+1,j+1] - Pf[i,j+1] ) / Δ.x for i=1:3, j=1:2 )
-        ∂Pf∂y   = SMatrix{2,3, Float64}( (Pf[i+1,j+1] - Pf[i+1,j] ) / Δ.y for i=1:2, j=1:3 )
-        qDx     = SMatrix{3,2, Float64}( - kx_μ_xx .*  ∂Pf∂x       ) 
-        qDy     = SMatrix{2,3, Float64}( - ky_μ_yy .*  ∂Pf∂y - ρfg ) 
-        divqD   = ∂x(qDx) / Δ.x .+ ∂y(qDy) / Δ.y 
-        divqD̄   = av(divqD)[1]
+    #     # Darcy flux
+    #     k_μ_xx  = SMatrix{4,4, Float64}( @.  k_ηf0 * max.(Φ_loc, 1e-6).^n  )
+    #     kx_μ_xx = SMatrix{3,2, Float64}( (k_μ_xx[i,j+1] + k_μ_xx[i+1,j+1]) / 2 for i=1:3, j=1:2 )
+    #     k_μ_yy  = SMatrix{4,4, Float64}( @.  k_ηf0 * max.(Φ_loc, 1e-6).^n  )
+    #     ky_μ_yy = SMatrix{2,3, Float64}( (k_μ_yy[i+1,j] + k_μ_yy[i+1,j+1]) / 2 for i=1:2, j=1:3 )
+    #     ∂Pf∂x   = SMatrix{3,2, Float64}( (Pf[i+1,j+1] - Pf[i,j+1] ) / Δ.x for i=1:3, j=1:2 )
+    #     ∂Pf∂y   = SMatrix{2,3, Float64}( (Pf[i+1,j+1] - Pf[i+1,j] ) / Δ.y for i=1:2, j=1:3 )
+    #     qDx     = SMatrix{3,2, Float64}( - kx_μ_xx .*  ∂Pf∂x       ) 
+    #     qDy     = SMatrix{2,3, Float64}( - ky_μ_yy .*  ∂Pf∂y - ρfg ) 
+    #     divqD   = ∂x(qDx) / Δ.x .+ ∂y(qDy) / Δ.y 
+    #     divqD̄   = av(divqD)[1]
         
-        # Visco-elasticity
-        G      = materials.G[phases.v[i,j]]
-        τ̄xx0   = av(τxx0)
-        τ̄yy0   = av(τyy0)
-        P̄t     = av(  Pt)
-        P̄f     = av(  Pf)
-        ε̇vec   = @SVector([ε̇̄xx[1]+τ̄xx0[1]/(2*G[1]*Δ.t), ε̇̄yy[1]+τ̄yy0[1]/(2*G[1]*Δ.t), ε̇xy[1]+τ0.xy[i,j]/(2*G[1]*Δ.t), P̄t[1], P̄f[1]])
-        τ0_loc = @SVector([τ̄xx0[1], τ̄yy0[1], τ0.xy[i,j]])
+    #     # Visco-elasticity
+    #     G      = materials.G[phases.v[i,j]]
+    #     τ̄xx0   = av(τxx0)
+    #     τ̄yy0   = av(τyy0)
+    #     P̄t     = av(  Pt)
+    #     P̄f     = av(  Pf)
+    #     ε̇vec   = @SVector([ε̇̄xx[1]+τ̄xx0[1]/(2*G[1]*Δ.t), ε̇̄yy[1]+τ̄yy0[1]/(2*G[1]*Δ.t), ε̇xy[1]+τ0.xy[i,j]/(2*G[1]*Δ.t), P̄t[1], P̄f[1]])
+    #     τ0_loc = @SVector([τ̄xx0[1], τ̄yy0[1], τ0.xy[i,j]])
 
-        D̄kk   = av(Dkk)
-        ϕ̄0    = av(Φ0_loc)
-        P̄t0   = av(Pt0)
-        P̄f0   = av(Pf0)
+    #     D̄kk   = av(Dkk)
+    #     ϕ̄0    = av(Φ0_loc)
+    #     P̄t0   = av(Pt0)
+    #     P̄f0   = av(Pf0)
 
-        ##################################
+    #     ##################################
 
-        # Tangent operator used for Newton Linearisation
-        stress_state, τ_vec, jac = ad_value_and_jacobian_first(StressVector_P!, ε̇vec, D̄kk[1], divqD̄, P̄t0[1], P̄f0[1], ϕ̄0[1], τ0_loc, materials, phases.v[i,j], Δ)
-        _, η_local, λ̇_local, _, _, _ = stress_state
+    #     # Tangent operator used for Newton Linearisation
+    #     stress_state, τ_vec, jac = ad_value_and_jacobian_first(StressVector_P!, ε̇vec, D̄kk[1], divqD̄, P̄t0[1], P̄f0[1], ϕ̄0[1], τ0_loc, materials, phases.v[i,j], Δ)
+    #     _, η_local, λ̇_local, _, _, _ = stress_state
 
-        @views 𝐷_ctl.v[i,j] .= jac
+    #     @views 𝐷_ctl.v[i,j] .= jac
 
-        ##################################
+    #     ##################################
 
-        # Tangent operator used for Picard Linearisation
-        𝐷.v[i,j] .= diagm(2 * η_local * _ones)
-        𝐷.v[i,j][4,4] = 1
-        𝐷.v[i,j][5,5] = 1
+    #     # Tangent operator used for Picard Linearisation
+    #     𝐷.v[i,j] .= diagm(2 * η_local * _ones)
+    #     𝐷.v[i,j][4,4] = 1
+    #     𝐷.v[i,j][5,5] = 1
 
-        # Update stress
-        τ.xy[i,j] = τ_vec[3]
-        ε̇.xy[i,j] = ε̇xy[1]
-        λ̇.v[i,j]  = λ̇_local
-        η.v[i,j]  = η_local
-    end
+    #     # Update stress
+    #     τ.xy[i,j] = τ_vec[3]
+    #     ε̇.xy[i,j] = ε̇xy[1]
+    #     λ̇.v[i,j]  = λ̇_local
+    #     η.v[i,j]  = η_local
+    # end
 
     # # # Cheap copy edges
     # # for j=2:size(ε̇.xy,2)-1 
