@@ -32,7 +32,7 @@ function Porosity(Φ0, Pt, Pf, Pt0, Pf0, KΦ, ηΦ0, m, λ̇, sinψ, Δt)
     return Φ, dΦdt, ηΦ 
 end
 
-function ΔP_Trial(x, Pt_trial, Pf_trial, Φ, divVs, divqD, λ̇, Pt0, Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, sinψ, Δt )
+function ΔP_Trial(x, Pt, Pf, divVs, divqD, λ̇, Pt0, Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, sinψ, Δt )
 
     Pt, Pf = x[1], x[2]
 
@@ -60,14 +60,14 @@ function ΔP_Trial(x, Pt_trial, Pf_trial, Φ, divVs, divqD, λ̇, Pt0, Pf0, Φ0,
     ]
 end
 
-function ΔP(Pt_trial, Pf_trial, Φ_trial, divVs, divqD, λ̇, Pt0, Pf0, Φ0, ηΦ,  KΦ, Ks, Kf, sinψ, Δt)
+function ΔP(Pt_trial, Pf_trial, divVs, divqD, λ̇, Pt0, Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, sinψ, Δt)
 
     x   = @SVector[0.0, 0.0]
     r0  = 1.0
     tol = 1e-13
 
     for iter=1:10
-        R, J = ad_value_and_jacobian(ΔP_Trial, x, Pt_trial, Pf_trial, Φ_trial, 0 * divVs, 0 * divqD, λ̇, 0 * Pt0, 0 * Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, sinψ, Δt)
+        R, J = ad_value_and_jacobian(ΔP_Trial, x, Pt_trial, Pf_trial, 0 * divVs, 0 * divqD, λ̇, 0 * Pt0, 0 * Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, sinψ, Δt)
         x  = x .- J \ R
         nr = mynorm(R)
         if iter==1 && nr>1e-17
@@ -92,7 +92,7 @@ function residual_two_phase_P(x, ηve, Δt, ε̇II_eff, Pt_trial, Pf_trial, divV
     # ΔPf = Kf .* KΦ .* sinψ .* Δt .* ηΦ .* λ̇ ./ (Kf .* KΦ .* Δt .* Φ_trial - Kf .* KΦ .* Δt + Kf .* Φ_trial .* ηΦ - Kf .* ηΦ - Ks .* KΦ .* Δt .* Φ_trial - Ks .* Φ_trial .* ηΦ - KΦ .* Φ_trial .* ηΦ)
     
     # Pressure corrections
-    ΔPt_1, ΔPf = ΔP(Pt_trial, Pf_trial, Φ_trial, divVs, divqD, λ̇, Pt0, Pf0, Φ0, ηΦ,  KΦ, Ks, Kf, sinψ, Δt)
+    ΔPt_1, ΔPf = ΔP(Pt_trial, Pf_trial, divVs, divqD, λ̇, Pt0, Pf0, Φ0, ηΦ, m,  KΦ, Ks, Kf, sinψ, Δt)
 
     # Check yield
 
@@ -140,70 +140,82 @@ function LocalRheology_P(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phas
     sinψ = materials.sinψ[phases]    
     sinϕ = materials.sinϕ[phases] 
     cosϕ = materials.cosϕ[phases]  
+
+    # ηvep, λ̇, Pt, Pf, τII, Φ, f  = 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0
     
     α1 = materials.single_phase ? 0.0 : 1.0 
 
     # Initial guess
-    η         = (η0 .* ε̇II_eff.^(1 ./ n .- 1.0 ))[1]
+    η         = (η0 .* ε̇II_eff.^(1 ./ n .- 1.0 ))
     ηve       = inv(1/η + 1/(G*Δ.t))
-    τII = 2*ηve*ε̇II_eff
+    τII       = 2*ηve*ε̇II_eff
+    ηvep      = ηve
 
     # Trial porosity
-    Φ = (KΦ .* Δ.t .* (Pf - Pt) + KΦ .* Φ0 .* ηΦ + ηΦ .* (Pf - Pf0 - Pt + Pt0)) ./ (KΦ .* ηΦ)
+    Φ = 0.1
+    # Φ = (KΦ .* Δ.t .* (Pf - Pt) + KΦ .* Φ0 .* ηΦ + ηΦ .* (Pf - Pf0 - Pt + Pt0)) ./ (KΦ .* ηΦ)
+    # Φ = if materials.single_phase
+    #         0.0
+    #     else
+    #         Porosity(Φ0, Pt, Pf, Pt0, Pf0, KΦ, ηΦ, m, 0.0, 0.0, Δ.t)[1]
+    #     end
 
     # Check yield
     λ̇  = 0.0
 
-    # # # f        = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, 0.0)
-    # # # if f>0
-    # # #     λ̇ = f / (KΦ .* Δ.t * sinϕ * sinψ + ηve + ηvp)
-    # # #     f  = τII - λ̇*ηve - C*cosϕ - (Pt + KΦ .* Δ.t * sinψ * λ̇)*sinϕ
-    # # #     # @show f, λ̇
-    # # #     # error()
+    # # # # f        = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, 0.0)
+    # # # # if f>0
+    # # # #     λ̇ = f / (KΦ .* Δ.t * sinϕ * sinψ + ηve + ηvp)
+    # # # #     f  = τII - λ̇*ηve - C*cosϕ - (Pt + KΦ .* Δ.t * sinψ * λ̇)*sinϕ
+    # # # #     # @show f, λ̇
+    # # # #     # error()
 
-    # # #     τII = τII - λ̇*ηve
-    # # #     Pt  = Pt + KΦ .* Δ.t * sinψ * λ̇
-    # # # end
+    # # # #     τII = τII - λ̇*ηve
+    # # # #     Pt  = Pt + KΦ .* Δ.t * sinψ * λ̇
+    # # # # end
 
-    #############################
+    # #############################
 
-    f  = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, α1)
+    f = -1.0
+    # f  = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, α1)
+    # f  = F(τII, Pt, Pf, 0.0, C, 0.0, 0.0,0.0, 0.0, 0.0)
 
-    x = @MVector ([τII, Pt, Pf, 0.0])
 
-    nr   = 1.0
-    nr0  = 1.0
-    tol  = 1e-10
+    # x = @MVector ([τII, Pt, Pf, 0.0])
 
-    # Return mapping
-    if f>-1e-13
-        # This is the proper return mapping with plasticity
-        for iter=1:10
-            R, J = ad_value_and_jacobian(residual_two_phase_P, x, ηve, Δ.t, ε̇II_eff, Pt, Pf, divVs, divqD, Φ, Pt0, Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, materials.single_phase)
-            x .= x .- J \ R
-            nr = mynorm(R[:])
-            if iter==1 
-                nr0 = nr
-            end
-            r = nr/nr0
-            r<tol && break
-        end
-    end
+    # nr   = 1.0
+    # nr0  = 1.0
+    # tol  = 1e-10
 
-    τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
+    # # Return mapping
+    # if f>-1e-13
+    #     # This is the proper return mapping with plasticity
+    #     for iter=1:10
+    #         R, J = ad_value_and_jacobian(residual_two_phase_P, x, ηve, Δ.t, ε̇II_eff, Pt, Pf, divVs, divqD, Φ, Pt0, Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, materials.single_phase)
+    #         x .= x .- J \ R
+    #         nr = mynorm(R[:])
+    #         if iter==1 
+    #             nr0 = nr
+    #         end
+    #         r = nr/nr0
+    #         r<tol && break
+    #     end
+    # end
 
-    Φ = if materials.single_phase
-            0.0
-        else
-            Porosity(Φ0, Pt, Pf, Pt0, Pf0, KΦ, ηΦ, m, λ̇, sinψ, Δ.t)[1]
-        end
+    # τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
 
-    #############################
+    # Φ = if materials.single_phase
+    #         0.0
+    #     else
+    #         Porosity(Φ0, Pt, Pf, Pt0, Pf0, KΦ, ηΦ, m, λ̇, sinψ, Δ.t)[1]
+    #     end
+
+    # #############################
 
     # Effective viscosity
-    ηvep = τII/(2*ε̇II_eff)
+    # ηvep = τII/(2*ε̇II_eff)
 
-    f       = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, α1)
+    # f       = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, α1)
 
     return ηvep, λ̇, Pt, Pf, τII, Φ, f 
 end
