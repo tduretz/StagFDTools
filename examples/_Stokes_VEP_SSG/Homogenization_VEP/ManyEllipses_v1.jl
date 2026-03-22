@@ -1,8 +1,9 @@
 using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
+using Random
+Random.seed!(1234)
 using TimerOutputs
-
 
 @views function PorousMediumEllipses!(phase, inx, iny, X, Y)
 
@@ -37,7 +38,7 @@ end
         g    = [1.0    1.0  ],
         ρ    = [0.0    0.0  ], 
         n    = [1.0    1.0  ],
-        η0   = [1e0    1e3 ]./(sc.σ * sc.t), 
+        η0   = [1e0    1.0e3 ]./(sc.σ * sc.t), 
         G    = [3e50   1e50  ]./(sc.σ),
         C    = [50e6   1e60 ]./(sc.σ),
         ϕ    = [30.    0.   ],
@@ -330,8 +331,106 @@ end
         probes.τs[it] = τ_solid
         probes.τt[it] = τ_total
 
+        #############################
+
+        Wz   = zeros(size_v...)
+        Wz_m = 0.0
+        Wz_f = 0.0
+        Wz_s = 0.0
+        iwz_m, iwz_f, iwz_s = 0, 0, 0
+        for I in CartesianIndices(ε̇.xy)
+            i, j = I[1], I[2]
+            if i>2 && j>2 && i<nc.x+0  && j<nc.y+0
+                iwz_m +=1
+                wz    = 1/2 * ((V.x[i+0,j+1] -  V.x[i+0,j+0])/Δ.y - (V.y[i+1,j+0] - V.y[i+0,j+0])/Δ.x )
+                Wz[I] = wz
+                Wz_m += wz
+                if phases.v[I] == 1
+                    iwz_f +=1
+                    Wz_f  += wz
+                elseif phases.v[I] == 2
+                    iwz_s += 1
+                    Wz_s  += wz
+                end
+            end
+        end
+
+        Wz_m /= iwz_m
+        Wz_s /= iwz_s
+        Wz_f /= iwz_f
+
+        @show Wz_m
+        @show Wz_f
+        @show Wz_s
+
+        @show (Wz_f-Wz_m)/Wz_m*100
+        @show (Wz_s-Wz_m)/Wz_m*100
+
+        ###############################
+
+        # Block analysis
+        k = [2, 4, 8, 16]
+        for ik = 1:length(k)
+            kx = k[ik]   # block size in x
+            ky = k[ik]   # block size in y
+            nbx = div(nc.x, kx)
+            nby = div(nc.y, ky)
+
+            ω_fluid_block = fill(NaN, nbx, nby)
+            ω_solid_block = fill(NaN, nbx, nby)
+            R_block       = fill(NaN, nbx, nby)
+
+            for bx in 1:nbx, by in 1:nby
+
+                i_start = (bx-1)*kx + 1
+                i_end   = bx*kx
+                j_start = (by-1)*ky + 1
+                j_end   = by*ky
+
+                ωf_sum = 0.0
+                ωs_sum = 0.0
+                nf = 0
+                ns = 0
+
+                for i in i_start:i_end, j in j_start:j_end
+                    if phases.v[i,j] == 1
+                        ωf_sum += Wz[i,j]
+                        nf += 1
+                    elseif phases.v[i,j] == 2
+                        ωs_sum += Wz[i,j]
+                        ns += 1
+                    end
+                end
+
+                if nf > 0
+                    ω_fluid_block[bx,by] = ωf_sum / nf
+                end
+
+                if ns > 0
+                    ω_solid_block[bx,by] = ωs_sum / ns
+                end
+
+                if nf > 0 && ns > 0
+                    R_block[bx,by] = ω_fluid_block[bx,by] - ω_solid_block[bx,by]
+                end
+            end
+
+            valid = .!isnan.(R_block)
+            R_mean = mean(R_block[valid])
+            R_rms  = sqrt(mean(R_block[valid].^2))
+
+            ω_mean = mean(abs.(Wz))
+            χ = R_rms / ω_mean
+            @show χ
+        end
+ 
+        ###############################
+
         # p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
-        p2 = heatmap(xc, yc,  (Pt[inx_c,iny_c].-mean(Pt[inx_c,iny_c]))'.*sc.σ, aspect_ratio=1, xlim=extrema(xc), title="Pt")
+        # p2 = heatmap(xc, yc,  (Pt[inx_c,iny_c].-mean(Pt[inx_c,iny_c]))'.*sc.σ, aspect_ratio=1, xlim=extrema(xc), title="Pt")
+        p2 = heatmap(xc, yc,  (phases.c[inx_c,iny_c])', aspect_ratio=1, xlim=extrema(xc), title="phases")
+        # p2 = heatmap(R_block', aspect_ratio=1, title="R_block")
+
         # p3 = heatmap(xc, yc,  log10.(ε̇II)', aspect_ratio=1, xlim=extrema(xc), title="ε̇II", c=:coolwarm)
         p3 = plot(xlabel="time", ylabel="stress")
         p3 = plot!([1:it].*Δ.t,  probes.τf[1:it].*sc.σ, label="τ fluid")
@@ -361,5 +460,5 @@ end
 end
 
 let
-    main((x = 200, y = 200, t=1))
+    main((x = 400, y = 400, t=1))
 end
