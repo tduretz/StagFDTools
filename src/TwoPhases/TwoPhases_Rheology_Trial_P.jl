@@ -181,41 +181,43 @@ function LocalRheology_P(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phas
     # f  = F(τII, Pt, Pf, 0.0, C, 0.0, 0.0,0.0, 0.0, 0.0)
 
 
-    # x = @MVector ([τII, Pt, Pf, 0.0])
+    x = @MVector ([τII, Pt, Pf, 0.0])
 
-    # nr   = 1.0
-    # nr0  = 1.0
-    # tol  = 1e-10
+    nr   = 1.0
+    nr0  = 1.0
+    tol  = 1e-10
 
-    # # Return mapping
-    # if f>-1e-13
-    #     # This is the proper return mapping with plasticity
-    #     for iter=1:10
-    #         R, J = ad_value_and_jacobian(residual_two_phase_P, x, ηve, Δ.t, ε̇II_eff, Pt, Pf, divVs, divqD, Φ, Pt0, Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, materials.single_phase)
-    #         x .= x .- J \ R
-    #         nr = mynorm(R[:])
-    #         if iter==1 
-    #             nr0 = nr
-    #         end
-    #         r = nr/nr0
-    #         r<tol && break
-    #     end
-    # end
+    # Return mapping
+    if f>-1e-13
+        # This is the proper return mapping with plasticity
+        for iter=1:10
+            R_raw, J_raw = ad_value_and_jacobian(residual_two_phase_P, x, ηve, Δ.t, ε̇II_eff, Pt, Pf, divVs, divqD, Φ, Pt0, Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, materials.single_phase)
+            R = SVector{4}(R_raw)::SVector{4, Float64}
+            J = SMatrix{4,4}(J_raw)::SMatrix{4, 4, Float64, 16}
+            x = x .- J \ R
+            nr = mynorm(R)
+            if iter==1 
+                nr0 = nr
+            end
+            r = nr/nr0
+            r<tol && break
+        end
+    end
 
-    # τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
+    τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
 
-    # Φ = if materials.single_phase
-    #         0.0
-    #     else
-    #         Porosity(Φ0, Pt, Pf, Pt0, Pf0, KΦ, ηΦ, m, λ̇, sinψ, Δ.t)[1]
-    #     end
+    Φ = if materials.single_phase
+            0.0
+        else
+            Porosity(Φ0, Pt, Pf, Pt0, Pf0, KΦ, ηΦ, m, λ̇, sinψ, Δ.t)[1]
+        end
 
-    # #############################
+    #############################
 
     # Effective viscosity
-    # ηvep = τII/(2*ε̇II_eff)
+    ηvep = τII/(2*ε̇II_eff)
 
-    # f       = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, α1)
+    f       = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, α1)
 
     return ηvep, λ̇, Pt, Pf, τII, Φ, f 
 end
