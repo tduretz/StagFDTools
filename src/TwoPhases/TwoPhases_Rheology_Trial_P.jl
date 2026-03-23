@@ -233,6 +233,15 @@ function StressVector_P!(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phas
     return τ, η, λ̇, τII, Φ, f
 end
 
+function StressVector_P2!(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases, Δ) 
+    η, λ̇, Pt, Pf, τII, Φ, f = StagFDTools.TwoPhases.LocalRheology_P(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases, Δ)
+    τ  = @SVector([2 * η * ε̇[1],
+                   2 * η * ε̇[2],
+                   2 * η * ε̇[3],
+                             Pt,
+                             Pf,])
+    return τ
+end
 
 function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
 
@@ -319,8 +328,8 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
         ##################################
 
         # Tangent operator used for Newton Linearisation
-        stress_state, τ_vec, jac = ad_value_and_jacobian_first(StressVector_P!, ε̇vec, Dkk[1], divqD, P0.t[i,j], P0.f[i,j], Φ0.c[i,j], τ0_loc, materials, phases.c[i,j], Δ)
-        # _, η_local, λ̇_local, τII_local, Φ_local, f_local = stress_state
+        τ_vec, jac = ad_value_and_jacobian(StressVector_P2!, ε̇vec, Dkk[1], divqD, P0.t[i,j], P0.f[i,j], Φ0.c[i,j], τ0_loc, materials, phases.c[i,j], Δ)
+        η_local, λ̇_local, τII_local, Φ_local, f_local = StagFDTools.TwoPhases.LocalRheology_P(ε̇vec, Dkk[1], divqD, P0.t[i,j], P0.f[i,j], Φ0.c[i,j], τ0_loc, materials, phases.c[i,j], Δ)
 
         # @views 𝐷_ctl.c[i,j] .= jac
 
