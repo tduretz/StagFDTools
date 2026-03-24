@@ -82,37 +82,47 @@ function ΔP(Pt_trial, Pf_trial, divVs, divqD, λ̇, Pt0, Pf0, Φ0, ηΦ, m, KΦ
 end
 
 
-function residual_two_phase_P(x, ηve, Δt, ε̇II_eff, Pt_trial, Pf_trial, divVs, divqD, Φ_trial, Pt0, Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, single_phase )
+# function residual_two_phase_P(x, ηve, Δt, ε̇II_eff, Pt_trial, Pf_trial, divVs, divqD, Φ_trial, Pt0, Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, single_phase )
      
-    τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
-    α1 = single_phase ? 0.0 : 1.0 
+#     τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
+    # α1 = single_phase ? 0.0 : 1.0 
 
-    # Pressure corrections
-    # ΔPt = KΦ .* sinψ .* Δt .* Φ_trial .* ηΦ .* λ̇ .* (-Kf + Ks) ./ (-Kf .* KΦ .* Δt .* Φ_trial + Kf .* KΦ .* Δt - Kf .* Φ_trial .* ηΦ + Kf .* ηΦ + Ks .* KΦ .* Δt .* Φ_trial + Ks .* Φ_trial .* ηΦ + KΦ .* Φ_trial .* ηΦ)
-    # ΔPf = Kf .* KΦ .* sinψ .* Δt .* ηΦ .* λ̇ ./ (Kf .* KΦ .* Δt .* Φ_trial - Kf .* KΦ .* Δt + Kf .* Φ_trial .* ηΦ - Kf .* ηΦ - Ks .* KΦ .* Δt .* Φ_trial - Ks .* Φ_trial .* ηΦ - KΦ .* Φ_trial .* ηΦ)
+    # # Pressure corrections
+    # # ΔPt = KΦ .* sinψ .* Δt .* Φ_trial .* ηΦ .* λ̇ .* (-Kf + Ks) ./ (-Kf .* KΦ .* Δt .* Φ_trial + Kf .* KΦ .* Δt - Kf .* Φ_trial .* ηΦ + Kf .* ηΦ + Ks .* KΦ .* Δt .* Φ_trial + Ks .* Φ_trial .* ηΦ + KΦ .* Φ_trial .* ηΦ)
+    # # ΔPf = Kf .* KΦ .* sinψ .* Δt .* ηΦ .* λ̇ ./ (Kf .* KΦ .* Δt .* Φ_trial - Kf .* KΦ .* Δt + Kf .* Φ_trial .* ηΦ - Kf .* ηΦ - Ks .* KΦ .* Δt .* Φ_trial - Ks .* Φ_trial .* ηΦ - KΦ .* Φ_trial .* ηΦ)
     
-    # Pressure corrections
-    ΔPt_1, ΔPf = ΔP(Pt_trial, Pf_trial, divVs, divqD, λ̇, Pt0, Pf0, Φ0, ηΦ, m,  KΦ, Ks, Kf, sinψ, Δt)
+    # # Pressure corrections
+    # ΔPt_1, ΔPf = ΔP(Pt_trial, Pf_trial, divVs, divqD, λ̇, Pt0, Pf0, Φ0, ηΦ, m,  KΦ, Ks, Kf, sinψ, Δt)
 
-    # Check yield
+    # # Check yield
 
-    f = if single_phase
-            τII - C*cosϕ - Pt*sinϕ 
-        else
-            F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, α1)
-        end
+    # f = if single_phase
+    #         τII - C*cosϕ - Pt*sinϕ 
+    #     else
+    #         F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, α1)
+    #     end
 
-    ΔPt =   if single_phase
-        Ks .* sinψ .* Δt .* λ̇
-        else
-            ΔPt_1
-        end
+    # ΔPt = if single_phase
+    #     Ks .* sinψ .* Δt .* λ̇
+    #     else
+    #         ΔPt_1
+    #     end
 
+    # return @SVector [ 
+    #     ε̇II_eff   -  τII/(2*ηve) - λ̇/2,
+    #     Pt - (Pt_trial + ΔPt),
+    #     Pf - (Pf_trial + ΔPf),
+    #     f, 
+    # ]
+
+function residual_two_phase_P(x ::SVector{N, D}, ηve, Δt, ε̇II_eff, Pt_trial, Pf_trial, divVs, divqD, Φ_trial, Pt0, Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, single_phase ) where {N, D}
+    τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
+    # α1 = single_phase ? D(0.0) : D(1.0)
     return @SVector [ 
-        ε̇II_eff   -  τII/(2*ηve) - λ̇/2,
-        Pt - (Pt_trial + ΔPt),
-        Pf - (Pf_trial + ΔPf),
-        f, 
+        1.0,
+        1.0,
+        1.0,
+        1.0, 
     ]
 end
 
@@ -152,8 +162,8 @@ function LocalRheology_P(ε̇ ::SVector{N, D}, divVs, divqD, Pt0, Pf0, Φ0, τ0,
     ηvep      = ηve
 
     # Trial porosity
-    Φ = 0.1
-    Φ = (KΦ * Δ.t * (Pf - Pt) + KΦ * Φ0 * ηΦ + ηΦ * (Pf - Pf0 - Pt + Pt0)) / (KΦ * ηΦ)
+    # Φ = 0.1
+    # Φ = (KΦ * Δ.t * (Pf - Pt) + KΦ * Φ0 * ηΦ + ηΦ * (Pf - Pf0 - Pt + Pt0)) / (KΦ * ηΦ)
     Φ = if materials.single_phase
         zero(D)
     else
@@ -161,7 +171,7 @@ function LocalRheology_P(ε̇ ::SVector{N, D}, divVs, divqD, Pt0, Pf0, Φ0, τ0,
     end
 
     # Check yield
-    λ̇  = 0.0
+    λ̇  = zero(D)
 
     # # # # f        = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, 0.0)
     # # # # if f>0
@@ -176,19 +186,16 @@ function LocalRheology_P(ε̇ ::SVector{N, D}, divVs, divqD, Pt0, Pf0, Φ0, τ0,
 
     # #############################
 
-    f = -1.0
-    # # f  = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, α1)
-    # # f  = F(τII, Pt, Pf, 0.0, C, 0.0, 0.0,0.0, 0.0, 0.0)
+    f  = F(τII, Pt, Pf, Φ, C, cosϕ, sinϕ, λ̇, ηvp, α1)
 
-
-    x = @SVector [τII, Pt, Pf, 0.0]
+    x = @SVector [τII, Pt, Pf, λ̇]
 
     nr   = 1.0
     nr0  = 1.0
     tol  = 1e-10
 
     # Return mapping
-    if f>-1e-13
+    if f > D(-1e-13)
         # This is the proper return mapping with plasticity
         for iter=1:10
             R, J = ad_value_and_jacobian(residual_two_phase_P, x, ηve, Δ.t, ε̇II_eff, Pt, Pf, divVs, divqD, Φ, Pt0, Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, materials.single_phase)
@@ -210,13 +217,12 @@ function LocalRheology_P(ε̇ ::SVector{N, D}, divVs, divqD, Pt0, Pf0, Φ0, τ0,
         Porosity(Φ0, Pt, Pf, Pt0, Pf0, KΦ, ηΦ, m, λ̇, sinψ, Δ.t)[1]
     end
 
-
     #############################
 
     # Effective viscosity
     ηvep = τII/(2*ε̇II_eff)
 
-    f       = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, α1)
+    f       = F(τII, Pt, Pf, Φ, C, cosϕ, sinϕ, λ̇, ηvp, α1)
 
     return ηvep, λ̇, Pt, Pf, τII, Φ, f 
 end

@@ -5,14 +5,46 @@ using Random
 Random.seed!(1234)
 using TimerOutputs
 
+function laplacian(A, dx, dy)
+    nx, ny = size(A)
+    L = fill(NaN, nx, ny)
+
+    for i in 2:nx-1, j in 2:ny-1
+        if !isnan(A[i,j]) &&
+           !isnan(A[i+1,j]) && !isnan(A[i-1,j]) &&
+           !isnan(A[i,j+1]) && !isnan(A[i,j-1])
+
+            L[i,j] =
+                (A[i+1,j] - 2A[i,j] + A[i-1,j]) / dx^2 +
+                (A[i,j+1] - 2A[i,j] + A[i,j-1]) / dy^2
+        end
+    end
+
+    return L
+end
+
+# @views function PorousMediumEllipses!(phase, inx, iny, X, Y)
+
+#     for i=1:100
+#         # Ellipse 1
+#         x0, y0 = rand() - 0.5, rand() - 0.5
+#         α  = rand() * 90
+#         ar = rand() * 10
+#         r  = rand() * 0.02
+#         𝑋 = cosd(α)*X .- sind(α).*Y'
+#         𝑌 = sind(α)*X .+ cosd(α).*Y'
+#         phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
+#     end
+# end
+
 @views function PorousMediumEllipses!(phase, inx, iny, X, Y)
 
-    for i=1:200
+    for i=1:1000
         # Ellipse 1
         x0, y0 = rand() - 0.5, rand() - 0.5
         α  = rand() * 90
-        ar = 1.0#rand() * 1
-        r  = rand() * 0.05
+        ar = rand() * 4
+        r  = rand() * 0.02
         𝑋 = cosd(α)*X .- sind(α).*Y'
         𝑌 = sind(α)*X .+ cosd(α).*Y'
         phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
@@ -31,7 +63,7 @@ end
     # D_BC   = @SMatrix( [ -ε̇bg 0.;
     #                       0.  ε̇bg ])
     D_BC   = @SMatrix( [  0.0 ε̇bg*2.;
-                            0.  0.0 ])
+                          0.  0.0 ])
 
     # Material parameters
     materials = ( 
@@ -40,7 +72,7 @@ end
         g    = [1.0    1.0  ],
         ρ    = [0.0    0.0  ], 
         n    = [1.0    1.0  ],
-        η0   = [1e0    1.00001e4 ]./(sc.σ * sc.t), 
+        η0   = [1e0    1.00001e0 ]./(sc.σ * sc.t), 
         G    = [3e50   1e50  ]./(sc.σ),
         C    = [50e6   1e60 ]./(sc.σ),
         ϕ    = [30.    0.   ],
@@ -280,7 +312,7 @@ end
             # Direct-iterative solver
             fu   = @views -r[1:size(𝐊,1)]
             fp   = @views -r[size(𝐊,1)+1:end]
-            @timeit to "Solver" u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu,  ηb=1e5, niter_l=10, ϵ_l=1e-10, 𝐊_PC=𝐊_PC)
+            @timeit to "Solver" u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu,  ηb=1e5, niter_l=10, ϵ_l=1e-9, 𝐊_PC=𝐊_PC)
             @views dx[1:size(𝐊,1)]     .= u
             @views dx[size(𝐊,1)+1:end] .= p
 
@@ -376,9 +408,16 @@ end
         ###############################
 
         # Block analysis
-        k = [2, 4, 8, 16, 32, 64, 128, 256]
+        k = [2, 4, 8, 16, 32, 64, 128]
 
         R_block       = Vector{Matrix{Float64}}(undef, length(k))
+
+        tau_xx = zeros(size_v...)
+        tau_yy = zeros(size_v...)
+        tau_xx[inx_v,iny_v] .= av2D(τ.xx)
+        tau_yy[inx_v,iny_v] .= av2D(τ.yy)
+        tau_xy = τ.xy
+        tau_yx = τ.xy
 
 
         for ik = 1:length(k)
@@ -387,24 +426,30 @@ end
             nbx = div(nc.x, kx)
             nby = div(nc.y, ky)
 
-            @info "nbx = $nbx, nby=$nby"
+             @info "nbx = $nbx, nby=$nby"
+
+            # =========================
+            # 0. Grid / geometry
+            # =========================
+            dx = L.x / nc.x
+            dy = L.y / nc.y
+
+            Lx_block = L.x / nbx
+            Ly_block = L.y / nby
+            A_block  = Lx_block * Ly_block
 
             # =========================
             # 1. Allocate fields
             # =========================
-
-            ω_all_block   = fill(NaN, nbx, nby)
-            ω_solid_block = fill(NaN, nbx, nby)
-            R_block[ik]   = fill(NaN, nbx, nby)
-
-            D12_block     = fill(NaN, nbx, nby)
-            σ12_block     = fill(NaN, nbx, nby)
-            φ_block       = fill(NaN, nbx, nby)
+            Tz_block     = fill(NaN, nbx, nby)
+            D12_block    = fill(NaN, nbx, nby)
+            σ12_block    = fill(NaN, nbx, nby)
+            φ_block      = fill(NaN, nbx, nby)
+            R_block[ik]  = fill(NaN, nbx, nby)
 
             # =========================
             # 2. Block loop
             # =========================
-
             for bx in 1:nbx, by in 1:nby
 
                 i_start = (bx-1)*kx + 1
@@ -412,127 +457,144 @@ end
                 j_start = (by-1)*ky + 1
                 j_end   = by*ky
 
-                ω_all_sum = 0.0
-                ωs_sum    = 0.0
-                D_sum     = 0.0
-                σ_sum     = 0.0
-
-                ns   = 0
                 ntot = 0
+                ns   = 0
+
+                D_sum = 0.0
+                σ_sum = 0.0
+                T_sum = 0.0
+
+                # --- block center (physical) ---
+                x_c = ((i_start + i_end)/2 - 0.5) * dx
+                y_c = ((j_start + j_end)/2 - 0.5) * dy
 
                 for i in i_start:i_end, j in j_start:j_end
 
+                    # --- physical coordinates ---
+                    x = (i - 0.5) * dx
+                    y = (j - 0.5) * dy
+
+                    # --- gradients ---
                     dxy = dVxdy[i,j]
                     dyx = dVydx[i,j]
 
-                    ω_local = 0.5 * (dyx - dxy)
-                    D12     = 0.5 * (dxy + dyx)
+                    # --- kinematics ---
+                    D12 = 0.5 * (dxy + dyx)
 
-                    ω_all_sum += ω_local
-                    D_sum     += D12
-                    σ_sum     += τ.xy[i,j]
-                    ntot      += 1
+                    # --- stresses ---
+                    τxy = tau_xy[i,j]
+                    τyx = tau_yx[i,j]  # usually equal
+
+                    # --- lever arm ---
+                    rx = x - x_c
+                    ry = y - y_c
+
+                    # --- torque contribution ---
+                    T_sum += rx * τxy - ry * τyx
+
+                    # --- accumulate ---
+                    D_sum += D12
+                    σ_sum += τxy
+                    ntot += 1
 
                     if phases.v[i,j] == 2
-                        ωs_sum += ω_local
                         ns += 1
                     end
                 end
 
                 if ntot > 0
-                    ω_all_block[bx,by] = ω_all_sum / ntot
-                    D12_block[bx,by]   = D_sum / ntot
-                    σ12_block[bx,by]   = σ_sum / ntot
-                    φ_block[bx,by]     = ns / ntot
-                end
+                    D12_block[bx,by] = D_sum / ntot
+                    σ12_block[bx,by] = σ_sum / ntot
+                    φ_block[bx,by]   = ns / ntot
 
-                if ns > 0
-                    ω_solid_block[bx,by] = ωs_sum / ns
-                    R_block[ik][bx,by]   = ω_all_block[bx,by] - ω_solid_block[bx,by]
+                    # --- normalize torque (intensive) ---
+                    Tz_block[bx,by] = T_sum / A_block
+                    R_block[ik][bx,by] = Tz_block[bx,by]
                 end
             end
 
             # =========================
-            # 3. Filtering (critical)
+            # 1. Compute Laplacian
             # =========================
+            L_D12 = laplacian(D12_block, Lx_block, Ly_block)
 
-            mask = .!isnan.(R_block[ik]) .&
+            # =========================
+            # 2. Build dataset
+            # =========================
+            mask = .!isnan.(L_D12) .&
+                .!isnan.(D12_block) .&
+                .!isnan.(σ12_block) .&
                 (φ_block .> 0.2) .&
                 (φ_block .< 0.8)
 
             X1 = D12_block[mask]
-            X2 = R_block[ik][mask]
+            X2 = L_D12[mask]
             Y  = σ12_block[mask]
 
             println("Number of valid blocks: ", length(X1))
 
             # =========================
-            # 4. Statistical diagnostics
+            # 3. Statistics
             # =========================
 
             println("\n--- Statistics ---")
 
-            println("mean(|ω|) ≈ ", mean(abs.(ω_all_block[.!isnan.(ω_all_block)])))
-
-            R_rms = sqrt(mean(X2.^2))
-            println("R_rms = ", R_rms)
-
-            χ = R_rms / mean(abs.(ω_all_block[.!isnan.(ω_all_block)]))
-            println("χ = ", χ)
+            println("mean(|D|) ≈ ", mean(abs.(X1)))
+            println("mean(|∇²D|) ≈ ", mean(abs.(X2)))
 
             println("\nCorrelations:")
-            println("cor(D, σ) = ", cor(X1, Y))
-            println("cor(R, σ) = ", cor(X2, Y))
-            println("cor(D, R) = ", cor(X1, X2))
+            println("cor(D, σ)    = ", cor(X1, Y))
+            println("cor(∇²D, σ)  = ", cor(X2, Y))
+            println("cor(D, ∇²D)  = ", cor(X1, X2))
 
             # =========================
-            # 5. Regression (Cosserat)
+            # 4. Nonlocal regression
             # =========================
 
-            # Normalize (important for stability)
+            # normalize (important!)
             s1 = std(X1)
             s2 = std(X2)
 
             X1n = X1 ./ s1
             X2n = X2 ./ s2
 
-            A = hcat(2 .* X1n, 2 .* X2n)
+            A = hcat(2 .* X1n, X2n)
 
             coeffs = A \ Y
 
             μ_fit = coeffs[1] / s1
-            κ_fit = coeffs[2] / s2
+            β_fit = coeffs[2] / s2
 
-            println("\n--- Cosserat fit ---")
+            println("\n--- Nonlocal fit ---")
             println("μ = ", μ_fit)
-            println("κ = ", κ_fit)
-            println("κ/μ = ", κ_fit / μ_fit)
+            println("β = ", β_fit)
+            println("β/μ = ", β_fit / μ_fit)
 
             # =========================
-            # 6. Classical comparison
+            # 5. Model comparison
             # =========================
 
             μ_classical = (2 .* X1) \ Y
 
             Y_classical = 2 .* μ_classical .* X1
-            Y_cosserat  = 2 .* μ_fit .* X1 .+ 2 .* κ_fit .* X2
+            Y_nonlocal  = 2 .* μ_fit .* X1 .+ β_fit .* X2
 
             rmse_classical = sqrt(mean((Y - Y_classical).^2))
-            rmse_cosserat  = sqrt(mean((Y - Y_cosserat).^2))
+            rmse_nonlocal  = sqrt(mean((Y - Y_nonlocal).^2))
 
             println("\n--- Model comparison ---")
             println("RMSE classical = ", rmse_classical)
-            println("RMSE Cosserat  = ", rmse_cosserat)
-            println("Improvement    = ", rmse_classical / rmse_cosserat)
+            println("RMSE nonlocal  = ", rmse_nonlocal)
+            println("Improvement    = ", rmse_classical / rmse_nonlocal)
 
             # =========================
-            # 7. Optional: outlier robustness
+            # 6. Internal length scale
             # =========================
 
-            println("\n--- Distribution check ---")
-            println("R mean = ", mean(X2))
-            println("R std  = ", std(X2))
-            println("max |R| = ", maximum(abs.(X2)))
+            if μ_fit != 0
+                ℓ = sqrt(abs(β_fit / μ_fit))
+                println("\nEstimated internal length ℓ = ", ℓ)
+            end
 
             valid = .!isnan.(R_block[1])
             R_mean = mean(R_block[1][valid])
@@ -541,15 +603,6 @@ end
             ω_mean = mean(abs.(Wz))
             χ = R_rms / ω_mean
             @show χ
-
-            # =========================
-            # 8. Internal length scale
-            # =========================
-
-            if μ_fit != 0
-                ℓ = sqrt(abs(κ_fit / μ_fit))
-                println("\nEstimated internal length ℓ = ", ℓ)
-            end
         end
  
         ###############################
