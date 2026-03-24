@@ -307,28 +307,28 @@ function two_phase_return_mapping()
         probes.r[it]  = r
     end
 
-    function figure()
-        fig = Figure(fontsize = 20, size = (600, 800) )     
-        ax1 = Axis(fig[1,1], title="Deviatoric stress",  xlabel=L"$t$ [yr]",  ylabel=L"$\tau_{II}$ [MPa]", xlabelsize=20, ylabelsize=20)
-        lines!(ax1, probes.t[1:nt]*sc.t, probes.τ[1:nt]*sc.σ)
+    # function figure()
+    #     fig = Figure(fontsize = 20, size = (600, 800) )     
+    #     ax1 = Axis(fig[1,1], title="Deviatoric stress",  xlabel=L"$t$ [yr]",  ylabel=L"$\tau_{II}$ [MPa]", xlabelsize=20, ylabelsize=20)
+    #     lines!(ax1, probes.t[1:nt]*sc.t, probes.τ[1:nt]*sc.σ)
 
-        ax2 = Axis(fig[2,1], title="Pressure",  xlabel=L"$t$ [yr]",  ylabel=L"$P$ [MPa]", xlabelsize=20, ylabelsize=20)
-        lines!(ax2, probes.t[1:nt]*sc.t, probes.Pt[1:nt]*sc.σ)
-        lines!(ax2, probes.t[1:nt]*sc.t, probes.Pf[1:nt]*sc.σ)
+    #     ax2 = Axis(fig[2,1], title="Pressure",  xlabel=L"$t$ [yr]",  ylabel=L"$P$ [MPa]", xlabelsize=20, ylabelsize=20)
+    #     lines!(ax2, probes.t[1:nt]*sc.t, probes.Pt[1:nt]*sc.σ)
+    #     lines!(ax2, probes.t[1:nt]*sc.t, probes.Pf[1:nt]*sc.σ)
 
-        ax3 = Axis(fig[3,1], title="Plastic multiplier",  xlabel=L"$t$ [yr]",  ylabel=L"$\dot{\lambda}$ [1/s]", xlabelsize=20, ylabelsize=20)    
-        lines!(ax3, probes.t[1:nt]*sc.t, probes.λ̇[1:nt]/sc.t)
+    #     ax3 = Axis(fig[3,1], title="Plastic multiplier",  xlabel=L"$t$ [yr]",  ylabel=L"$\dot{\lambda}$ [1/s]", xlabelsize=20, ylabelsize=20)    
+    #     lines!(ax3, probes.t[1:nt]*sc.t, probes.λ̇[1:nt]/sc.t)
    
-        ax4 = Axis(fig[4,1], title="Porosity",  xlabel=L"$t$ [yr]",  ylabel=L"$\phi$", xlabelsize=20, ylabelsize=20)    
-        lines!(ax4, probes.t[1:nt]*sc.t, probes.Φ[1:nt])
+    #     ax4 = Axis(fig[4,1], title="Porosity",  xlabel=L"$t$ [yr]",  ylabel=L"$\phi$", xlabelsize=20, ylabelsize=20)    
+    #     lines!(ax4, probes.t[1:nt]*sc.t, probes.Φ[1:nt])
 
-        ax5 = Axis(fig[5,1], title="Residual",  xlabel=L"$t$ [yr]",  ylabel=L"$r$", xlabelsize=20, ylabelsize=20)    
-        scatter!(ax5, probes.t[1:nt]*sc.t, log10.(probes.r[1:nt]))
-        display(fig)
-    end
-    with_theme(figure, theme_latexfonts())
+    #     ax5 = Axis(fig[5,1], title="Residual",  xlabel=L"$t$ [yr]",  ylabel=L"$r$", xlabelsize=20, ylabelsize=20)    
+    #     scatter!(ax5, probes.t[1:nt]*sc.t, log10.(probes.r[1:nt]))
+    #     display(fig)
+    # end
+    # with_theme(figure, theme_latexfonts())
 end
 
 @time two_phase_return_mapping()
 # julia> @time two_phase_return_mapping()
-#   0.000287 seconds (526 allocations: 85.266 KiB)
+#    0.000278 seconds (526 allocations: 85.266 KiB)
