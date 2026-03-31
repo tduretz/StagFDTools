@@ -1,7 +1,7 @@
 using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
+using StagFDTools: Duplicated, Const, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
 using TimerOutputs
 using ExactFieldSolutions
 import CairoMakie as cm
@@ -210,25 +210,25 @@ end
     I2  = LinearAlgebra.I(2)     # Identity matrix
 
     for I in CartesianIndices(X.v)
-        J          = Enzyme.jacobian(Enzyme.ForwardWithPrimal, TransformCoordinates, ξ.v[I], Const(params))
+        J          = forwarddiff_jacobian(TransformCoordinates, ξ.v[I], Const(params))
         Jinv.v[I] .= J.derivs[1] \ I2
         X.v[I]    .= J.val
     end
 
     for I in CartesianIndices(X.c)
-        J          = Enzyme.jacobian(Enzyme.ForwardWithPrimal, TransformCoordinates, ξ.c[I], Const(params))
+        J          = forwarddiff_jacobian(TransformCoordinates, ξ.c[I], Const(params))
         Jinv.c[I] .= J.derivs[1] \ I2
         X.c[I]    .= J.val
     end
 
     for I in CartesianIndices(X.Vx)
-        J          = Enzyme.jacobian(Enzyme.ForwardWithPrimal, TransformCoordinates, ξ.Vx[I], Const(params))
+        J          = forwarddiff_jacobian(TransformCoordinates, ξ.Vx[I], Const(params))
         Jinv.Vx[I] .= J.derivs[1] \ I2
         X.Vx[I]    .= J.val
     end
 
     for I in CartesianIndices(X.Vy)
-        J          = Enzyme.jacobian(Enzyme.ForwardWithPrimal, TransformCoordinates, ξ.Vy[I], Const(params))
+        J          = forwarddiff_jacobian(TransformCoordinates, ξ.Vy[I], Const(params))
         Jinv.Vy[I] .= J.derivs[1] \ I2
         X.Vy[I]    .= J.val
     end

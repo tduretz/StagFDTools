@@ -1,4 +1,5 @@
-using StagFDTools, ExtendableSparse, StaticArrays, Enzyme, LinearAlgebra, Statistics, UnPack, Plots
+using StagFDTools, ExtendableSparse, StaticArrays, LinearAlgebra, Statistics, UnPack, Plots
+using StagFDTools: Duplicated, Const, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
  
 function Poisson2D(u_loc, k, s, type_loc, bcv_loc, Δ)
     
@@ -82,7 +83,7 @@ end
         bcv_loc  .= num.bc_val[i-1:i+1,j-1:j+1] 
         type_loc .=   num.type[i-1:i+1,j-1:j+1]
         ∂R∂u     .= 0.
-        autodiff(Enzyme.Reverse, Poisson2D, Duplicated(u_loc, ∂R∂u), Const(k_loc), Const(s[i,j]), Const(type_loc), Const(bcv_loc), Const(Δ))
+        forwarddiff_gradients!(Poisson2D, Duplicated(u_loc, ∂R∂u), Const(k_loc), Const(s[i,j]), Const(type_loc), Const(bcv_loc), Const(Δ))
 
         for jj in axes(num_loc,2), ii in axes(num_loc,1)
             if (num_loc[ii,jj]>0) 

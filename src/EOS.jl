@@ -58,28 +58,25 @@ function DensityBirchMurnaghanEinstein(T, P, materials, phase)
 
     # for iter=1:niter
     #     # Evaluate the function and the Jacobian: r, ∂r∂V
-    #     J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual, V, Const(P), Const(T), Const(materials), Const(phase) )  
-    #     r = J.val[1]
+    #     r, dresdV = ad_value_and_derivative(residual, V, P, T, materials, phase)
     #     @show r
     #     if iter==1 r0 = r end
     #     err         = abs(r/r0)
     #     if err<tol break end
     #     # Newton update
-    #     V = V - r/J.derivs[1]
+    #     V = V - r / dresdV
     # end
     
     while (iter<niter && err>tol)
         iter += 1
         # Evaluate the function and the Jacobian: r, ∂r∂V
-        J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual, V, Const(P), Const(T), Const(materials), Const(phase) )  
-        r = J.val[1]
+        r, dresdV = ad_value_and_derivative(residual, V, P, T, materials, phase)
         if iter==1 r0 = r end
         err         = abs(r/r0)
-        # @show r, J.derivs[1]
+        # @show r, dresdV
         # Newton update
-        V -= r/J.derivs[1]
+        V -= r / dresdV
     end
     ρ = ρr*V0/V
     return ρ
 end
-

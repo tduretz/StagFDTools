@@ -1,4 +1,5 @@
-using CairoMakie, Enzyme, StaticArrays, ExtendableSparse, LinearAlgebra, Printf, JLD2
+using CairoMakie, StaticArrays, ExtendableSparse, LinearAlgebra, Printf, JLD2
+using StagFDTools: Duplicated, Const, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
 
 # Try to get bulk elasticity running but it does not !
 
@@ -105,7 +106,7 @@ function momentum!(M, r, Vys, Pt, Pf, τyy0, Pt0, Pf0, ϕ0, BC, num, p, Δy, Δt
         fill!(∂R∂Vy, 0.0)
         fill!(∂R∂Pt, 0.0)
         fill!(∂R∂Pf, 0.0)
-        autodiff(Enzyme.Reverse, momentum_local, Duplicated(Vyˡ, ∂R∂Vy), Duplicated(Ptˡ, ∂R∂Pt), Duplicated(Pfˡ, ∂R∂Pf), Const(τyy0ˡ), Const(Pt0ˡ), Const(Pf0ˡ), Const(ϕ0ˡ), Const(tagˡ), Const(p), Const(Δy), Const(Δt))
+        forwarddiff_gradients!(momentum_local, Duplicated(Vyˡ, ∂R∂Vy), Duplicated(Ptˡ, ∂R∂Pt), Duplicated(Pfˡ, ∂R∂Pf), Const(τyy0ˡ), Const(Pt0ˡ), Const(Pf0ˡ), Const(ϕ0ˡ), Const(tagˡ), Const(p), Const(Δy), Const(Δt))
 
         # Vy --- Vy
         connect = SVector{3}( num.Vy[jj]   for jj in j-1:j+1 )
@@ -242,7 +243,7 @@ function continuity!(M, r, Vys, Pt, Pf, Pt0, Pf0, ϕ0, BC, num, p, Δy, Δt)
         fill!(∂R∂Vy, 0.0)
         fill!(∂R∂Pt, 0.0)
         fill!(∂R∂Pf, 0.0)
-        autodiff(Enzyme.Reverse, continuity_local, Duplicated(Vyˡ, ∂R∂Vy), Duplicated(Ptˡ, ∂R∂Pt), Duplicated(Pfˡ, ∂R∂Pf), Const(Pt0ˡ), Const(Pf0ˡ), Const(ϕ0ˡ), Const(tagˡ), Const(tag_ptˡ), Const(p), Const(Δy), Const(Δt))
+        forwarddiff_gradients!(continuity_local, Duplicated(Vyˡ, ∂R∂Vy), Duplicated(Ptˡ, ∂R∂Pt), Duplicated(Pfˡ, ∂R∂Pf), Const(Pt0ˡ), Const(Pf0ˡ), Const(ϕ0ˡ), Const(tagˡ), Const(tag_ptˡ), Const(p), Const(Δy), Const(Δt))
 
         # Pt --- Vy
         connect = SVector{2}( num.Vy[jj]   for jj in j:j+1 )
@@ -275,7 +276,7 @@ function continuity!(M, r, Vys, Pt, Pf, Pt0, Pf0, ϕ0, BC, num, p, Δy, Δt)
         fill!(∂R∂Vy, 0.0)
         fill!(∂R∂Pt, 0.0)
         fill!(∂R∂Pf, 0.0)
-        autodiff(Enzyme.Reverse, fluid_continuity_local, Duplicated(Vyˡ, ∂R∂Vy), Duplicated(Ptˡ, ∂R∂Pt), Duplicated(Pfˡ, ∂R∂Pf), Const(Pt0ˡ), Const(Pf0ˡ), Const(ϕ0ˡ), Const(tagˡ), Const(p), Const(Δy), Const(Δt))
+        forwarddiff_gradients!(fluid_continuity_local, Duplicated(Vyˡ, ∂R∂Vy), Duplicated(Ptˡ, ∂R∂Pt), Duplicated(Pfˡ, ∂R∂Pf), Const(Pt0ˡ), Const(Pf0ˡ), Const(ϕ0ˡ), Const(tagˡ), Const(p), Const(Δy), Const(Δt))
 
         # Pt --- Vy
         connect = SVector{2}( num.Vy[jj]   for jj in j:j+1 )

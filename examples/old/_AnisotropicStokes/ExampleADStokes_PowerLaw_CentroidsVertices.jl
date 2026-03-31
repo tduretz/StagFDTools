@@ -1,8 +1,7 @@
 using StagFDTools.Stokes, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays
 import Statistics:mean
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
-
+using StagFDTools: Duplicated, Const, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
 function Momentum_x_PowerLaw(Vx, Vy, Pt, phases, materials, type, bcv, Δ)
     
     invΔx, invΔy = 1 / Δ.x, 1 / Δ.y
@@ -150,7 +149,7 @@ function AssembleMomentum2D_x!(K, V, P, phases, materials, num, pattern, type, B
             ∂R∂Vx .= 0.
             ∂R∂Vy .= 0.
             ∂R∂Pt .= 0.
-            autodiff(Enzyme.Reverse, Momentum_x_PowerLaw, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+            forwarddiff_gradients!(Momentum_x_PowerLaw, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
             # Vx --- Vx
             Local = num.Vx[i-1:i+1,j-1:j+1] .* pattern[1][1]
             for jj in axes(Local,2), ii in axes(Local,1)
@@ -228,7 +227,7 @@ function AssembleMomentum2D_y!(K, V, P, phases, materials, num, pattern, type, B
             ∂R∂Vx .= 0.
             ∂R∂Vy .= 0.
             ∂R∂Pt .= 0.
-            autodiff(Enzyme.Reverse, Momentum_y_PowerLaw, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+            forwarddiff_gradients!(Momentum_y_PowerLaw, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
             # Vy --- Vx
             Local = num.Vx[i-2:i+1,j-1:j+2] .* pattern[2][1]
             for jj in axes(Local,2), ii in axes(Local,1)
@@ -280,7 +279,7 @@ function AssembleContinuity2D!(K, V, P, phases, materials, num, pattern, type, B
         
         ∂R∂Vx .= 0.
         ∂R∂Vy .= 0.
-        autodiff(Enzyme.Reverse, Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Const(P[i,j]), Const(type_loc), Const(bcv_loc), Const(Δ))
+        forwarddiff_gradients!(Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Const(P[i,j]), Const(type_loc), Const(bcv_loc), Const(Δ))
 
         # Pt --- Vx
         Local = num.Vx[i:i+1,j:j+2] .* pattern[3][1]

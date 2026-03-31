@@ -1,8 +1,8 @@
 using StagFDTools, ExtendableSparse, StaticArrays, LinearAlgebra, IterativeSolvers, SuiteSparse, Statistics, Plots
 using TimerOutputs
 using DifferentiationInterface
-import ForwardDiff, Enzyme  # AD backends you want to use 
-
+import ForwardDiff
+using StagFDTools: Duplicated, Const, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
 ######
 
 
@@ -274,7 +274,7 @@ function AssemblyPoisson_Enzyme!(K, u, k, s, numbering, nc, Δ)
 
         ∂R∂u     .= 0e0
 
-        autodiff(Enzyme.Reverse, Poisson2D, Duplicated(u_loc, ∂R∂u), Const(k_loc), Const(s[i,j]), Const(type_loc), Const(bcv_loc), Const(Δ))
+        forwarddiff_gradients!(Poisson2D, Duplicated(u_loc, ∂R∂u), Const(k_loc), Const(s[i,j]), Const(type_loc), Const(bcv_loc), Const(Δ))
 
         num_ij = num[i,j]
         for jj in axes(num_loc,2), ii in axes(num_loc,1)

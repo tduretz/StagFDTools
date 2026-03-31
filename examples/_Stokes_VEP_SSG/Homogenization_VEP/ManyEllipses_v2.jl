@@ -1,145 +1,79 @@
 using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf
-import Statistics:mean
+using Statistics
 using DifferentiationInterface
+using Random
+Random.seed!(1234)
 using TimerOutputs
 
+function laplacian(A, dx, dy)
+    nx, ny = size(A)
+    L = fill(NaN, nx, ny)
 
-@views function PorousMediumCircles!(phase, inx, iny, X, Y)
-    # Ellipse 1
-    x0, y0 = 0., 0.
-    α  = 30.0
-    ar = 1.0
-    r  = 0.007
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
+    for i in 2:nx-1, j in 2:ny-1
+        if !isnan(A[i,j]) &&
+           !isnan(A[i+1,j]) && !isnan(A[i-1,j]) &&
+           !isnan(A[i,j+1]) && !isnan(A[i,j-1])
 
-    # Ellipse 1
-    x0, y0 = 0.25, 0.
-    α  = -80.0
-    ar = 1.0
-    r  = 0.005
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
+            L[i,j] =
+                (A[i+1,j] - 2A[i,j] + A[i-1,j]) / dx^2 +
+                (A[i,j+1] - 2A[i,j] + A[i,j-1]) / dy^2
+        end
+    end
 
-    # Ellipse 3
-    x0, y0 = -0.15, 0.
-    α  = -30.0
-    ar = 1.0
-    r  = 0.005
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 4
-    x0, y0 = 0.35, -0.3
-    α  = 86.0
-    ar = 200.0
-    r  = 0.005
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 5
-    x0, y0 = 0.35, -0.3
-    α  = -20.0
-    ar = 1.0
-    r  = 0.01
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 5
-    x0, y0 = -0.35, -0.3
-    α  = 15.0
-    ar = 1.0
-    r  = 0.004
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
+    return L
 end
+
+# @views function PorousMediumEllipses!(phase, inx, iny, X, Y)
+
+#     for i=1:100
+#         # Ellipse 1
+#         x0, y0 = rand() - 0.5, rand() - 0.5
+#         α  = rand() * 90
+#         ar = rand() * 10
+#         r  = rand() * 0.02
+#         𝑋 = cosd(α)*X .- sind(α).*Y'
+#         𝑌 = sind(α)*X .+ cosd(α).*Y'
+#         phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
+#     end
+# end
 
 @views function PorousMediumEllipses!(phase, inx, iny, X, Y)
 
-    # Ellipse 1
-    x0, y0 = 0., 0.
-    α  = 30.0
-    ar = 100.0
-    r  = 0.007
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 1
-    x0, y0 = 0.25, 0.
-    α  = -80.0
-    ar = 150.0
-    r  = 0.005
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 3
-    x0, y0 = -0.15, 0.
-    α  = -30.0
-    ar = 100.0
-    r  = 0.005
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 4
-    x0, y0 = 0.35, -0.3
-    α  = 86.0
-    ar = 200.0
-    r  = 0.005
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 5
-    x0, y0 = 0.35, -0.3
-    α  = -20.0
-    ar = 250.0
-    r  = 0.01
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
-    # Ellipse 5
-    x0, y0 = -0.35, -0.3
-    α  = 15.0
-    ar = 200.0
-    r  = 0.004
-    𝑋 = cosd(α)*X .- sind(α).*Y'
-    𝑌 = sind(α)*X .+ cosd(α).*Y'
-    phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
-
+    for i=1:1000
+        # Ellipse 1
+        x0, y0 = rand() - 0.5, rand() - 0.5
+        α  = rand() * 90
+        ar = rand() * 4
+        r  = rand() * 0.02
+        𝑋 = cosd(α)*X .- sind(α).*Y'
+        𝑌 = sind(α)*X .+ cosd(α).*Y'
+        phase[inx, iny][ ((𝑋 .- x0).^2 .+ (𝑌  .- y0).^2/(ar)^2) .< r^2] .= 2
+    end
 end
 
 @views function main(nc)
     #--------------------------------------------#
 
     # Scales
-    sc = (σ = 1e8, L = 1e-2, t=1e12)
+    sc = (σ = 1e0, L = 1e-0, t=1e0)
 
     # Boundary loading type
     config = :free_slip
-    ε̇bg    = -1e-12*sc.t
-    D_BC   = @SMatrix( [ -ε̇bg 0.;
-                          0.  ε̇bg ])
+    ε̇bg    = -1e0*sc.t
+    # D_BC   = @SMatrix( [ -ε̇bg 0.;
+    #                       0.  ε̇bg ])
+    D_BC   = @SMatrix( [  0.0 ε̇bg*2.;
+                          0.  0.0 ])
 
     # Material parameters
     materials = ( 
-        compressible = true,
-        plasticity   = :DruckerPrager,
+        compressible = false,
+        plasticity   = :none,
         g    = [1.0    1.0  ],
         ρ    = [0.0    0.0  ], 
         n    = [1.0    1.0  ],
-        η0   = [1e22   1e10 ]./(sc.σ * sc.t), 
-        G    = [3e10   1e5  ]./(sc.σ),
+        η0   = [1e0    1.00001e0 ]./(sc.σ * sc.t), 
+        G    = [3e50   1e50  ]./(sc.σ),
         C    = [50e6   1e60 ]./(sc.σ),
         ϕ    = [30.    0.   ],
         ηvp  = [1e17   0.   ]./(sc.σ * sc.t),
@@ -276,11 +210,11 @@ end
         BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
     end
 
-    # PorousMediumEllipses!(phases.c, inx_c, iny_c, xc, yc)
-    # PorousMediumEllipses!(phases.v, inx_v, iny_v, xv, yv)
+    PorousMediumEllipses!(phases.c, inx_c, iny_c, xc, yc)
+    PorousMediumEllipses!(phases.v, inx_v, iny_v, xv, yv)
 
-    PorousMediumCircles!(phases.c, inx_c, iny_c, xc, yc)
-    PorousMediumCircles!(phases.v, inx_v, iny_v, xv, yv)
+    # PorousMediumCircles!(phases.c, inx_c, iny_c, xc, yc)
+    # PorousMediumCircles!(phases.v, inx_v, iny_v, xv, yv)
 
     # # Set material geometry 
     # @views phases.c[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= 0.1^2] .= 2
@@ -337,6 +271,9 @@ end
             err.x[iter] = @views norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
             err.y[iter] = @views norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
             err.p[iter] = @views norm(R.p[inx_c,iny_c])/sqrt(nPt)
+            
+            @info err.x
+
             max(err.x[iter], err.y[iter]) < ϵ_nl ? break : nothing
 
             #--------------------------------------------#
@@ -375,7 +312,7 @@ end
             # Direct-iterative solver
             fu   = @views -r[1:size(𝐊,1)]
             fp   = @views -r[size(𝐊,1)+1:end]
-            @timeit to "Solver" u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu,  ηb=1e3, niter_l=10, ϵ_l=1e-11, 𝐊_PC=𝐊_PC)
+            @timeit to "Solver" u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=:lu,  ηb=1e5, niter_l=10, ϵ_l=1e-9, 𝐊_PC=𝐊_PC)
             @views dx[1:size(𝐊,1)]     .= u
             @views dx[size(𝐊,1)+1:end] .= p
 
@@ -428,19 +365,264 @@ end
         probes.τs[it] = τ_solid
         probes.τt[it] = τ_total
 
+        #############################
+
+        Wz    = zeros(size_v...)
+        dVxdy = zeros(size_v...)
+        dVydx = zeros(size_v...)
+        Wz_m = 0.0
+        Wz_f = 0.0
+        Wz_s = 0.0
+        iwz_m, iwz_f, iwz_s = 0, 0, 0
+
+        for I in CartesianIndices(ε̇.xy)
+            i, j = I[1], I[2]
+            if i>2 && j>2 && i<nc.x+0  && j<nc.y+0
+                iwz_m +=1
+                wz    = 1/2 * ((V.x[i+0,j+1] -  V.x[i+0,j+0])/Δ.y - (V.y[i+1,j+0] - V.y[i+0,j+0])/Δ.x )
+                dVxdy[I] = (V.x[i+0,j+1] -  V.x[i+0,j+0])/Δ.y
+                dVydx[I] = (V.y[i+1,j+0] -  V.y[i+0,j+0])/Δ.x
+                Wz[I] = wz
+                Wz_m += wz
+                if phases.v[I] == 1
+                    iwz_f +=1
+                    Wz_f  += wz
+                elseif phases.v[I] == 2
+                    iwz_s += 1
+                    Wz_s  += wz
+                end
+            end
+        end
+
+        Wz_m /= iwz_m
+        Wz_s /= iwz_s
+        Wz_f /= iwz_f
+
+        @show Wz_m
+        @show Wz_f
+        @show Wz_s
+
+        @show (Wz_f-Wz_m)/Wz_m*100
+        @show (Wz_s-Wz_m)/Wz_m*100
+
+        ###############################
+
+        # Block analysis
+        k = [2, 4, 8, 16, 32, 64, 128]
+
+        R_block       = Vector{Matrix{Float64}}(undef, length(k))
+
+        tau_xx = zeros(size_v...)
+        tau_yy = zeros(size_v...)
+        tau_xx[inx_v,iny_v] .= av2D(τ.xx)
+        tau_yy[inx_v,iny_v] .= av2D(τ.yy)
+        tau_xy = τ.xy
+        tau_yx = τ.xy
+
+
+        for ik = 1:length(k)
+            kx = k[ik]   # block size in x
+            ky = k[ik]   # block size in y
+            nbx = div(nc.x, kx)
+            nby = div(nc.y, ky)
+
+             @info "nbx = $nbx, nby=$nby"
+
+            # =========================
+            # 0. Grid / geometry
+            # =========================
+            dx = L.x / nc.x
+            dy = L.y / nc.y
+
+            Lx_block = L.x / nbx
+            Ly_block = L.y / nby
+            A_block  = Lx_block * Ly_block
+
+            # =========================
+            # 1. Allocate fields
+            # =========================
+            Tz_block     = fill(NaN, nbx, nby)
+            D12_block    = fill(NaN, nbx, nby)
+            σ12_block    = fill(NaN, nbx, nby)
+            φ_block      = fill(NaN, nbx, nby)
+            R_block[ik]  = fill(NaN, nbx, nby)
+
+            # =========================
+            # 2. Block loop
+            # =========================
+            for bx in 1:nbx, by in 1:nby
+
+                i_start = (bx-1)*kx + 1
+                i_end   = bx*kx
+                j_start = (by-1)*ky + 1
+                j_end   = by*ky
+
+                ntot = 0
+                ns   = 0
+
+                D_sum = 0.0
+                σ_sum = 0.0
+                T_sum = 0.0
+
+                # --- block center (physical) ---
+                x_c = ((i_start + i_end)/2 - 0.5) * dx
+                y_c = ((j_start + j_end)/2 - 0.5) * dy
+
+                for i in i_start:i_end, j in j_start:j_end
+
+                    # --- physical coordinates ---
+                    x = (i - 0.5) * dx
+                    y = (j - 0.5) * dy
+
+                    # --- gradients ---
+                    dxy = dVxdy[i,j]
+                    dyx = dVydx[i,j]
+
+                    # --- kinematics ---
+                    D12 = 0.5 * (dxy + dyx)
+
+                    # --- stresses ---
+                    τxy = tau_xy[i,j]
+                    τyx = tau_yx[i,j]  # usually equal
+
+                    # --- lever arm ---
+                    rx = x - x_c
+                    ry = y - y_c
+
+                    # --- torque contribution ---
+                    T_sum += rx * τxy - ry * τyx
+
+                    # --- accumulate ---
+                    D_sum += D12
+                    σ_sum += τxy
+                    ntot += 1
+
+                    if phases.v[i,j] == 2
+                        ns += 1
+                    end
+                end
+
+                if ntot > 0
+                    D12_block[bx,by] = D_sum / ntot
+                    σ12_block[bx,by] = σ_sum / ntot
+                    φ_block[bx,by]   = ns / ntot
+
+                    # --- normalize torque (intensive) ---
+                    Tz_block[bx,by] = T_sum / A_block
+                    R_block[ik][bx,by] = Tz_block[bx,by]
+                end
+            end
+
+            # =========================
+            # 1. Compute Laplacian
+            # =========================
+            L_D12 = laplacian(D12_block, Lx_block, Ly_block)
+
+            # =========================
+            # 2. Build dataset
+            # =========================
+            mask = .!isnan.(L_D12) .&
+                .!isnan.(D12_block) .&
+                .!isnan.(σ12_block) .&
+                (φ_block .> 0.2) .&
+                (φ_block .< 0.8)
+
+            X1 = D12_block[mask]
+            X2 = L_D12[mask]
+            Y  = σ12_block[mask]
+
+            println("Number of valid blocks: ", length(X1))
+
+            # =========================
+            # 3. Statistics
+            # =========================
+
+            println("\n--- Statistics ---")
+
+            println("mean(|D|) ≈ ", mean(abs.(X1)))
+            println("mean(|∇²D|) ≈ ", mean(abs.(X2)))
+
+            println("\nCorrelations:")
+            println("cor(D, σ)    = ", cor(X1, Y))
+            println("cor(∇²D, σ)  = ", cor(X2, Y))
+            println("cor(D, ∇²D)  = ", cor(X1, X2))
+
+            # =========================
+            # 4. Nonlocal regression
+            # =========================
+
+            # normalize (important!)
+            s1 = std(X1)
+            s2 = std(X2)
+
+            X1n = X1 ./ s1
+            X2n = X2 ./ s2
+
+            A = hcat(2 .* X1n, X2n)
+
+            coeffs = A \ Y
+
+            μ_fit = coeffs[1] / s1
+            β_fit = coeffs[2] / s2
+
+            println("\n--- Nonlocal fit ---")
+            println("μ = ", μ_fit)
+            println("β = ", β_fit)
+            println("β/μ = ", β_fit / μ_fit)
+
+            # =========================
+            # 5. Model comparison
+            # =========================
+
+            μ_classical = (2 .* X1) \ Y
+
+            Y_classical = 2 .* μ_classical .* X1
+            Y_nonlocal  = 2 .* μ_fit .* X1 .+ β_fit .* X2
+
+            rmse_classical = sqrt(mean((Y - Y_classical).^2))
+            rmse_nonlocal  = sqrt(mean((Y - Y_nonlocal).^2))
+
+            println("\n--- Model comparison ---")
+            println("RMSE classical = ", rmse_classical)
+            println("RMSE nonlocal  = ", rmse_nonlocal)
+            println("Improvement    = ", rmse_classical / rmse_nonlocal)
+
+            # =========================
+            # 6. Internal length scale
+            # =========================
+
+            if μ_fit != 0
+                ℓ = sqrt(abs(β_fit / μ_fit))
+                println("\nEstimated internal length ℓ = ", ℓ)
+            end
+
+            valid = .!isnan.(R_block[1])
+            R_mean = mean(R_block[1][valid])
+            R_rms  = sqrt(mean(R_block[1][valid].^2))
+
+            ω_mean = mean(abs.(Wz))
+            χ = R_rms / ω_mean
+            @show χ
+        end
+ 
+        ###############################
+
         # p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
-        p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]'.*sc.σ, aspect_ratio=1, xlim=extrema(xc), title="Pt")
+        # p2 = heatmap(xc, yc,  (Pt[inx_c,iny_c].-mean(Pt[inx_c,iny_c]))'.*sc.σ, aspect_ratio=1, xlim=extrema(xc), title="Pt")
+        p3  = heatmap(xc, yc,  (phases.c[inx_c,iny_c])', aspect_ratio=1, xlim=extrema(xc), title="phases")
+        # p2 = heatmap(R_block', aspect_ratio=1, title="R_block")
+        p2 = histogram(R_block[1][.!isnan.(R_block[1])])
         # p3 = heatmap(xc, yc,  log10.(ε̇II)', aspect_ratio=1, xlim=extrema(xc), title="ε̇II", c=:coolwarm)
-        p3 = plot(xlabel="time", ylabel="stress")
-        p3 = plot!([1:it].*Δ.t,  probes.τf[1:it].*sc.σ, label="τ fluid")
-        p3 = plot!([1:it].*Δ.t,  probes.τs[1:it].*sc.σ, label="τ solid")
-        p3 = plot!([1:it].*Δ.t,  probes.τt[1:it].*sc.σ, label="τ total")
-        p3 = plot!([1:it].*Δ.t,  probes.Pf[1:it].*sc.σ, label="P fluid")
-        p3 = plot!([1:it].*Δ.t,  probes.Ps[1:it].*sc.σ, label="P solid")
-        p3 = plot!([1:it].*Δ.t,  probes.Pt[1:it].*sc.σ, label="P total")
-        p3 = plot!([1:it].*Δ.t,  τ_dry *ones(it).*sc.σ, label="τ dry",  linewidth=2)
-        p3 = plot!([1:it].*Δ.t,  τ_terz*ones(it).*sc.σ, label="τ Terz", linewidth=2)
-        p3 = plot!([1:it].*Δ.t,  τ_shi *ones(it).*sc.σ, label="τ Shi",  linewidth=2, legend=:outertopright)
+        # p3 = plot(xlabel="time", ylabel="stress")
+        # p3 = plot!([1:it].*Δ.t,  probes.τf[1:it].*sc.σ, label="τ fluid")
+        # p3 = plot!([1:it].*Δ.t,  probes.τs[1:it].*sc.σ, label="τ solid")
+        # p3 = plot!([1:it].*Δ.t,  probes.τt[1:it].*sc.σ, label="τ total")
+        # p3 = plot!([1:it].*Δ.t,  probes.Pf[1:it].*sc.σ, label="P fluid")
+        # p3 = plot!([1:it].*Δ.t,  probes.Ps[1:it].*sc.σ, label="P solid")
+        # p3 = plot!([1:it].*Δ.t,  probes.Pt[1:it].*sc.σ, label="P total")
+        # p3 = plot!([1:it].*Δ.t,  τ_dry *ones(it).*sc.σ, label="τ dry",  linewidth=2)
+        # p3 = plot!([1:it].*Δ.t,  τ_terz*ones(it).*sc.σ, label="τ Terz", linewidth=2)
+        # p3 = plot!([1:it].*Δ.t,  τ_shi *ones(it).*sc.σ, label="τ Shi",  linewidth=2, legend=:outertopright)
 
         p4 = heatmap(xc, yc,  τII'.*sc.σ, aspect_ratio=1, xlim=extrema(xc), title="τII", c=:turbo)
         p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright)
@@ -459,5 +641,5 @@ end
 end
 
 let
-    main((x = 200, y = 200, t=100))
+    main((x = 600, y = 600, t=1))
 end

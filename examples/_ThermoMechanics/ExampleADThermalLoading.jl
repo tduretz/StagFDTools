@@ -1,7 +1,5 @@
 using StagFDTools, StagFDTools.ThermoMechanics, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf, JLD2
 import Statistics:mean
-using Enzyme  
-
 # This example shows how thermal loading (heating) leads to pressurisation
 # The pressure is predicted numerically and exactly using the adiabatic relation:
 # ΔP = α/K*ΔT 

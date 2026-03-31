@@ -1,7 +1,6 @@
 using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
 using TimerOutputs, Interpolations, GridGeometryUtils
 import CairoMakie as cm
 
@@ -17,6 +16,8 @@ import CairoMakie as cm
         compressible = false,
         plasticity   = :none,
         n    = [1.0    1.0  1.0  ],
+        g    = [0.0    0.0  0.0  ],
+        ρ    = [1.0    1.0  1.0  ],
         η0   = [2e0    2/10 1e-1 ], 
         G    = [1e6    1e6  1e6  ],
         C    = [150    150  150  ],

@@ -5,7 +5,6 @@ using JustPIC, JustPIC._2D
 import JustPIC.@index
 const backend = JustPIC.CPUBackend 
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
 using TimerOutputs, GridGeometryUtils
 
 function compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v, nphases)
