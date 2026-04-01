@@ -34,6 +34,8 @@ using GridGeometryUtils
         cosϕ = [0.0    0.0  ],
         sinϕ = [0.0    0.0  ],
         sinψ = [0.0    0.0  ],
+        δ    = [1.0     1.0 ],
+        θ    = [0.0     0.0 ],
     )           # 1     # 2
     materials.B   .= (2*materials.η0).^(-materials.n)
 
@@ -124,14 +126,14 @@ using GridGeometryUtils
     𝐷_ctl   = (c = D_ctl_c, v = D_ctl_v)
 
     # Mesh coordinates
-    xv = LinRange(-L.x/2, L.x/2, nc.x+1)
-    yv = LinRange(-L.y/2, L.y/2, nc.y+1)
+    xv   = LinRange(-L.x/2, L.x/2, nc.x+1)
+    yv   = LinRange(-L.y/2, L.y/2, nc.y+1)
     xve  = LinRange(-L.x/2-Δ.x, L.x/2+Δ.x, nc.x+3)
     yve  = LinRange(-L.y/2-Δ.y, L.y/2+Δ.y, nc.y+3)
-    xc = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
-    yc = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
-    xce = LinRange(-L.x/2-Δ.x/2, L.x/2+Δ.x/2, nc.x+2)
-    yce = LinRange(-L.y/2-Δ.y/2, L.y/2+Δ.y/2, nc.y+2)
+    xc   = LinRange(-L.x/2+Δ.x/2, L.x/2-Δ.x/2, nc.x)
+    yc   = LinRange(-L.y/2+Δ.y/2, L.y/2-Δ.y/2, nc.y)
+    xce  = LinRange(-L.x/2-Δ.x/2, L.x/2+Δ.x/2, nc.x+2)
+    yce  = LinRange(-L.y/2-Δ.y/2, L.y/2+Δ.y/2, nc.y+2)
 
     # Initial velocity & pressure field
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
@@ -157,17 +159,17 @@ using GridGeometryUtils
     phase_ratios, phase_weights = InitialisePhaseRatios(m, ε̇)
 
     # Set material geometry
-    # rad = 0.1 + 1e-13
-    # mphase[(m.xm.^2 .+ (m.ym)'.^2) .<= rad^2] .= 2
-    incl = Hexagon((0.0, 0.0), 0.2; θ = π / 10)
-    for I in CartesianIndices(mphase)
-        i,j = I[1], I[2]
-        𝐱 = SVector(m.xm[i], m.ym[j])
-        isin = inside(𝐱, incl)
-        if isin
-            mphase[I] = 2
-        end
-    end
+    rad = 0.1 + 1e-13
+    mphase[(m.xm.^2 .+ (m.ym)'.^2) .<= rad^2] .= 2
+    # incl = Hexagon((0.0, 0.0), 0.2; θ = π / 10)
+    # for I in CartesianIndices(mphase)
+    #     i,j = I[1], I[2]
+    #     𝐱 = SVector(m.xm[i], m.ym[j])
+    #     isin = inside(𝐱, incl)
+    #     if isin
+    #         mphase[I] = 2
+    #     end
+    # end
 
     # Set phase ratios on grid
     PhaseRatios!(phase_ratios, phase_weights, m, mphase, xce, yce, xve, yve, Δ)
