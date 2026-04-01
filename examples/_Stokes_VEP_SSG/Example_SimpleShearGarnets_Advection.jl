@@ -467,7 +467,7 @@ let
         :EW_periodic,
     ]
 
-    # Boundary deformation gradient matrix
+    # Boundary velocity gradient matrix
     D_BCs = [
         # @SMatrix( [1 0; 0 -1] ),
          @SMatrix( [0 1; 0  0] ),

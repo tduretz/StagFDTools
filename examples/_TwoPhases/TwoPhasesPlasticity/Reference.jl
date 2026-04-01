@@ -1,4 +1,4 @@
-using StagFDTools, StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, GLMakie, LinearAlgebra, SparseArrays, Printf, JLD2
+using StagFDTools, StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, CairoMakie, LinearAlgebra, SparseArrays, Printf, JLD2
 import Statistics:mean
 using Enzyme  # AD backends you want to use
 
@@ -6,7 +6,7 @@ using Enzyme  # AD backends you want to use
 
     sc = (σ=1e7, t=1e10, L=1e3)
 
-    homo   = true
+    homo   = false
 
     # Time steps
     nt     = 30
@@ -18,8 +18,8 @@ using Enzyme  # AD backends you want to use
     α     = LinRange(0.05, 1.0, 5)
 
     rad     = 2e3/sc.L 
-    Pt_ini  = 1e6/sc.σ
-    Pf_ini  = 1e6/sc.σ
+    Pt_ini  = 1e7/sc.σ
+    Pf_ini  = 1e7/sc.σ
     ε̇       = 2e-15.*sc.t
     τ_ini   = 0*(sind(35)*(Pt_ini-Pf_ini) + 0*1e7/sc.σ*cosd(35))  
 
@@ -31,15 +31,21 @@ using Enzyme  # AD backends you want to use
 
     # Material parameters
     materials = ( 
+        g     = [0. 0.] / (sc.L/sc.t^2),
         oneway       = false,
         compressible = true,
         plasticity   = :off,
         linearizeϕ   = false,              # !!!!!!!!!!!
         single_phase = false,
+        conservative = false,
         n     = [1.0    1.0  ],
+        m     = [0.0    0.0  ],
+        n_CK  = [1.0    1.0   1.0  ],
         ηs0   = [1e22   1e19 ]/sc.σ/sc.t, 
-        ηΦ    = [2e22   2e22 ]/sc.σ/sc.t,
+        ηΦ0   = [2e22   2e22 ]/sc.σ/sc.t,
         G     = [3e10   3e10 ]./sc.σ, 
+        ρs    = [2800   2800 ]/(sc.σ*sc.t^2/sc.L^2),
+        ρf    = [1000   1000 ]/(sc.σ*sc.t^2/sc.L^2),
         Kd    = [1e30   1e30 ]./sc.σ,  # not needed
         Ks    = [1e11   1e11 ]./sc.σ,
         KΦ    = [1e10   1e10  ]./sc.σ,
@@ -60,7 +66,7 @@ using Enzyme  # AD backends you want to use
     @. materials.sinψ  = sind(materials.ψ)
 
     Φ0      = 0.05
-    # Φ0 = (materials.KΦ[1] .* Δt0 .* (Pf_ini - Pt_ini)) ./ (materials.KΦ[1] .* materials.ηΦ[1])
+    # Φ0 = (materials.KΦ[1] .* Δt0 .* (Pf_ini - Pt_ini)) ./ (materials.KΦ[1] .* materials.ηΦ0[1])
     @show Φ0
     # error()
     Φ_ini   = Φ0
@@ -151,6 +157,8 @@ using Enzyme  # AD backends you want to use
     Pi      = (t = Pt_ini.*ones(size_c...), f = Pf_ini.*ones(size_c...))
     P0      = (t = zeros(size_c...), f = zeros(size_c...))
     ΔP      = (t = zeros(size_c...), f = zeros(size_c...))
+    ρ       = (s = materials.ρs[1]*ones(size_c...), f = materials.ρf[1]*ones(size_c...), t = zeros(size_c...))
+    ρ0      = (s = materials.ρs[1]*ones(size_c...), f = materials.ρf[1]*ones(size_c...), t = zeros(size_c...))
 
     # Generate grid coordinates 
     x = (min=-L.x/2, max=L.x/2)
@@ -175,22 +183,6 @@ using Enzyme  # AD backends you want to use
         @views phases.c[inx_c, iny_c][(X.c.x.^2 .+ (X.c.y').^2) .<= rad^2] .= 2
         @views phases.v[inx_v, iny_v][(X.v.x.^2 .+ (X.v.y').^2) .<= rad^2] .= 2
     end
-
-    # Xc = xc .+ 0*yc'
-    # Yc = 0*xc .+ yc'
-    # Xv = xv .+ 0*yv'
-    # Yv = 0*xv .+ yv'
-    # α  = 30.
-    # # ax = 2
-    # # ay = 1/2
-    # ax = 1
-    # ay = 1
-    # X_tilt = cosd(α).*Xc .- sind(α).*Yc
-    # Y_tilt = sind(α).*Xc .+ cosd(α).*Yc
-    # phases.c[inx_c, iny_c][(X_tilt.^2 ./ax.^2 .+ (Y_tilt).^2 ./ay^2) .< r^2 ] .= 2
-    # X_tilt = cosd(α).*Xv .- sind(α).*Yv
-    # Y_tilt = sind(α).*Xv .+ cosd(α).*Yv
-    # phases.v[inx_v, iny_v][(X_tilt.^2 ./ax.^2 .+ (Y_tilt).^2 ./ay^2) .< r^2 ] .= 2
 
     # Boundary condition values
     BC = ( Vx = zeros(size_x...), Vy = zeros(size_y...), Pt = zeros(size_c...), Pf = zeros(size_c...))
@@ -234,6 +226,8 @@ using Enzyme  # AD backends you want to use
         τ0.yy .= τ.yy
         τ0.xy .= τ.xy
         Φ0.c  .= Φ.c 
+        ρ0.s  .= ρ.s
+        ρ0.f  .= ρ.f
 
         for iter=1:niter
 
@@ -246,9 +240,9 @@ using Enzyme  # AD backends you want to use
             # Residual check
             TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
             ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-            ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-            ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
-            ResidualFluidContinuity2D!(R, V, P, ΔP, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
+            ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+            ResidualContinuity2D!(R, V, P, (P0, Φ0, ρ0), phases, materials, number, type, BC, nc, Δ) 
+            ResidualFluidContinuity2D!(R, V, P, ΔP, (P0, Φ0, ρ0), phases, materials, number, type, BC, nc, Δ) 
 
             println("min/max λ̇.c  - ",  extrema(λ̇.c[inx_c,iny_c]))
             println("min/max λ̇.v  - ",  extrema(λ̇.v[3:end-2,3:end-2]))
@@ -278,9 +272,9 @@ using Enzyme  # AD backends you want to use
             # Assembly
             @info "Assembly, ndof  = $(nVx + nVy + nPt + nPf)"
             AssembleMomentum2D_x!(M, V, P, P0, ΔP, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-            AssembleMomentum2D_y!(M, V, P, P0, ΔP, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-            AssembleContinuity2D!(M, V, P, P0, Φ0, phases, materials, number, pattern, type, BC, nc, Δ)
-            AssembleFluidContinuity2D!(M, V, P, ΔP, P0, Φ0, phases, materials, number, pattern, type, BC, nc, Δ)
+            AssembleMomentum2D_y!(M, V, P, P0, ΔP, τ0, Φ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+            AssembleContinuity2D!(M, V, P, (P0, Φ0, ρ0), phases, materials, number, pattern, type, BC, nc, Δ)
+            AssembleFluidContinuity2D!(M, V, P, ΔP, (P0, Φ0, ρ0), phases, materials, number, pattern, type, BC, nc, Δ)
 
             # Two-phases operator as block matrix
             𝑀 = [
@@ -373,7 +367,7 @@ using Enzyme  # AD backends you want to use
             # dx[(nVx+nVy+nPt+1):end] .= dpf
 
             #--------------------------------------------#
-            imin = LineSearch!(rvec, α, dx, R, V, P, ε̇, τ, Vi, Pi, ΔP, P0, Φ, Φ0, τ0, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+            imin = LineSearch!(rvec, α, dx, R, V, P, ε̇, τ, Vi, Pi, ΔP, Φ, (τ0, P0, Φ0, ρ0), λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
             UpdateSolution!(V, P, α[imin]*dx, number, type, nc)
         end
 
@@ -382,9 +376,10 @@ using Enzyme  # AD backends you want to use
         # Residual check
         TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
         ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-        ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-        ResidualContinuity2D!(R, V, P, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
-        ResidualFluidContinuity2D!(R, V, P, ΔP, P0, Φ0, phases, materials, number, type, BC, nc, Δ) 
+                    ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+
+        ResidualContinuity2D!(R, V, P, (P0, Φ0, ρ0), phases, materials, number, type, BC, nc, Δ) 
+        ResidualFluidContinuity2D!(R, V, P, ΔP, (P0, Φ0, ρ0), phases, materials, number, type, BC, nc, Δ) 
 
         @info "Residuals - posteriori"
         @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
@@ -409,7 +404,7 @@ using Enzyme  # AD backends you want to use
         # # Post process 
         # @time for i in eachindex(Φ.c)
         #     KΦ     = materials.KΦ[phases.c[i]]
-        #     ηΦ     = materials.ηΦ[phases.c[i]] 
+        #     ηΦ     = materials.ηΦ0[phases.c[i]] 
         #     sinψ   = materials.sinψ[phases.c[i]] 
         #     dPtdt  = (P.t[i] - P0.t[i]) / Δ.t
         #     dPfdt  = (P.f[i] - P0.f[i]) / Δ.t
@@ -527,7 +522,7 @@ end
 
 function Run()
 
-    nc = (x=10, y=10)
+    nc = (x=150, y=100)
 
     # Mode 0   
     main(nc);

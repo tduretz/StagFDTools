@@ -78,6 +78,7 @@ function Diffusion2D(u_loc, k, s, type_loc, bcv_loc, Δ, u0, ρ, cp)
     qyN = -k.yy[2]*(uN - uC)/Δ.y  # North
 
     # Return the residual function based on finite differences
+    # r(u) = ∇⋅𝐪 - s + ρc*dudt --> r(u) = 0    
     return -(-(qxE - qxW)/Δ.x - (qyN - qyS)/Δ.y + s - ρ*cp*(uC - u0)/Δ.t)  
 end
 
@@ -123,15 +124,15 @@ end
 # Computation of the partial derivatives of the residual function. Sets the coefficient in the system matrix.
 function AssemblyPoisson_Enzyme!(K, u, k, s, number, type, pattern, bc_val, nc, Δ, u0, ρ, cp)
 
-    # This is aocal matrix that stores the partial derivatives.
+    # This is local matrix that stores the partial derivatives.
      
     # Remember:     #             0    uN    0
                     #     u_loc = uW   uC    uE
                     #             0    uS    0 
                     
-    # Now we have   #                0     df_duN      0 
-                    #     ∂R∂u  = df_duW   df_duC   df_duE
-                    #                0     df_duS      0 
+    # Now we have   #                0     dr_duN      0 
+                    #     ∂R∂u  = dr_duW   dr_duC   dr_duE
+                    #                0     dr_duS      0 
     # These cofficient are automatically computed by Enzyme and are then collected in the sparse matrix that defines the linear system of equations
     ∂R∂u     = @MMatrix zeros(3,3) 
     shift    = (x=1, y=1)
@@ -162,6 +163,7 @@ function AssemblyPoisson_Enzyme!(K, u, k, s, number, type, pattern, bc_val, nc, 
         # Initialise partial derivatives to 0
         ∂R∂u     .= 0e0
 
+        # R(u) -> ∂R∂u
         # Here the magic happens: we call a function from Enzyme that computes all, partial derivatives for the current stencil block 
         autodiff(Enzyme.Reverse, Diffusion2D, Duplicated(u_loc, ∂R∂u), Const(k_loc), Const(s[i,j]), Const(type_loc), Const(bcv_loc), Const(Δ), Const(u0[i,j]), Const(ρ[i,j]), Const(cp[i,j]))
 
@@ -291,7 +293,7 @@ function RunDiffusion(n)
     u_ana  = zeros(nc.x+2, nc.y+2)     # analytical solution
     u_devi = zeros(nc.x+2, nc.y+2)     # difference between the numerical and the analytic solution
     k      = (x = (xx= ones(nc.x+1,nc.y), xy=zeros(nc.x+1,nc.y)), # conductivity tensor (can be simplidied)
-           y = (yx=zeros(nc.x,nc.y+1), yy= ones(nc.x,nc.y+1)))
+              y = (yx=zeros(nc.x,nc.y+1), yy= ones(nc.x,nc.y+1)))
     Δ      = (x=L/nc.x, y=L/nc.y, t=Δt0)
     xc     = LinRange(-L/2-Δ.x/2, L/2+Δ.x/2, nc.x+2)
     yc     = LinRange(-L/2-Δ.y/2, L/2+Δ.y/2, nc.y+2)

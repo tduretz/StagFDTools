@@ -71,7 +71,8 @@ end
 function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, T, P, ΔP, type, BC, materials, phases, Δ)
 
     _ones = @SVector ones(5)
-    Dzz   = materials.Dzz
+    # Dzz   = materials.Dzz
+    OOP   = materials.OOP
 
     # Loop over centroids
     for j=2:size(ε̇.xx,2)-1, i=2:size(ε̇.xx,1)-1
@@ -94,8 +95,8 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, T, P, ΔP
             Dxy = ∂y(Vx) / Δ.y
             Dyx = ∂x(Vy) / Δ.x
             
-            
-            Dkk = Dxx .+ Dyy
+            Dzz = 0.5*(Dxx .+ Dyy) * OOP
+            Dkk = Dxx .+ Dyy .+ Dzz
             ε̇xx = @. Dxx - Dkk ./ 3
             ε̇yy = @. Dyy - Dkk ./ 3
             ε̇zz = @. Dzz - Dkk ./ 3
@@ -156,10 +157,12 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, T, P, ΔP
         Dxy    = ∂y_inn(Vx) / Δ.y
         Dyx    = ∂x_inn(Vy) / Δ.x
 
-        Dkk   = @. Dxx + Dyy
+        Dzz  = 0.5*(Dxx .+ Dyy) * OOP
+        Dkk   = @. Dxx + Dyy + Dzz
         ε̇xx   = @. Dxx - Dkk / 3
         ε̇yy   = @. Dyy - Dkk / 3
         ε̇zz   = @. Dzz - Dkk / 3
+        # @show ε̇zz
         ε̇xy   = @. (Dxy + Dyx) /2
         ε̇̄xx   = av(ε̇xx)
         ε̇̄yy   = av(ε̇yy)

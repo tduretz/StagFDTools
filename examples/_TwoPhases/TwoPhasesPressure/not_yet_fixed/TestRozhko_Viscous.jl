@@ -3,7 +3,9 @@ import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 
-function Rozhko2008(rho, phi, r1, rc, eta, P0, dPf, m, kappa, G)
+function Rozhko2008(rho, phi, r1, rc, P0, dPf, m, G, ν)
+    eta   = (1-2*ν)/(1-ν)/2
+    kappa = 3-4*ν
     if rho < r1
         Pf   = dPf
         Ux   = 0.
@@ -38,32 +40,38 @@ end
 
     # Independant
     ηs0    = 1e0              # Shear viscosity
+    ηsi    = 1.0       # Inclusion shear viscosity
     len    = 10.              # Box size
     ϕ0     = 1e-3
     # Dependant
-    ηb0      = ηs0*1e6        # Bulk viscosity
-    ηΦi      = ηb0 
-    k_ηf0    = 1e-10 # Permeability / fluid viscosity
-    kμfi     = 1e-2
+    ν        = 0.25
+    @show ηb0      = 3*ηs0*(1-2ν)/(2*(1+ν)*(1-2ν))
+
+    @show ηb0      = 40*ηs0       # Bulk viscosity
+    ηΦi      = ηb0*20000
+    ηΦo      = ηb0/20000
+    k_ηf0    = 1e0 # Permeability / fluid viscosity
+    kμfi     = 1e1
     r_in     = 1.        # Inclusion radius 
     r_out    = 3.5*r_in
-    ηsi      = 1e-5       # Inclusion shear viscosity
     ε̇        = 0.0    # Background strain rate
-    G0,  Gi  = 1e6, 1
-    ν        = 0.4
-    K        = 3*G0*(1-2ν)/(2*(1+ν)*(1-2ν))
-    Ks0, Ksi = K, K
-    Kϕ0, Kϕi = K, K
-    Kf0, Kfi = K, K
+    G0,  Gi  = 1e25, 1e25*1e-3
+    ν        = 0.49
+    K        = 1*3*G0*(1-2ν)/(2*(1+ν)*(1-2ν))
+    Ks0, Ksi = 1e20*K, 1e20*K*1e-3
+    KΦ0, KΦi = 1e20*K, 1e20*K*1e-3
+    Kf0, Kfi = 1e20*K, 1e20*K*1e-3
 
     # Set Rozhko values for fluid pressure
+    G_anal = 1.0
+    ν_anal = 0.49
+
     Pf_out = 0.    # Fluid pressure on external boundary, Pa
     # nondim 
     m      = 0.0   # 0 - circle, 0.5 - ellipse, 1 - cut 
     # dependent scales
-    dPf   = 1.0   # Fluid pressure on cavity - Po
-    
-    Δt0      = 5
+    dPf   = 1.0   # Fluid pressure on cavity - Po    
+    Δt0   = 1e0
 
     # Velocity gradient matrix
     D_BC = @SMatrix( [ε̇ 0; 0 -ε̇] )
@@ -123,13 +131,12 @@ end
     type.Pf[2:end-1,2:end-1] .= :in
     type.Pf[1,:]             .= :Dirichlet 
     type.Pf[end,:]           .= :Dirichlet 
-    type.Pf[:,1]             .= :Neumann
-    type.Pf[:,end]           .= :Neumann
+    type.Pf[:,1]             .= :Dirichlet
+    type.Pf[:,end]           .= :Dirichlet
     # Add a constrant pressure within a circular region
-    @views type.Pf[inx_c, iny_c][(xc .+ 0*yc') .<-2] .= :constant
-    @views type.Pf[inx_c, iny_c][(xc .+ 0*yc') .> 2] .= :constant
-
-    # @views type.Pf[inx_c, iny_c][(xc.^2 .+ (yc').^2) .>= r_out^2] .= :constant
+    @views type.Pf[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= r_in^2] .= :constant
+    @views type.Pf[inx_c, iny_c][(xc.^2 .+ (yc').^2) .>= r_out^2] .= :constant
+    
     # @views type.Pt[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= r_in^2] .= :constant
     # @views type.Pt[inx_c, iny_c][(xc.^2 .+ (yc').^2) .>= r_out^2] .= :constant
     
@@ -168,40 +175,48 @@ end
     # Initial configuration
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
     V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
-    P.f[inx_c, iny_c][(xc .+ 0*yc') .<-2]  .= 2.
-    P.f[inx_c, iny_c][(xc .+ 0*yc') .> 2]  .= 1.
+    P.f[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= r_in^2]  .= dPf
+    P.f[inx_c, iny_c][(xc.^2 .+ (yc').^2) .>= r_out^2] .= Pf_out
 
-    # KΦ[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= r_in^2] .= KΦi
-    # Ks[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= r_in^2] .= Ksi
-    # Kf[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= r_in^2] .= Kfi
-    # η.y[(xvy.^2 .+ (yvy').^2) .<= r_in^2] .= ηsi
-    # η.x[(xvx.^2 .+ (yvx').^2) .<= r_in^2] .= ηsi 
-    # G.y[(xvy.^2 .+ (yvy').^2) .<= r_in^2] .= Gi
-    # G.x[(xvx.^2 .+ (yvx').^2) .<= r_in^2] .= Gi 
-    # ηΦ[(xce.^2 .+ (yce').^2) .<= r_in^2]  .= ηΦi
+    KΦ[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= r_in^2] .= KΦi
+    Ks[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= r_in^2] .= Ksi
+    Kf[inx_c, iny_c][(xc.^2 .+ (yc').^2) .<= r_in^2] .= Kfi
+    η.y[(xvy.^2 .+ (yvy').^2) .<= r_in^2] .= ηsi
+    η.x[(xvx.^2 .+ (yvx').^2) .<= r_in^2] .= ηsi 
+    G.y[(xvy.^2 .+ (yvy').^2) .<= r_in^2] .= Gi
+    G.x[(xvx.^2 .+ (yvx').^2) .<= r_in^2] .= Gi 
+    ηΦ[(xce.^2 .+ (yce').^2) .<= r_in^2]  .= ηΦi
 
-    # kμf.y[(xvy.^2 .+ (yvy').^2) .>= r_out^2] .= kμfi
-    # kμf.x[(xvx.^2 .+ (yvx').^2) .>= r_out^2] .= kμfi 
 
-    # Ks[inx_c, iny_c][(xc.^2 .+ (yc').^2) .>= r_out^2] .= Ksi
-    # Kf[inx_c, iny_c][(xc.^2 .+ (yc').^2) .>= r_out^2] .= Kfi
-    # KΦ[inx_c, iny_c][(xc.^2 .+ (yc').^2) .>= r_out^2] .= KΦi
-    # η.y[(xvy.^2 .+ (yvy').^2) .>= r_out^2] .= ηsi
-    # η.x[(xvx.^2 .+ (yvx').^2) .>= r_out^2] .= ηsi 
-    # G.y[(xvy.^2 .+ (yvy').^2) .>= r_out^2] .= Gi
-    # G.x[(xvx.^2 .+ (yvx').^2) .>= r_out^2] .= Gi
-    # ηΦ[(xce.^2 .+ (yce').^2) .>= r_out^2]  .= ηΦi
+
+    # kμf.x[(xvx.^2 .+ (yvx').^2) .<= r_in^2] .= kμfi
+    # kμf.y[(xvy.^2 .+ (yvy').^2) .<= r_in^2] .= kμfi
+
+    Ks[inx_c, iny_c][(xc.^2 .+ (yc').^2) .>= r_out^2] .= Ksi
+    Kf[inx_c, iny_c][(xc.^2 .+ (yc').^2) .>= r_out^2] .= Kfi
+    KΦ[inx_c, iny_c][(xc.^2 .+ (yc').^2) .>= r_out^2] .= KΦi
+    η.y[(xvy.^2 .+ (yvy').^2) .>= r_out^2] .= ηsi
+    η.x[(xvx.^2 .+ (yvx').^2) .>= r_out^2] .= ηsi 
+    G.y[(xvy.^2 .+ (yvy').^2) .>= r_out^2] .= Gi
+    G.x[(xvx.^2 .+ (yvx').^2) .>= r_out^2] .= Gi
+    ηΦ[(xce.^2 .+ (yce').^2) .>= r_out^2]  .= ηΦo
 
     η.y .= 1 ./ (1. ./ η.y .+ 1. ./ (G.y*Δ.t))
     η.x .= 1 ./ (1. ./ η.x .+ 1. ./ (G.x*Δ.t))
+
+    @show extrema(η.y)
     
     η.p .= 0.25.*(η.x[1:end-1,2:end-1].+η.x[2:end-0,2:end-1].+η.y[2:end-1,1:end-1].+η.y[2:end-1,2:end-0])
-    Kd = (1-ϕ0) .* ( 1 ./ KΦ + 1 ./ Ks).^1
+    Kd = (1-ϕ0) .* ( 1 ./ KΦ + 1 ./ Ks).^-1
     α  = 1 .- Kd ./ Ks
-    B  = (Kd.^-1 - Ks.^-1) ./ (Kd.^-1 - Ks.^-1 + ϕ.*(Kf.^-1 .- Ks.^1))
+    B  = @. (Kd.^-1 - Ks.^-1) ./ (Kd.^-1 - Ks.^-1 + ϕ.*(Kf.^-1 .- Ks.^-1))
 
     rheo = (η=η, ηΦ=ηΦ, kμf=kμf, ϕ=ϕ, B=B, α=α, Kd=Kd)
 
+
+    @show extrema(Ks)
+    @show extrema(KΦ)
+    @show extrema(Kd)
     @show extrema(α)
     @show extrema(B)
     @show extrema(η.p)
@@ -217,24 +232,28 @@ end
     BC.Vy[     2, iny_Vy] .= (type.Vy[     2, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[    2, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[1]   .+ D_BC[2,2]*yv)
     BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
     
-    BC.Pf[1,:] .= 1
-    BC.Pf[end,:] .= 2
 
-    # preprocessing
-    eta   = (1-2*ν)/(1-ν)/2
-    kappa = 3-4*ν 
+    # preprocessing 
     xce  = LinRange(-L.x/2-Δ.x/2, L.x/2+Δ.x/2, nc.x+2)
     yce  = LinRange(-L.y/2-Δ.y/2, L.y/2+Δ.y/2, nc.y+2)
 
     Ur_ana = zero(BC.Pf)
+    Ut_ana = zero(BC.Pf)
+    Pf_ana = zero(BC.Pf)
+    Pt_ana = zero(BC.Pf)
+    ϵ_Ur   = zero(BC.Pf)
+    ϵ_Pf   = zero(BC.Pf)
 
     for i=1:size(BC.Pf,1), j=1:size(BC.Pf,2)
         # coordinate transform
         ro  = sqrt(xce[i]^2 + yce[j]^2)
         phi = atan(yce[j], xce[i])
-        sol = Rozhko2008(ro, phi, r_in, r_out, eta, Pf_out, dPf, m, kappa, G0)
-        # BC.Pf[i,j] = sol.pf
-        # Ur_ana[i,j] = sol.ur
+        sol = Rozhko2008(ro, phi, r_in, r_out, Pf_out, dPf, m, G_anal, ν_anal)
+        BC.Pf[i,j]  = sol.pf
+        Pf_ana[i,j] = sol.pf
+        Pt_ana[i,j] = sol.pf
+        Ur_ana[i,j] = sol.ur
+        Ut_ana[i,j] = sol.ut
     end
 
     xce = LinRange(-L.x/2-Δ.x, L.x/2+Δ.x, nc.x+3)# nc.x+3, nc.y+4
@@ -243,7 +262,7 @@ end
         # coordinate transform
         ro  = sqrt(xce[i]^2 + yce[j]^2)
         phi = atan(yce[j], xce[i])
-        sol = Rozhko2008(ro, phi, r_out, r_in, eta, Pf_out, dPf, m, kappa, G0)
+        sol = Rozhko2008(ro, phi, r_in, r_out, Pf_out, dPf, m, G_anal, ν_anal)
         # BC.Vx[i,j] = sol.ux
         # V.x[i,j]   = sol.ux
     end
@@ -254,7 +273,7 @@ end
         # coordinate transform
         ro  = sqrt(xce[i]^2 + yce[j]^2)
         phi = atan(yce[j], xce[i])
-        sol = Rozhko2008(ro, phi, r_out, r_in, eta, Pf_out, dPf, m, kappa, G0)
+        sol = Rozhko2008(ro, phi, r_in, r_out, Pf_out, dPf, m, G_anal, ν_anal)
         # BC.Vy[i,j] = sol.uy
         # V.y[i,j]   = sol.uy
     end
@@ -344,31 +363,35 @@ end
     Vr  = zero(Vxsc)
     Vt  = zero(Vxsc)
 
-    # for i in 1:length(xce), j in 1:length(yce)
+    for i in 1:length(xce), j in 1:length(yce)
 
-    #     r = sqrt.(xce[i].^2 .+ yce[j].^2)
-    #     t = atan.(yce[j], xce[i])
+        r = sqrt.(xce[i].^2 .+ yce[j].^2)
+        t = atan.(yce[j], xce[i])
 
-    #     J = [cos(t) sin(t);    
-    #          -sin(t) cos(t)]
-    #     V_cart = [Vxsc[i,j]; Vysc[i,j]]
-    #     V_pol  =  J*V_cart
+        J = [cos(t) sin(t);    
+             -sin(t) cos(t)]
+        V_cart = [Vxsc[i,j]; Vysc[i,j]]
+        V_pol  =  J*V_cart
 
-    #     Vr[i,j] = V_pol[1]
-    #     Vt[i,j] = V_pol[2]
+        Vr[i,j] = V_pol[1]
+        Vt[i,j] = V_pol[2]
 
-    #     if (xce[i].^2 .+ yce[j].^2) < r_in^2 ||  (xce[i].^2 .+ yce[j].^2) > r_out^2
-    #         Vr[i,j]  = NaN
-    #         Vt[i,j]  = NaN
-    #         # P.f[i,j] = NaN
-    #         P.t[i,j] = NaN
-    #     end
-    #     if (xce[i].^2 .+ yce[j].^2) > r_out^2
-    #         P.f[i,j] = NaN
-    #     end
+        if (xce[i].^2 .+ yce[j].^2) <= r_in^2 ||  (xce[i].^2 .+ yce[j].^2) >= r_out^2
+            Vr[i,j]     = NaN
+            Vt[i,j]     = NaN
+            P.f[i,j]    = NaN
+            P.t[i,j]    = NaN
+            # Ur_ana[i,j] = NaN
+            # Ut_ana[i,j] = NaN
+        else
+            ϵ_Ur[i,j] = abs(Ur_ana[i,j] - Vr[i,j] )
+            ϵ_Pf[i,j] = abs(Pf_ana[i,j] - P.f[i,j])
+        end
         
-    # end
+    end
 
+    @show mean(ϵ_Ur)
+    @show mean(ϵ_Pf)
 
     # p1 = heatmap(xc, yc, Vs[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Vs")
     # p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, title="Ux", xlims=(-5,5), ylims=(-5,5))
@@ -377,16 +400,16 @@ end
     p2 = heatmap(xce, yce, Vt', aspect_ratio=1, title="Ut", c=:jet)
     p3 = heatmap(xc, yc, P.t[inx_c,iny_c]',   aspect_ratio=1, title="Pt", c=:jet)
     p4 = heatmap(xc, yc, P.f[inx_c,iny_c]',   aspect_ratio=1, title="Pf", c=:jet)
-    display(plot(p4)) # , p3, p1, p2
+    display(plot(p4, p3, p1, p2))
 
-    # ymid = Int64(floor(nc.y/2))
-    # p5 = plot(xlabel="x", ylabel="Pf")
-    # p5 = scatter!(xc, P.f[2:end-1, ymid], label="numerics")
-    # p5 = plot!(xc, BC.Pf[2:end-1, ymid], label="analytics")
-    # p6 = plot(xlabel="x", ylabel="Ur")
-    # p6 = scatter!(xc, Vr[2:end-1, ymid], label="numerics")
-    # p6 = plot!(xc, Ur_ana[2:end-1, ymid], label="analytics")
-    # display(plot(p5, p6))
+    ymid = Int64(floor(nc.y/2))
+    p5 = plot(xlabel="x", ylabel="Pf")
+    p5 = scatter!(xc, P.f[2:end-1, ymid], label="numerics")
+    p5 = plot!(xc, BC.Pf[2:end-1, ymid], label="analytics")
+    p6 = plot(xlabel="x", ylabel="Ur")
+    p6 = scatter!(xc, Vr[2:end-1, ymid], label="numerics")
+    p6 = plot!(xc, Ur_ana[2:end-1, ymid], label="analytics")
+    display(plot(p5, p6))
 
     #--------------------------------------------#
 
@@ -401,18 +424,8 @@ function Run()
     # Mode 0   
     Ωl = 0.1
     Ωη = 10.
-    main(nc,  Ωl, Ωη)
+    main(nc,  Ωl, Ωη);
 
 end
 
 Run()
-
-##################################
-
-@views function gradient(P, Δ)
-    dPdx = diff(P, dims=1)/Δ.x
-    dPdy = diff(P, dims=2)/Δ.y
-    dPdx_c = 0.5*(dPdx[:,2:end] .+ dPdx[:,1:end-1])
-    dPdy_c = 0.5*(dPdy[2:end,:] .+ dPdy[1:end-1,:])
-    return sqrt.(dPdx_c.^2 .+ dPdy_c.^2)
-end

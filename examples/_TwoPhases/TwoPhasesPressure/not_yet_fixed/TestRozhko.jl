@@ -3,9 +3,7 @@ import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 
-function Rozhko2008(rho, phi, r1, rc, P0, dPf, m, G, ν)
-    eta   = (1-2*ν)/(1-ν)/2
-    kappa = 3-4*ν
+function Rozhko2008(rho, phi, r1, rc, eta, P0, dPf, m, kappa, G)
     if rho < r1
         Pf   = dPf
         Ux   = 0.
@@ -44,34 +42,28 @@ end
     len    = 10.              # Box size
     ϕ0     = 1e-3
     # Dependant
-    ν        = 0.25
-    @show ηb0      = 3*ηs0*(1-2ν)/(2*(1+ν)*(1-2ν))
-
-    @show ηb0      = 40*ηs0       # Bulk viscosity
-    ηΦi      = ηb0*20000
-    ηΦo      = ηb0/20000
-    k_ηf0    = 1e0 # Permeability / fluid viscosity
+    ηb0      = 2*ηs0       # Bulk viscosity
+    ηΦi      = ηb0
+    k_ηf0    = 1.0 # Permeability / fluid viscosity
     kμfi     = 1e1
     r_in     = 1.        # Inclusion radius 
     r_out    = 3.5*r_in
     ε̇        = 0.0    # Background strain rate
-    G0,  Gi  = 1e25, 1e25*1e-3
+    G0,  Gi  = 1.0, 1e-3
     ν        = 0.49
-    K        = 1*3*G0*(1-2ν)/(2*(1+ν)*(1-2ν))
-    Ks0, Ksi = 1e20*K, 1e20*K*1e-3
-    Kϕ0, Kϕi = 1e20*K, 1e20*K*1e-3
-    Kf0, Kfi = 1e20*K, 1e20*K*1e-3
+    K        = 3*G0*(1-2ν)/(2*(1+ν)*(1-2ν))
+    Ks0, Ksi = K, K*1e-3
+    KΦ0, KΦi = K, K*1e-3
+    Kf0, Kfi = K, K*1e-3
 
     # Set Rozhko values for fluid pressure
-    G_anal = 1.0
-    ν_anal = 0.49
-
     Pf_out = 0.    # Fluid pressure on external boundary, Pa
     # nondim 
     m      = 0.0   # 0 - circle, 0.5 - ellipse, 1 - cut 
     # dependent scales
-    dPf   = 1.0   # Fluid pressure on cavity - Po    
-    Δt0   = 1e0
+    dPf   = 1.0   # Fluid pressure on cavity - Po
+    
+    Δt0      = 1e-1
 
     # Velocity gradient matrix
     D_BC = @SMatrix( [ε̇ 0; 0 -ε̇] )
@@ -199,24 +191,18 @@ end
     η.x[(xvx.^2 .+ (yvx').^2) .>= r_out^2] .= ηsi 
     G.y[(xvy.^2 .+ (yvy').^2) .>= r_out^2] .= Gi
     G.x[(xvx.^2 .+ (yvx').^2) .>= r_out^2] .= Gi
-    ηΦ[(xce.^2 .+ (yce').^2) .>= r_out^2]  .= ηΦo
+    ηΦ[(xce.^2 .+ (yce').^2) .>= r_out^2]  .= ηΦi
 
     η.y .= 1 ./ (1. ./ η.y .+ 1. ./ (G.y*Δ.t))
     η.x .= 1 ./ (1. ./ η.x .+ 1. ./ (G.x*Δ.t))
-
-    @show extrema(η.y)
     
     η.p .= 0.25.*(η.x[1:end-1,2:end-1].+η.x[2:end-0,2:end-1].+η.y[2:end-1,1:end-1].+η.y[2:end-1,2:end-0])
-    Kd = (1-ϕ0) .* ( 1 ./ KΦ + 1 ./ Ks).^-1
+    Kd = (1-ϕ0) .* ( 1 ./ KΦ + 1 ./ Ks).^1
     α  = 1 .- Kd ./ Ks
-    B  = @. (Kd.^-1 - Ks.^-1) ./ (Kd.^-1 - Ks.^-1 + ϕ.*(Kf.^-1 .- Ks.^-1))
+    B  = (Kd.^-1 - Ks.^-1) ./ (Kd.^-1 - Ks.^-1 + ϕ.*(Kf.^-1 .- Ks.^1))
 
     rheo = (η=η, ηΦ=ηΦ, kμf=kμf, ϕ=ϕ, B=B, α=α, Kd=Kd)
 
-
-    @show extrema(Ks)
-    @show extrema(KΦ)
-    @show extrema(Kd)
     @show extrema(α)
     @show extrema(B)
     @show extrema(η.p)
@@ -233,27 +219,21 @@ end
     BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*xv[end] .+ D_BC[2,2]*yv)
     
 
-    # preprocessing 
+    # preprocessing
+    eta   = (1-2*ν)/(1-ν)/2
+    kappa = 3-4*ν 
     xce  = LinRange(-L.x/2-Δ.x/2, L.x/2+Δ.x/2, nc.x+2)
     yce  = LinRange(-L.y/2-Δ.y/2, L.y/2+Δ.y/2, nc.y+2)
 
     Ur_ana = zero(BC.Pf)
-    Ut_ana = zero(BC.Pf)
-    Pf_ana = zero(BC.Pf)
-    Pt_ana = zero(BC.Pf)
-    ϵ_Ur   = zero(BC.Pf)
-    ϵ_Pf   = zero(BC.Pf)
 
     for i=1:size(BC.Pf,1), j=1:size(BC.Pf,2)
         # coordinate transform
         ro  = sqrt(xce[i]^2 + yce[j]^2)
         phi = atan(yce[j], xce[i])
-        sol = Rozhko2008(ro, phi, r_in, r_out, Pf_out, dPf, m, G_anal, ν_anal)
-        BC.Pf[i,j]  = sol.pf
-        Pf_ana[i,j] = sol.pf
-        Pt_ana[i,j] = sol.pf
+        sol = Rozhko2008(ro, phi, r_in, r_out, eta, Pf_out, dPf, m, kappa, G0)
+        BC.Pf[i,j] = sol.pf
         Ur_ana[i,j] = sol.ur
-        Ut_ana[i,j] = sol.ut
     end
 
     xce = LinRange(-L.x/2-Δ.x, L.x/2+Δ.x, nc.x+3)# nc.x+3, nc.y+4
@@ -262,7 +242,7 @@ end
         # coordinate transform
         ro  = sqrt(xce[i]^2 + yce[j]^2)
         phi = atan(yce[j], xce[i])
-        sol = Rozhko2008(ro, phi, r_in, r_out, Pf_out, dPf, m, G_anal, ν_anal)
+        sol = Rozhko2008(ro, phi, r_out, r_in, eta, Pf_out, dPf, m, kappa, G0)
         # BC.Vx[i,j] = sol.ux
         # V.x[i,j]   = sol.ux
     end
@@ -273,7 +253,7 @@ end
         # coordinate transform
         ro  = sqrt(xce[i]^2 + yce[j]^2)
         phi = atan(yce[j], xce[i])
-        sol = Rozhko2008(ro, phi, r_in, r_out, Pf_out, dPf, m, G_anal, ν_anal)
+        sol = Rozhko2008(ro, phi, r_out, r_in, eta, Pf_out, dPf, m, kappa, G0)
         # BC.Vy[i,j] = sol.uy
         # V.y[i,j]   = sol.uy
     end
@@ -376,22 +356,16 @@ end
         Vr[i,j] = V_pol[1]
         Vt[i,j] = V_pol[2]
 
-        if (xce[i].^2 .+ yce[j].^2) <= r_in^2 ||  (xce[i].^2 .+ yce[j].^2) >= r_out^2
-            Vr[i,j]     = NaN
-            Vt[i,j]     = NaN
-            P.f[i,j]    = NaN
-            P.t[i,j]    = NaN
-            # Ur_ana[i,j] = NaN
-            # Ut_ana[i,j] = NaN
-        else
-            ϵ_Ur[i,j] = abs(Ur_ana[i,j] - Vr[i,j] )
-            ϵ_Pf[i,j] = abs(Pf_ana[i,j] - P.f[i,j])
+        if (xce[i].^2 .+ yce[j].^2) < r_in^2 ||  (xce[i].^2 .+ yce[j].^2) > r_out^2
+            Vr[i,j]  = NaN
+            Vt[i,j]  = NaN
+            P.f[i,j] = NaN
+            P.t[i,j] = NaN
         end
         
     end
 
-    @show mean(ϵ_Ur)
-    @show mean(ϵ_Pf)
+    @show size(Vr),  size(xce)
 
     # p1 = heatmap(xc, yc, Vs[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Vs")
     # p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, title="Ux", xlims=(-5,5), ylims=(-5,5))
@@ -407,7 +381,7 @@ end
     p5 = scatter!(xc, P.f[2:end-1, ymid], label="numerics")
     p5 = plot!(xc, BC.Pf[2:end-1, ymid], label="analytics")
     p6 = plot(xlabel="x", ylabel="Ur")
-    p6 = scatter!(xc, Vr[2:end-1, ymid], label="numerics")
+    p6 = scatter!(xc, Vr[2:end-1, ymid].*Δ.t, label="numerics")
     p6 = plot!(xc, Ur_ana[2:end-1, ymid], label="analytics")
     display(plot(p5, p6))
 
@@ -424,8 +398,18 @@ function Run()
     # Mode 0   
     Ωl = 0.1
     Ωη = 10.
-    main(nc,  Ωl, Ωη);
+    main(nc,  Ωl, Ωη)
 
 end
 
 Run()
+
+##################################
+
+@views function gradient(P, Δ)
+    dPdx = diff(P, dims=1)/Δ.x
+    dPdy = diff(P, dims=2)/Δ.y
+    dPdx_c = 0.5*(dPdx[:,2:end] .+ dPdx[:,1:end-1])
+    dPdy_c = 0.5*(dPdy[2:end,:] .+ dPdy[1:end-1,:])
+    return sqrt.(dPdx_c.^2 .+ dPdy_c.^2)
+end
