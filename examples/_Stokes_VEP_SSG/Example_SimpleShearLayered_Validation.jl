@@ -1,5 +1,6 @@
-using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf
+using StagFDTools, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
+import StagFDTools.Stokes as Sk
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 using TimerOutputs, Interpolations, GridGeometryUtils
@@ -124,44 +125,44 @@ end
     α     = LinRange(0.05, 1.0, 10)
 
     # Grid bounds
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, inx_v, iny_v, size_x, size_y, size_c, size_v = Ranges(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, inx_v, iny_v, size_x, size_y, size_c, size_v = Sk.Ranges(nc)
 
     #--------------------------------------------#
     # Boundary conditions
 
     # Define node types and set BC flags
-    type = Fields(
+    type = Sk.Fields(
         fill(:out, (nc.x+3, nc.y+4)),
         fill(:out, (nc.x+4, nc.y+3)),
         fill(:out, (nc.x+2, nc.y+2)),
     )
-    set_boundaries_template!(type, config, nc)
+    Sk.set_boundaries_template!(type, config, nc)
 
     #--------------------------------------------#
     # Equation numbering
-    number = Fields(
+    number = Sk.Fields(
         fill(0, size_x),
         fill(0, size_y),
         fill(0, size_c),
     )
-    Numbering!(number, type, nc)
+    Sk.Numbering!(number, type, nc)
 
     #--------------------------------------------#
     # Stencil extent for each block matrix
-    pattern = Fields(
-        Fields(@SMatrix([1 1 1; 1 1 1; 1 1 1]),                 @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([1 1 1; 1 1 1])), 
-        Fields(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]),  @SMatrix([1 1 1; 1 1 1; 1 1 1]),                @SMatrix([1 1; 1 1; 1 1])), 
-        Fields(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]))
+    pattern = Sk.Fields(
+        Sk.Fields(@SMatrix([1 1 1; 1 1 1; 1 1 1]),                 @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([1 1 1; 1 1 1])), 
+        Sk.Fields(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]),  @SMatrix([1 1 1; 1 1 1; 1 1 1]),                @SMatrix([1 1; 1 1; 1 1])), 
+        Sk.Fields(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]))
     )
 
     # Sparse matrix assembly
     nVx   = maximum(number.Vx)
     nVy   = maximum(number.Vy)
     nPt   = maximum(number.Pt)
-    M = Fields(
-        Fields(ExtendableSparseMatrix(nVx, nVx), ExtendableSparseMatrix(nVx, nVy), ExtendableSparseMatrix(nVx, nPt)), 
-        Fields(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt)), 
-        Fields(ExtendableSparseMatrix(nPt, nVx), ExtendableSparseMatrix(nPt, nVy), ExtendableSparseMatrix(nPt, nPt))
+    M = Sk.Fields(
+        Sk.Fields(ExtendableSparseMatrix(nVx, nVx), ExtendableSparseMatrix(nVx, nVy), ExtendableSparseMatrix(nVx, nPt)), 
+        Sk.Fields(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt)), 
+        Sk.Fields(ExtendableSparseMatrix(nPt, nVx), ExtendableSparseMatrix(nPt, nVy), ExtendableSparseMatrix(nPt, nPt))
     )
     𝐊  = ExtendableSparseMatrix(nVx + nVy, nVx + nVy)
     𝐐  = ExtendableSparseMatrix(nVx + nVy, nPt)
@@ -218,7 +219,7 @@ end
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
     V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
     Pt[inx_c, iny_c ]  .= 10.                 
-    UpdateSolution!(V, Pt, dx, number, type, nc)
+    Sk.UpdateSolution!(V, Pt, dx, number, type, nc)
 
     # Boundary condition values
     BC = ( Vx = zeros(size_x...), Vy = zeros(size_y...))
@@ -276,10 +277,10 @@ end
             #--------------------------------------------#
             # Residual check        
             @timeit to "Residual" begin
-                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
-                ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
-                ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-                ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+                Sk.TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
+                Sk.ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
+                Sk.ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+                Sk.ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
             end
 
             err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
@@ -289,14 +290,14 @@ end
 
             #--------------------------------------------#
             # Set global residual vector
-            SetRHS!(r, R, number, type, nc)
+            Sk.SetRHS!(r, R, number, type, nc)
 
             #--------------------------------------------#
             # Assembly
             @timeit to "Assembly" begin
-                AssembleContinuity2D!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-                AssembleMomentum2D_x!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-                AssembleMomentum2D_y!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+                Sk.AssembleContinuity2D!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+                Sk.AssembleMomentum2D_x!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+                Sk.AssembleMomentum2D_y!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
             end
 
             #--------------------------------------------# 
@@ -311,15 +312,15 @@ end
             # Direct-iterative solver
             fu   = -r[1:size(𝐊,1)]
             fp   = -r[size(𝐊,1)+1:end]
-            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=factorization,  ηb=1e3, niter_l=10, ϵ_l=1e-9)
+            u, p = Sk.DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=factorization,  ηb=1e3, niter_l=10, ϵ_l=1e-9)
             dx[1:size(𝐊,1)]     .= u
             dx[size(𝐊,1)+1:end] .= p
 
             #--------------------------------------------#
             # Line search & solution update
-            @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
-            UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
-            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
+            @timeit to "Line search" imin = Sk.LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+            Sk.UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
+            Sk.TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
 
         end
 
@@ -353,15 +354,15 @@ end
         st = 15
         cm.arrows2d!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], tiplength = 0, lengthscale=0.02, tipwidth=1, color=:white)
         cm.Colorbar(fig[1,2], hm, label="τII")
-        ax2 = cm.Axis(fig[1,3])
+        ax2 = cm.Axis(fig[1,3], aspect=cm.DataAspect())
         hm2 = cm.heatmap!(ax2, xc, yc,  η.c[inx_c,iny_c], colormap=:bluesreds)
         cm.Colorbar(fig[1,4], hm2, label="η")
-        ax3 = cm.Axis(fig[2,1])
+        ax3 = cm.Axis(fig[2,1], aspect=cm.DataAspect())
         hm3 = cm.heatmap!(ax3, xc, yc,  V.x[inx_Vx,iny_Vx], colormap=:bluesreds)
         cm.Colorbar(fig[2,2], hm3, label="Vx")
-        ax3 = cm.Axis(fig[2,3])
-        hm3 = cm.heatmap!(ax3, xc, yc,  V.y[inx_Vx,iny_Vx], colormap=:bluesreds)
-        cm.Colorbar(fig[2,4], hm3, label="Vy")
+        ax4 = cm.Axis(fig[2,3], aspect=cm.DataAspect())
+        hm4 = cm.heatmap!(ax4, xc, yc,  V.y[inx_Vx,iny_Vx], colormap=:bluesreds)
+        cm.Colorbar(fig[2,4], hm4, label="Vy")
         display(fig)
     end
 
@@ -389,7 +390,7 @@ let
 
     # Discretise angle of layer 
     nθ         = 1
-    θ          = π/8 # LinRange(0, π, nθ)
+    θ          = π/2 # LinRange(0, π, nθ)
     τ_cart     = zeros(nθ)
     τ_cart_lay = zeros(nθ)
     τ_cart_trf0d = zeros(nθ)

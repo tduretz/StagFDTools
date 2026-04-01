@@ -1,5 +1,6 @@
-using StagFDTools, StagFDTools.StokesJustPIC, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf
+using StagFDTools, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
+import StagFDTools.StokesJustPIC as SkJP
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 using TimerOutputs, Interpolations, GridGeometryUtils
@@ -126,44 +127,44 @@ end
     α     = LinRange(0.05, 1.0, 10)
 
     # Grid bounds
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, inx_v, iny_v, size_x, size_y, size_c, size_v = Ranges(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, inx_v, iny_v, size_x, size_y, size_c, size_v = SkJP.Ranges(nc)
 
     #--------------------------------------------#
     # Boundary conditions
 
     # Define node types and set BC flags
-    type = Fields(
+    type = SkJP.Fields(
         fill(:out, (nc.x+3, nc.y+4)),
         fill(:out, (nc.x+4, nc.y+3)),
         fill(:out, (nc.x+2, nc.y+2)),
     )
-    set_boundaries_template!(type, config, nc)
+    SkJP.set_boundaries_template!(type, config, nc)
 
     #--------------------------------------------#
     # Equation numbering
-    number = Fields(
+    number = SkJP.Fields(
         fill(0, size_x),
         fill(0, size_y),
         fill(0, size_c),
     )
-    Numbering!(number, type, nc)
+    SkJP.Numbering!(number, type, nc)
 
     #--------------------------------------------#
     # Stencil extent for each block matrix
-    pattern = Fields(
-        Fields(@SMatrix([1 1 1; 1 1 1; 1 1 1]),                 @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([1 1 1; 1 1 1])), 
-        Fields(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]),  @SMatrix([1 1 1; 1 1 1; 1 1 1]),                @SMatrix([1 1; 1 1; 1 1])), 
-        Fields(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]))
+    pattern = SkJP.Fields(
+        SkJP.Fields(@SMatrix([1 1 1; 1 1 1; 1 1 1]),                 @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([1 1 1; 1 1 1])),
+        SkJP.Fields(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]),  @SMatrix([1 1 1; 1 1 1; 1 1 1]),                @SMatrix([1 1; 1 1; 1 1])), 
+        SkJP.Fields(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]))
     )
 
     # Sparse matrix assembly
     nVx   = maximum(number.Vx)
     nVy   = maximum(number.Vy)
     nPt   = maximum(number.Pt)
-    M = Fields(
-        Fields(ExtendableSparseMatrix(nVx, nVx), ExtendableSparseMatrix(nVx, nVy), ExtendableSparseMatrix(nVx, nPt)), 
-        Fields(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt)), 
-        Fields(ExtendableSparseMatrix(nPt, nVx), ExtendableSparseMatrix(nPt, nVy), ExtendableSparseMatrix(nPt, nPt))
+    M = SkJP.Fields(
+        SkJP.Fields(ExtendableSparseMatrix(nVx, nVx), ExtendableSparseMatrix(nVx, nVy), ExtendableSparseMatrix(nVx, nPt)), 
+        SkJP.Fields(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt)),
+        SkJP.Fields(ExtendableSparseMatrix(nPt, nVx), ExtendableSparseMatrix(nPt, nVy), ExtendableSparseMatrix(nPt, nPt))
     )
     𝐊  = ExtendableSparseMatrix(nVx + nVy, nVx + nVy)
     𝐐  = ExtendableSparseMatrix(nVx + nVy, nPt)
@@ -226,7 +227,7 @@ end
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
     V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
     Pt[inx_c, iny_c ]  .= 10.                 
-    UpdateSolution!(V, Pt, dx, number, type, nc)
+    SkJP.UpdateSolution!(V, Pt, dx, number, type, nc)
 
     # Boundary condition values
     BC = ( Vx = zeros(size_x...), Vy = zeros(size_y...))
@@ -242,9 +243,9 @@ end
 
     # --------------------------------------------#
     # Initialise marker field
-    m = InitialiseParticleField(nc, nmpc, L, Δ, materials, mnoise)
+    m = SkJP.InitialiseParticleField(nc, nmpc, L, Δ, materials, mnoise)
     mphase = ones(Int64, m.num...)
-    phase_ratios, phase_weights = InitialisePhaseRatios(m, ε̇)
+    phase_ratios, phase_weights = SkJP.InitialisePhaseRatios(m, ε̇)
 
  
     # Set material geometry
@@ -258,7 +259,7 @@ end
     end
 
     # Set phase ratios on grid
-    PhaseRatios!(phase_ratios, phase_weights, m, mphase, xce, yce, xve, yve, Δ)
+    SkJP.PhaseRatios!(phase_ratios, phase_weights, m, mphase, xce, yce, xve, yve, Δ)
 
     for I in CartesianIndices(phase_ratios.center)
         s = sum(phase_ratios.center[I])
@@ -295,7 +296,7 @@ end
         Pt0   .= Pt
 
         # Compute bulk and shear moduli
-        compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v, m.nphases)
+        SkJP.compute_shear_bulk_moduli!(G, β, materials, phase_ratios, nc, size_c, size_v, m.nphases)
 
 
         for iter=1:niter
@@ -305,10 +306,10 @@ end
             #--------------------------------------------#
             # Residual check        
             @timeit to "Residual" begin
-                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, G, β, V, Pt, Pt0, ΔPt, type, BC, materials, phase_ratios, Δ)
-                ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, β, materials, number, type, BC, nc, Δ) 
-                ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, G, materials, number, type, BC, nc, Δ)
-                ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, G, materials, number, type, BC, nc, Δ)
+                SkJP.TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, G, β, V, Pt, Pt0, ΔPt, type, BC, materials, phase_ratios, Δ)
+                SkJP.ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, β, materials, number, type, BC, nc, Δ) 
+                SkJP.ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, G, materials, number, type, BC, nc, Δ)
+                SkJP.ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, G, materials, number, type, BC, nc, Δ)
             end
 
             err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
@@ -318,14 +319,14 @@ end
 
             #--------------------------------------------#
             # Set global residual vector
-            SetRHS!(r, R, number, type, nc)
+            SkJP.SetRHS!(r, R, number, type, nc)
 
             #--------------------------------------------#
             # Assembly
             @timeit to "Assembly" begin
-                AssembleContinuity2D!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, β, materials, number, pattern, type, BC, nc, Δ)
-                AssembleMomentum2D_x!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, G, materials, number, pattern, type, BC, nc, Δ)
-                AssembleMomentum2D_y!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, G, materials, number, pattern, type, BC, nc, Δ)
+                SkJP.AssembleContinuity2D!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, β, materials, number, pattern, type, BC, nc, Δ)
+                SkJP.AssembleMomentum2D_x!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, G, materials, number, pattern, type, BC, nc, Δ)
+                SkJP.AssembleMomentum2D_y!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, G, materials, number, pattern, type, BC, nc, Δ)
             end
 
             #--------------------------------------------# 
@@ -346,9 +347,9 @@ end
 
             #--------------------------------------------#
             # Line search & solution update
-            @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, G, β, 𝐷, 𝐷_ctl, number, type, BC, materials, phase_ratios, nc, Δ)
-            UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
-            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, G, β, V, Pt, Pt0, ΔPt, type, BC, materials, phase_ratios, Δ)
+            @timeit to "Line search" imin = SkJP.LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, G, β, 𝐷, 𝐷_ctl, number, type, BC, materials, phase_ratios, nc, Δ)
+            SkJP.UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
+            SkJP.TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, G, β, V, Pt, Pt0, ΔPt, type, BC, materials, phase_ratios, Δ)
         end
 
         # Update pressure
@@ -381,15 +382,15 @@ end
         st = 15
         cm.arrows2d!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], tiplength = 0, lengthscale=0.02, tipwidth=1, color=:white)
         cm.Colorbar(fig[1,2], hm, label="τII")
-        ax2 = cm.Axis(fig[1,3])
+        ax2 = cm.Axis(fig[1,3], aspect=cm.DataAspect())
         hm2 = cm.heatmap!(ax2, xc, yc,  η.c[inx_c,iny_c], colormap=:bluesreds)
         cm.Colorbar(fig[1,4], hm2, label="η")
-        ax3 = cm.Axis(fig[2,1])
+        ax3 = cm.Axis(fig[2,1], aspect=cm.DataAspect())
         hm3 = cm.heatmap!(ax3, xc, yc,  V.x[inx_Vx,iny_Vx], colormap=:bluesreds)
         cm.Colorbar(fig[2,2], hm3, label="Vx")
-        ax3 = cm.Axis(fig[2,3])
-        hm3 = cm.heatmap!(ax3, xc, yc,  V.y[inx_Vx,iny_Vx], colormap=:bluesreds)
-        cm.Colorbar(fig[2,4], hm3, label="Vy")
+        ax4 = cm.Axis(fig[2,3], aspect=cm.DataAspect())
+        hm4 = cm.heatmap!(ax4, xc, yc,  V.y[inx_Vx,iny_Vx], colormap=:bluesreds)
+        cm.Colorbar(fig[2,4], hm4, label="Vy")
         display(fig)
     end
 
@@ -418,7 +419,7 @@ let
 
     # Discretise angle of layer 
     nθ         = 1
-    θ          = π/8 # LinRange(0, π, nθ)
+    θ          = π/2 # LinRange(0, π, nθ)
     τ_cart     = zeros(nθ)
     τ_cart_lay = zeros(nθ)
     τ_cart_ana = zeros(nθ)
@@ -463,21 +464,21 @@ let
 
     τ_cart .= τstrong * sqrt.(((δ^2 - 1) * cos.(2 .* θ).^2 .+ 1) / (δ^2))
 
-    function Visualisation()
-        fig   = cm.Figure(fontsize=15)
-        ax    = cm.Axis(fig[1,1], xlabel= cm.L"$\theta$ [$^{\circ}$]", ylabel=cm.L"$\tau_{II}$ [-]")
-        cm.lines!(ax, θ*180/π, τ_cart_lay, label="Layering", color=cm.Cycled(1))
-        cm.lines!(ax, θ*180/π, τstrong*ones(size(θ)), color=:gray, linestyle=:dash, label="End-Member (Biot et al., 1965)")
-        cm.lines!(ax, θ*180/π, τweak*ones(size(θ)), color=:gray, linestyle=:dash, label="End-Member (Biot et al., 1965)")
-        cm.scatter!(ax, θ[1:6:end]*180/π, τ_cart[1:6:end], label="Expression", markersize=10)
-        cm.scatter!(ax, θ[1:8:end]*180/π, τ_cart_ana[1:8:end], label="Analytical", marker=:utriangle, markersize=10, color=cm.Cycled(3))
-        cm.Legend(fig[2,1], ax, framevisible=false, orientation=:horizontal, unique=true, nbanks=4, cm.L"$\tau_{II}$    ($δ \approx$ %$(round(Int,δ)))")
-        display(fig)
-    end
-    cm.with_theme(Visualisation, cm.theme_latexfonts())
+    # function Visualisation()
+    #     fig   = cm.Figure(fontsize=15)
+    #     ax    = cm.Axis(fig[1,1], xlabel= cm.L"$\theta$ [$^{\circ}$]", ylabel=cm.L"$\tau_{II}$ [-]")
+    #     cm.lines!(ax, θ*180/π, τ_cart_lay, label="Layering", color=cm.Cycled(1))
+    #     cm.lines!(ax, θ*180/π, τstrong*ones(size(θ)), color=:gray, linestyle=:dash, label="End-Member (Biot et al., 1965)")
+    #     cm.lines!(ax, θ*180/π, τweak*ones(size(θ)), color=:gray, linestyle=:dash, label="End-Member (Biot et al., 1965)")
+    #     cm.scatter!(ax, θ[1:6:end]*180/π, τ_cart[1:6:end], label="Expression", markersize=10)
+    #     cm.scatter!(ax, θ[1:8:end]*180/π, τ_cart_ana[1:8:end], label="Analytical", marker=:utriangle, markersize=10, color=cm.Cycled(3))
+    #     cm.Legend(fig[2,1], ax, framevisible=false, orientation=:horizontal, unique=true, nbanks=4, cm.L"$\tau_{II}$    ($δ \approx$ %$(round(Int,δ)))")
+    #     display(fig)
+    # end
+    # cm.with_theme(Visualisation, cm.theme_latexfonts())
 
-    # Calculate sum of relative error over all angles
-    ϵτ_lay  = mean(abs.(τ_cart_lay  .- τ_cart_trf0d) ./ τ_cart_trf0d) * 100
-    ϵτ_laym = mean(abs.(τ_cart_laym .- τ_cart_trf0d) ./ τ_cart_trf0d) * 100
-    @show ϵτ_lay, ϵτ_laym
+    # # Calculate sum of relative error over all angles
+    # ϵτ_lay  = mean(abs.(τ_cart_lay  .- τ_cart_trf0d) ./ τ_cart_trf0d) * 100
+    # ϵτ_laym = mean(abs.(τ_cart_laym .- τ_cart_trf0d) ./ τ_cart_trf0d) * 100
+    # @show ϵτ_lay, ϵτ_laym
 end
