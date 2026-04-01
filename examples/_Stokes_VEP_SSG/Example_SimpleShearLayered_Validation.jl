@@ -352,16 +352,16 @@ end
         cm.poly!(ax, cm.Rect(xce[imin_x], yce[imin_y], xce[imax_x]-xce[imin_x], yce[imax_y]-yce[imin_y]), strokecolor=:white, strokewidth=2, color=:transparent)
         st = 15
         cm.arrows2d!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], tiplength = 0, lengthscale=0.02, tipwidth=1, color=:white)
-        cm.Colorbar(fig[1,2], hm, label="τII [Pa]")
+        cm.Colorbar(fig[1,2], hm, label="τII")
         ax2 = cm.Axis(fig[1,3])
         hm2 = cm.heatmap!(ax2, xc, yc,  η.c[inx_c,iny_c], colormap=:bluesreds)
-        cm.Colorbar(fig[1,4], hm2, label="Effective viscosity [Pa.s]")
+        cm.Colorbar(fig[1,4], hm2, label="η")
         ax3 = cm.Axis(fig[2,1])
         hm3 = cm.heatmap!(ax3, xc, yc,  V.x[inx_Vx,iny_Vx], colormap=:bluesreds)
-        cm.Colorbar(fig[2,2], hm3, label="Vx [m]")
+        cm.Colorbar(fig[2,2], hm3, label="Vx")
         ax3 = cm.Axis(fig[2,3])
         hm3 = cm.heatmap!(ax3, xc, yc,  V.y[inx_Vx,iny_Vx], colormap=:bluesreds)
-        cm.Colorbar(fig[2,4], hm3, label="Vy [m]")
+        cm.Colorbar(fig[2,4], hm3, label="Vy")
         display(fig)
     end
 
