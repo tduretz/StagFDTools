@@ -544,7 +544,6 @@ end
 
 function StressVector!(ε̇, Dkk, P0, materials, phases, Δ) 
     η, λ̇, P, τII = LocalRheology(ε̇, Dkk, P0, materials, phases, Δ)
-    λ̇, P, τII = 1.0, 1.0, 1.0
     τ       = @SVector([2 * η * ε̇[1],
                         2 * η * ε̇[2],
                         2 * η * ε̇[3],
