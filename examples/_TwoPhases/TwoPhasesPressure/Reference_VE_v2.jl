@@ -109,10 +109,10 @@ using Enzyme  # AD backends you want to use
     type.Pt[2:end-1,2:end-1] .= :in
     # -------- Pf -------- #
     type.Pf[2:end-1,2:end-1] .= :in
-    type.Pf[1,:]             .= :Neumann 
-    type.Pf[end,:]           .= :Neumann 
-    type.Pf[:,1]             .= :Neumann
-    type.Pf[:,end]           .= :Neumann
+    type.Pf[1,:]             .= :Dirichlet 
+    type.Pf[end,:]           .= :Dirichlet 
+    type.Pf[:,1]             .= :Dirichlet
+    type.Pf[:,end]           .= :Dirichlet
     
     # Equation Fields
     number = Fields(
@@ -165,8 +165,12 @@ using Enzyme  # AD backends you want to use
     𝐷_ctl   = (c = D_ctl_c, v = D_ctl_v)
     λ̇       = (c  = zeros(size_c...), v  = zeros(size_v...) )
     phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...), x =ones(Int64, size_x...), y=ones(Int64, size_y...) )  # phase on velocity points
-    P       = (t = Pi.*ones(size_c...), f = Pi.*ones(size_c...))
-    Pi      = (t = Pi.*ones(size_c...), f = Pi.*ones(size_c...))
+    # P       = (t = Pi.*ones(size_c...), f = Pi.*ones(size_c...))
+    # Pi      = (t = Pi.*ones(size_c...), f = Pi.*ones(size_c...))
+   
+    P       = (t = 0.0*ones(size_c...), f = 0.0.*ones(size_c...))
+    Pi      = (t = 0.0*ones(size_c...), f = 0.0.*ones(size_c...))
+   
     P0      = (t = zeros(size_c...), f = zeros(size_c...))
     ΔP      = (t = zeros(size_c...), f = zeros(size_c...))
     ρ       = (s = materials.ρs[1]*ones(size_c...), f = materials.ρf[1]*ones(size_c...), t = zeros(size_c...))
@@ -232,9 +236,14 @@ using Enzyme  # AD backends you want to use
         ΔPt = zeros(nt),
         ΔPf = zeros(nt),
         ΔPe = zeros(nt),
-        Pe  = zeros(nt),
-        Pt  = zeros(nt),
-        Pf  = zeros(nt),
+        normτ   = zeros(nt),
+        normPe  = zeros(nt),
+        normPt  = zeros(nt),
+        normPf  = zeros(nt),
+        meanτ   = zeros(nt),
+        meanPe  = zeros(nt),
+        meanPt  = zeros(nt),
+        meanPf  = zeros(nt),
         t   = zeros(nt),
     )
 
@@ -450,14 +459,19 @@ using Enzyme  # AD backends you want to use
         probes.ΔPt[it]   = maximum(P.t) - minimum(P.t)
         probes.ΔPf[it]   = maximum(P.f) - minimum(P.f)
         probes.ΔPe[it]   = maximum(P.t .- P.f) - minimum(P.t .- P.f) 
-        probes.Pe[it]    = norm(P.t .- P.f)
-        probes.Pt[it]    = norm(P.t)
-        probes.Pf[it]    = norm(P.f)
+        probes.normτ[it]  = norm(τ.II[inx_c,iny_c])
+        probes.normPe[it] = norm(P.t[inx_c,iny_c] .- P.f[inx_c,iny_c])
+        probes.normPt[it] = norm(P.t[inx_c,iny_c])
+        probes.normPf[it] = norm(P.f[inx_c,iny_c])
+        probes.meanτ[it]  = mean(τ.II[inx_c,iny_c])
+        probes.meanPe[it] = mean(P.t[inx_c,iny_c] .- P.f[inx_c,iny_c])
+        probes.meanPt[it] = mean(P.t[inx_c,iny_c])
+        probes.meanPf[it] = mean(P.f[inx_c,iny_c])
         probes.t[it]     = it*Δ.t
         # probes.maxPt[it] = maximum(P.t.-mean(P.t[inx_c,iny_c]) )
         # probes.maxPf[it] = maximum(P.f.-mean(P.f[inx_c,iny_c]) )
-        probes.maxPt[it] = (P.t .- mean(P.t[inx_c,iny_c]))[ix, iy_mid]
-        probes.maxPf[it] = (P.f .- mean(P.f[inx_c,iny_c]))[ix, iy_mid]
+        probes.maxPt[it] = (P.t .- 0*mean(P.t[inx_c,iny_c]))[ix, iy_mid]
+        probes.maxPf[it] = (P.f .- 0*mean(P.f[inx_c,iny_c]))[ix, iy_mid]
         probes.maxτ[it]  = τ.II[ix,iy]
 
         @show mean(P.t[phases.c.==2])
@@ -549,7 +563,7 @@ using Enzyme  # AD backends you want to use
     @show Δt0
 
     # if viscoelastic
-    #     save("./examples/_TwoPhases/TwoPhasesPressure/Viscoelastic3.jld2", "Ωl", Ωl, "Ωη", Ωη, "probes", probes, "X", X, "P", P, "phases", phases, "τ", τ )
+        save("./examples/_TwoPhases/TwoPhasesPressure/Viscoelastic_mean.jld2", "Ωl", Ωl, "Ωη", Ωη, "probes", probes, "X", X, "P", P, "phases", phases, "τ", τ )
     # else
     #     save("./examples/_TwoPhases/TwoPhasesPressure/ReferenceModel.jld2", "Ωl", Ωl, "Ωη", Ωη, "probes", probes, "X", X, "P", P, "phases", phases, "τ", τ)
     # end
