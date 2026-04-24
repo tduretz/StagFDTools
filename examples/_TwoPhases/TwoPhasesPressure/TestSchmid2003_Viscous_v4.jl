@@ -2,8 +2,6 @@ using StagFDTools, StagFDTools.TwoPhases
 using JLD2, ExtendableSparse, StaticArrays, CairoMakie, LinearAlgebra, SparseArrays, Printf, JLD2, ExactFieldSolutions, GridGeometryUtils
 import Statistics:mean
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
-
 @views function main(nc)
 
     # Characteristic scales

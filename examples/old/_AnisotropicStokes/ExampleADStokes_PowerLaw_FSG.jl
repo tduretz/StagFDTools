@@ -2,8 +2,7 @@ using StagFDTools, StagFDTools.StokesFSG
 using ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
-
+using StagFDTools: Duplicated, Const, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
 max_all(R) = max(maximum(R.x[1]), maximum(R.x[2]), maximum(R.y[1]), maximum(R.y[2]), maximum(R.p[1]), maximum(R.p[2]) )
 
 const rheology = :anisotropic
@@ -443,7 +442,7 @@ function AssembleMomentum2D_1!(K, V, Pt, phases, materials, num, pattern, types,
             ∂Rx∂Vy2 .= 0.
             ∂Rx∂Pt1 .= 0.
             ∂Rx∂Pt2 .= 0.
-            autodiff(Enzyme.Reverse, Momentum_x, Duplicated(Vx[1], ∂Rx∂Vx1), Duplicated(Vx[2], ∂Rx∂Vx2), Duplicated(Vy[2], ∂Rx∂Vy2), Duplicated(Vy[1], ∂Rx∂Vy1), Duplicated(P[1], ∂Rx∂Pt1), Duplicated(P[2], ∂Rx∂Pt2), Const(phase[1]), Const(phase[2]), Const(materials), Const(typex[1]), Const(typex[2]), Const(typey[2]), Const(typey[1]), Const(bc_val), Const(Δ))
+            forwarddiff_gradients!(Momentum_x, Duplicated(Vx[1], ∂Rx∂Vx1), Duplicated(Vx[2], ∂Rx∂Vx2), Duplicated(Vy[2], ∂Rx∂Vy2), Duplicated(Vy[1], ∂Rx∂Vy1), Duplicated(P[1], ∂Rx∂Pt1), Duplicated(P[2], ∂Rx∂Pt2), Const(phase[1]), Const(phase[2]), Const(materials), Const(typex[1]), Const(typex[2]), Const(typey[2]), Const(typey[1]), Const(bc_val), Const(Δ))
             # ∂Rx∂Pt1 .= 1.
             # ∂Rx∂Pt2 .= 0.
 
@@ -495,7 +494,7 @@ function AssembleMomentum2D_1!(K, V, Pt, phases, materials, num, pattern, types,
             ∂Ry∂Vy2 .= 0.
             ∂Ry∂Pt1 .= 0.
             ∂Ry∂Pt2 .= 0.
-            autodiff(Enzyme.Reverse, Momentum_y, Duplicated(Vx[2], ∂Ry∂Vx2), Duplicated(Vx[1], ∂Ry∂Vx1), Duplicated(Vy[1], ∂Ry∂Vy1), Duplicated(Vy[2], ∂Ry∂Vy2), Duplicated(P[2], ∂Ry∂Pt2), Duplicated(P[1], ∂Ry∂Pt1), Const(phase[2]), Const(phase[1]), Const(materials), Const(typex[2]), Const(typex[1]), Const(typey[1]), Const(typey[2]), Const(bc_val), Const(Δ))            ##################################################################
+            forwarddiff_gradients!(Momentum_y, Duplicated(Vx[2], ∂Ry∂Vx2), Duplicated(Vx[1], ∂Ry∂Vx1), Duplicated(Vy[1], ∂Ry∂Vy1), Duplicated(Vy[2], ∂Ry∂Vy2), Duplicated(P[2], ∂Ry∂Pt2), Duplicated(P[1], ∂Ry∂Pt1), Const(phase[2]), Const(phase[1]), Const(materials), Const(typex[2]), Const(typex[1]), Const(typey[1]), Const(typey[2]), Const(bc_val), Const(Δ))            ##################################################################
             # ∂Ry∂Pt1 .= 0.
             # ∂Ry∂Pt2 .= 0.
 
@@ -593,7 +592,7 @@ function AssembleMomentum2D_2!(K, V, Pt, phases, materials, num, pattern, types,
             ∂Rx∂Vy2 .= 0.
             ∂Rx∂Pt1 .= 0.
             ∂Rx∂Pt2 .= 0.
-            autodiff(Enzyme.Reverse, Momentum_x, Duplicated(Vx[2], ∂Rx∂Vx2), Duplicated(Vx[1], ∂Rx∂Vx1), Duplicated(Vy[1], ∂Rx∂Vy1), Duplicated(Vy[2], ∂Rx∂Vy2), Duplicated(P[2], ∂Rx∂Pt2), Duplicated(P[1], ∂Rx∂Pt1), Const(phase[2]), Const(phase[1]), Const(materials), Const(typex[2]), Const(typex[1]), Const(typey[1]), Const(typey[2]), Const(bc_val), Const(Δ))
+            forwarddiff_gradients!(Momentum_x, Duplicated(Vx[2], ∂Rx∂Vx2), Duplicated(Vx[1], ∂Rx∂Vx1), Duplicated(Vy[1], ∂Rx∂Vy1), Duplicated(Vy[2], ∂Rx∂Vy2), Duplicated(P[2], ∂Rx∂Pt2), Duplicated(P[1], ∂Rx∂Pt1), Const(phase[2]), Const(phase[1]), Const(materials), Const(typex[2]), Const(typex[1]), Const(typey[1]), Const(typey[2]), Const(bc_val), Const(Δ))
 
             ##################################################################
             # Vx2 --> Vx2, Vy2
@@ -645,7 +644,7 @@ function AssembleMomentum2D_2!(K, V, Pt, phases, materials, num, pattern, types,
             ∂Ry∂Vy2 .= 0.
             ∂Ry∂Pt1 .= 0.
             ∂Ry∂Pt2 .= 0.
-            autodiff(Enzyme.Reverse, Momentum_y, Duplicated(Vx[1], ∂Ry∂Vx1), Duplicated(Vx[2], ∂Ry∂Vx2), Duplicated(Vy[2], ∂Ry∂Vy2), Duplicated(Vy[1], ∂Ry∂Vy1), Duplicated(P[1], ∂Ry∂Pt1), Duplicated(P[2], ∂Ry∂Pt2), Const(phase[1]), Const(phase[2]), Const(materials), Const(typex[1]), Const(typex[2]), Const(typey[2]), Const(typey[1]), Const(bc_val), Const(Δ))
+            forwarddiff_gradients!(Momentum_y, Duplicated(Vx[1], ∂Ry∂Vx1), Duplicated(Vx[2], ∂Ry∂Vx2), Duplicated(Vy[2], ∂Ry∂Vy2), Duplicated(Vy[1], ∂Ry∂Vy1), Duplicated(P[1], ∂Ry∂Pt1), Duplicated(P[2], ∂Ry∂Pt2), Const(phase[1]), Const(phase[2]), Const(materials), Const(typex[1]), Const(typex[2]), Const(typey[2]), Const(typey[1]), Const(bc_val), Const(Δ))
     
             ##################################################################
             # Vy1 --> Vy1, Vx1

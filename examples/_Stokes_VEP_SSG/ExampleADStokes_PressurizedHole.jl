@@ -1,7 +1,6 @@
 using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
 using TimerOutputs
 
 function line(p, K, Δt, η_ve, ψ, p1, t1)
@@ -31,8 +30,10 @@ end
 
     # Material parameters
     materials = ( 
+        g     = [0.0   0.0],
         compressible = true,
         plasticity   = :Kiss2023,
+        ρ    = [0.0    0.0  ],
         n    = [1.0    1.0  ],
         η0   = [1e3    1e-1 ], 
         G    = [1e1    1e1  ],

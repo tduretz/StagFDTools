@@ -1,4 +1,5 @@
-using GLMakie, Enzyme, LinearAlgebra, JLD2, StaticArrays
+using CairoMakie, LinearAlgebra, JLD2, StaticArrays
+using StagFDTools: Duplicated, Const, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
 
 # Intends to implement constitutive updates as in RheologicalCalculator
 
@@ -90,7 +91,7 @@ function StressVector(ϵ̇, τ0, Pt0, Pf0, Φ0, params)
         tol = 1e-15
 
         for iter=1:10
-            J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase, x, Const(ε̇II_eff), Const(Pt_trial), Const(Pf_trial), Const(Φ_trial), Const(Pt0), Const(Pf0), Const(Φ0), Const(params))
+            J = forwarddiff_jacobian(residual_two_phase, x, Const(ε̇II_eff), Const(Pt_trial), Const(Pf_trial), Const(Φ_trial), Const(Pt0), Const(Pf0), Const(Φ0), Const(params))
             # display(J.derivs[1])
             x .-= J.derivs[1]\J.val
             if iter==1 
@@ -223,7 +224,7 @@ function two_phase_return_mapping()
 
 
         # # Consistent tangent
-        # J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector1, ϵ̇, Const(τ0), Const(P0), Const(params))
+        # J = forwarddiff_jacobian(StressVector1, ϵ̇, Const(τ0), Const(P0), Const(params))
         # display(J.derivs[1])
 
         # Probes

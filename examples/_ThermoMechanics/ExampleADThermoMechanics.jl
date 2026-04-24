@@ -1,7 +1,5 @@
 using StagFDTools, StagFDTools.ThermoMechanics, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf, JLD2
 import Statistics:mean
-using Enzyme 
-
 # This example shows how mechanical loading (compaction) leads to heating
 # The temperature is predicted numerically and exactly using the adiabatic relation:
 # ΔT = α*T*ΔP / (ρ*cp - α*ΔP) 

@@ -66,7 +66,7 @@ function AssembleContinuity2D_Def!(K, V, P, Pt0, ΔP, τ0, 𝐷, Jinv, phases, m
         fill!(∂R∂Vx, 0e0)
         fill!(∂R∂Vy, 0e0)
         fill!(∂R∂P , 0e0)
-        autodiff(Enzyme.Reverse, Continuity_Def, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂P), Const(Pt0[i,j]), Const(D), Const(Jinv_c), Const(phases.c[i,j]), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+        forwarddiff_gradients!(Continuity_Def, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂P), Const(Pt0[i,j]), Const(D), Const(Jinv_c), Const(phases.c[i,j]), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
 
         K31 = K[3][1]
         K32 = K[3][2]
@@ -292,7 +292,7 @@ function AssembleMomentum2D_x_Def!(K, V, P, P0, ΔP, τ0, 𝐷, Jinv, phases, ma
             fill!(∂R∂Vx, 0e0)
             fill!(∂R∂Vy, 0e0)
             fill!(∂R∂Pt, 0e0)
-            autodiff(Enzyme.Reverse, SMomentum_x_Generic_Def, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ΔP_loc), Const(τ0_loc), Const(D_Vy), Const(Jinv_loc), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+            forwarddiff_gradients!(SMomentum_x_Generic_Def, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ΔP_loc), Const(τ0_loc), Const(D_Vy), Const(Jinv_loc), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
             
             num_Vx = @inbounds num.Vx[i,j]
             bounds_Vx = num_Vx > 0
@@ -460,7 +460,7 @@ function AssembleMomentum2D_y_Def!(K, V, P, P0, ΔP, τ0, 𝐷, Jinv, phases, ma
             fill!(∂R∂Vx, 0.0)
             fill!(∂R∂Vy, 0.0)
             fill!(∂R∂Pt, 0.0)
-            autodiff(Enzyme.Reverse, SMomentum_y_Generic_Def, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ΔP_loc), Const(τ0_loc), Const(D_Vx), Const(Jinv_loc), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+            forwarddiff_gradients!(SMomentum_y_Generic_Def, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ΔP_loc), Const(τ0_loc), Const(D_Vx), Const(Jinv_loc), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
             
             num_Vy = @inbounds num.Vy[i,j]
             bounds_Vy = num_Vy > 0
@@ -577,7 +577,7 @@ function TangentOperator_Def!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V,  P,  �
             ε̇vec = @SVector([ϵ̇xx[1], ϵ̇yy[1], ϵ̇xy[1], P_loc[1]])
 
             # Tangent operator used for Newton Linearisation
-            jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector!, ε̇vec, Const(materials), Const(ph_loc[1]), Const(Δ))
+            jac   = forwarddiff_jacobian(StressVector!, ε̇vec, Const(materials), Const(ph_loc[1]), Const(Δ))
         
             # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
             @views 𝐷_ctl.Vx[i,j][:,1] .= jac.derivs[1][1][1]
@@ -658,7 +658,7 @@ function TangentOperator_Def!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V,  P,  �
             ε̇vec = @SVector([ϵ̇xx[1], ϵ̇yy[1], ϵ̇xy[1], P_loc[1]])
 
             # Tangent operator used for Newton Linearisation
-            jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector!, ε̇vec, Const(materials), Const(ph_loc[1]), Const(Δ))
+            jac   = forwarddiff_jacobian(StressVector!, ε̇vec, Const(materials), Const(ph_loc[1]), Const(Δ))
         
             # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
             @views 𝐷_ctl.Vy[i,j][:,1] .= jac.derivs[1][1][1]

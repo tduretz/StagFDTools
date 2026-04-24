@@ -116,7 +116,11 @@ function AssembleContinuity2D_VE!(K, V, P, P0, rheo, num, pattern, type, BC, nc,
         ∂R∂Vy .= 0.
         ∂R∂Pt .= 0.
         ∂R∂Pf .= 0.
-        autodiff(Enzyme.Reverse, Continuity_VE, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(Pt_loc, ∂R∂Pt), Const(Pt0), Duplicated(Pf_loc, ∂R∂Pf), Const(Pf0), Const(rheo.ηΦ[i,j]),  Const(rheo.Kd[i,j]),  Const(rheo.α[i,j]), Const(rheo.ϕ[i,j]), Const(type_loc), Const(bcv_loc), Const(Δ))
+        ∂Vx, ∂Vy, ∂Pt, ∂Pf = ad_partial_gradients(Continuity_VE, (Vx_loc, Vy_loc, Pt_loc, Pf_loc), Pt0, Pf0, rheo.ηΦ[i,j], rheo.Kd[i,j], rheo.α[i,j], rheo.ϕ[i,j], type_loc, bcv_loc, Δ)
+        ∂R∂Vx .= ∂Vx
+        ∂R∂Vy .= ∂Vy
+        ∂R∂Pt .= ∂Pt
+        ∂R∂Pf .= ∂Pf
 
         # Pt --- Vx
         Local = num.Vx[i:i+1,j:j+2] .* pattern[3][1]
@@ -197,7 +201,11 @@ function AssembleFluidContinuity2D_VE!(K, V, P, P0, rheo, num, pattern, type, BC
         ∂R∂Vy .= 0.
         ∂R∂Pt .= 0.
         ∂R∂Pf .= 0.
-        autodiff(Enzyme.Reverse, FluidContinuity_VE, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(Pt_loc, ∂R∂Pt), Const(Pt0), Duplicated(Pf_loc, ∂R∂Pf), Const(Pf0), Const(rheo.ηΦ[i,j]),  Const(rheo.Kd[i,j]),  Const(rheo.α[i,j]),  Const(rheo.B[i,j]), Const(rheo.ϕ[i,j]), Const(k_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
+        ∂Vx, ∂Vy, ∂Pt, ∂Pf = ad_partial_gradients(FluidContinuity_VE, (Vx_loc, Vy_loc, Pt_loc, Pf_loc), Pt0, Pf0, rheo.ηΦ[i,j], rheo.Kd[i,j], rheo.α[i,j], rheo.B[i,j], rheo.ϕ[i,j], k_loc, type_loc, bcv_loc, Δ)
+        ∂R∂Vx .= ∂Vx
+        ∂R∂Vy .= ∂Vy
+        ∂R∂Pt .= ∂Pt
+        ∂R∂Pf .= ∂Pf
              
         # Pf --- Vx
         Local = num.Vx[i:i+1,j:j+2] .* pattern[4][1]
