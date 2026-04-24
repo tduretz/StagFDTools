@@ -1,4 +1,4 @@
-using StagFDTools, StagFDTools.StokesJustPIC, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf, GLMakie, MathTeXEngine
+using StagFDTools, StagFDTools.StokesJustPIC, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf, CairoMakie, MathTeXEngine
 Makie.update_theme!( fonts = (regular = texfont(), bold = texfont(:bold), italic = texfont(:italic)))
 import Statistics:mean
 using JustPIC, JustPIC._2D
@@ -423,7 +423,7 @@ record(fig, "results/SimpleShearGarnets.mp4", 1:nt; framerate=15) do it
             pyv  = ppy.data[:]
             clr  = phases.data[:]
             idxv = particles.index.data[:]
-            scatter!(ax, Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=GLMakie.Reverse(:roma), markersize=5)
+            scatter!(ax, Array(pxv[idxv]), Array(pyv[idxv]), color=Array(clr[idxv]), colormap=CairoMakie.Reverse(:roma), markersize=5)
             xlims!(ax, extrema(xv))
             ylims!(ax, extrema(yv))
             ax = Axis(fig[2,1], aspect=DataAspect(), title=L"$\tau_{xx}$", xlabel=L"$x$", ylabel=L"$y$")

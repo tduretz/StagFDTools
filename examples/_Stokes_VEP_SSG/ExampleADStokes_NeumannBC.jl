@@ -1,4 +1,4 @@
-using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, GLMakie, LinearAlgebra, SparseArrays, Printf
+using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, CairoMakie, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
 using TimerOutputs
@@ -15,8 +15,10 @@ using TimerOutputs
 
     # Material parameters
     materials = ( 
+        g     = [0.0   0.0],
         compressible = true,
         plasticity   = :none,
+        ρ    = [0.0    0.0  ],
         n    = [1.0    1.0  ],
         η0   = [1e2    1e-1 ], 
         G    = [1e1    1e1  ],

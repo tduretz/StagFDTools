@@ -1,4 +1,4 @@
-using Enzyme, GLMakie, DelimitedFiles
+using Enzyme, CairoMakie, DelimitedFiles
 
 function Density(T, P, materials, r_vec, niter)
 

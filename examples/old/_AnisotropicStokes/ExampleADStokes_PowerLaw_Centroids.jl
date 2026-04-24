@@ -594,7 +594,7 @@ let
     #--------------------------------------------#
     # Kdiff = K - K'
     # dropzeros!(Kdiff)
-    # f = GLMakie.spy(rotr90(Kdiff))
-    # GLMakie.DataInspector(f)
+    # f = CairoMakie.spy(rotr90(Kdiff))
+    # CairoMakie.DataInspector(f)
     # display(f)
 end

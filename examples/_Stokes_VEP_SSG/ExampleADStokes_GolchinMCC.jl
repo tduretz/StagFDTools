@@ -43,6 +43,7 @@ end
 
     # Material parameters
     materials = ( 
+        g    = [0. 0.],
         compressible = true,
         # plasticity   = :tensile,
         # plasticity   = :DruckerPrager1,
@@ -50,7 +51,6 @@ end
         # plasticity   = :Hyperbolic,
         # plasticity   = :DruckerPrager,
         # plasticity   = :Kiss2023,
-        g    = [0. 0.],
         #      rock   gouge  salt 
         ρ    = [0.0    0.0    0.0 ],
         n    = [1.0    1.0    1.0 ],      # Power law exponent

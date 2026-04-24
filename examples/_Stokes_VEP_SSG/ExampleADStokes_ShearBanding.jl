@@ -15,8 +15,10 @@ using TimerOutputs
 
     # Material parameters
     materials = ( 
+        g     = [0.0   0.0],
         compressible = true,
         plasticity   = :DruckerPrager,
+        ρ    = [1.0    1.0  ],
         n    = [1.0    1.0  ],
         η0   = [1e2    1e-1 ], 
         G    = [1e1    1e1  ],

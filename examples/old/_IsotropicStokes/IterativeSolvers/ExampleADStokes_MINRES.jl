@@ -2,7 +2,7 @@ using StagFDTools.Stokes, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, 
 import Statistics:mean
 using DifferentiationInterface
 using StagFDTools: Duplicated, Const, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
-# import GLMakie
+# import CairoMakie
 
 include("BasicIterativeSolvers.jl")
 
@@ -620,10 +620,10 @@ end
     𝑀diff = 𝑀 - 𝑀'
     dropzeros!(𝑀diff)
     @show norm(𝑀diff)
-    # # f = GLMakie.spy(rotr90(𝑀diff))
-    # # f = GLMakie.spy(rotr90(𝑀))
-    # f = GLMakie.spy(rotr90(D_PC_inv))
-    # GLMakie.DataInspector(f)
+    # # f = CairoMakie.spy(rotr90(𝑀diff))
+    # # f = CairoMakie.spy(rotr90(𝑀))
+    # f = CairoMakie.spy(rotr90(D_PC_inv))
+    # CairoMakie.DataInspector(f)
     # display(f)
 
     #--------------------------------------------#

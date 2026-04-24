@@ -1,4 +1,4 @@
-using GLMakie, LinearAlgebra#, ForwardDiff
+using CairoMakie, LinearAlgebra#, ForwardDiff
 using StagFDTools: Duplicated, Const, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
 
 # Intends to implement constitutive updates as in RheologicalCalculator

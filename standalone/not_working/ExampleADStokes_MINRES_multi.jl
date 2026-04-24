@@ -2,7 +2,7 @@ using StagFDTools, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseA
 import Statistics:mean
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
-# import GLMakie
+# import CairoMakie
 
 include("../examples/Stokes/BasicIterativeSolvers.jl")
 
@@ -618,10 +618,10 @@ let
     𝑀diff = 𝑀 - 𝑀'
     dropzeros!(𝑀diff)
     @show norm(𝑀diff)
-    # f = GLMakie.spy(rotr90(𝑀diff))
-    # f = GLMakie.spy(rotr90(𝑀))
-    f = GLMakie.spy(rotr90(D_PC_inv))
-    GLMakie.DataInspector(f)
+    # f = CairoMakie.spy(rotr90(𝑀diff))
+    # f = CairoMakie.spy(rotr90(𝑀))
+    f = CairoMakie.spy(rotr90(D_PC_inv))
+    CairoMakie.DataInspector(f)
     display(f)
 
     #--------------------------------------------#

@@ -1,4 +1,4 @@
-using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf
+using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, CairoMakie, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
 using TimerOutputs
@@ -23,8 +23,10 @@ end
 
     # Material parameters
     materials = ( 
-        compressible = true,
+        g    = [0.0    0.0],
+        compressible = false,
         plasticity   = :Kiss2023,
+        ρ    = [1.0    1.0    1.0  ],
         n    = [1.0    1.0  ],
         η0   = [1e3    1e-1 ], 
         G    = [1e1    1e1  ],
@@ -278,22 +280,36 @@ end
     
         P_end =  1000
  
-        p3 = plot(aspect_ratio=1, xlabel="P", ylabel="τII")
-        p3 = plot!([pc1, pc1, pc2, P_end],[0.0, τc1, τc2, P_end*sind(φ)+C*cosd(φ)], label=:none)
-        p3 = plot!(p_tr1,  l1, label=:none)
-        p3 = plot!(p_tr2,  l2, label=:none)
-        p3 = plot!(p_tr3,  l3, label=:none)
-        p3 = scatter!( Pt[inx_c,iny_c][:], τII[:], label=:none)
+        ########################################
+        fig = Figure(size = (1200, 900))
 
-        p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
-        # p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt", c=:coolwarm)
-        p2 = heatmap(xc, yc,  log10.(ε̇II)', aspect_ratio=1, xlim=extrema(xc), title="ε̇II", c=:coolwarm)
-        p4 = heatmap(xc, yc,  τII', aspect_ratio=1, xlim=extrema(xc), title="τII", c=:turbo)
-        p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright)
-        p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")
-        p1 = scatter!(1:niter, log10.(err.y[1:niter]), label="Vy")
-        p1 = scatter!(1:niter, log10.(err.p[1:niter]), label="Pt")
-        display(plot(p1, p2, p3, p4, layout=(2,2)))
+        ax11 = Axis(fig[1, 1],
+            xlabel = "Iterations @ step $(it)",
+            ylabel = "log₁₀ error")
+        s1 = scatter!(ax11, 1:niter, log10.(err.x[1:niter]); color = :blue)
+        s2 = scatter!(ax11, 1:niter, log10.(err.y[1:niter]); color = :orange)
+        s3 = scatter!(ax11, 1:niter, log10.(err.p[1:niter]); color = :green)
+        axislegend(ax11, [s1, s2, s3], ["Vx", "Vy", "Pt"]; position = :rt)
+
+        ax12 = Axis(fig[1, 2], title = "ε̇II", aspect = DataAspect())
+        heatmap!(ax12, xc, yc, log10.(ε̇II)'; colormap = :coolwarm)
+        # set x-limits correctly
+        xlims!(ax12, extrema(xc))
+
+        ax21 = Axis(fig[2, 1], xlabel = "P", ylabel = "τII", aspect = DataAspect())
+        lines!(ax21, [pc1, pc1, pc2, P_end], [0.0, τc1, τc2, P_end * sind(φ) + C * cosd(φ)]; color = :black)
+        lines!(ax21, p_tr1, l1; color = :red)
+        lines!(ax21, p_tr2, l2; color = :blue)
+        lines!(ax21, p_tr3, l3; color = :green)
+        scatter!(ax21, Pt[inx_c, iny_c][:], τII[:] ; color = :black)
+
+        ax22 = Axis(fig[2, 2], title = "τII", aspect = DataAspect())
+        heatmap!(ax22, xc, yc, τII'; colormap = :turbo)
+        xlims!(ax22, extrema(xc))
+
+        display(fig)
+        # or save("my_figure.png", fig)
+        ########################################
 
         @show (3/materials.β[1] - 2*materials.G[1])/(2*(3/materials.β[1] + 2*materials.G[1]))
 

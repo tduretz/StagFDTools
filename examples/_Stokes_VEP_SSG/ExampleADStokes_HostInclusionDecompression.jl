@@ -31,8 +31,10 @@ end
     K0   = 4*G0
 
     materials = ( 
+        g    = [0.0    0.0],
         compressible = true,
         plasticity   = :DruckerPrager,
+        ρ    = [0.0    0.0    0.0 ],
         n    = [1.0    1.0    1.0 ],
         η0   = [1e50   1e50   1e50]./(sc.σ*sc.t), 
         G    = [G0     G0/4   2*G0]./sc.σ,
@@ -312,37 +314,20 @@ end
             for iter=1:10
                 F_yield = F_hyperbolic(τ_ax, P_ax, φ, C, σT) 
                 @show norm(F_yield)
-
-                # forwarddiff_gradients!(F_hyperbolic, Duplicated(τ_ax, dFdτ), Const(P_ax), Const(φ), Const(C), Const(σT) )
                 τ_ax .-= F_yield./1
             end
 
             plot!(P_ax.*sc.σ/1e9, τ_ax.*sc.σ/1e9, c=:black)
 
-        
         elseif materials.plasticity === :tensile
             plot!([-σT.*sc.σ/1e9, P_end.*sc.σ/1e9],[0., (P_end+σT).*sc.σ/1e9], label=:none)
         elseif materials.plasticity === :Kiss2023
-            # l1    = line.(p_tr1, K, Δ.t, η_ve, 90., pc1, τc1)
-            # l2    = line.(p_tr2, K, Δ.t, η_ve, 90., pc2, τc2)
-            # l3    = line.(p_tr3, K, Δ.t, η_ve,   ψ, pc2, τc2)
-            # p3 = plot!(p_tr1,  l1, label=:none)
-            # p3 = plot!(p_tr2,  l2, label=:none)
-            # p3 = plot!(p_tr3,  l3, label=:none)
             p3 = plot!([pc1.*sc.σ/1e9, pc1.*sc.σ/1e9, pc2.*sc.σ/1e9, P_end.*sc.σ/1e9],[0.0, τc1.*sc.σ/1e9, τc2.*sc.σ/1e9, (P_end*sind(φ)+C*cosd(φ)).*sc.σ/1e9], label=:none)
         end
         p3 = scatter!( Pt[inx_c,iny_c][:].*sc.σ/1e9, τII[:].*sc.σ/1e9, label=:none)
 
-        # p1 = heatmap(xv, yc, R.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vx")
-        # p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt", c=:coolwarm)
         p2 = heatmap(xc*sc.L*1e2, yc*sc.L*1e2,  log10.(ε̇II./sc.t)', aspect_ratio=1, xlim=extrema(xc*sc.L*1e2), title="log10 ε̇II [1/s]", c=:coolwarm)
         p4 = heatmap(xc*sc.L*1e2, yc.*sc.L*1e2,  τII'.*sc.σ./1e6,   aspect_ratio=1, xlim=extrema(xc*sc.L*1e2), title="τII [MPa]", c=:turbo)
-        # p4 = heatmap(xv*sc.L, yv.*sc.L,  τ.xy[inx_v,iny_v]'.*sc.σ, aspect_ratio=1, xlim=extrema(xc*sc.L), title="τ.xy", c=:turbo)
-        # p4 = heatmap(xv*sc.L, yv.*sc.L,  η.v[inx_v,iny_v]'.*sc.σ, aspect_ratio=1, xlim=extrema(xc*sc.L), title="τII", c=:turbo)
-
-        # p3 = heatmap(xv, yc, (V.x[inx_Vx,iny_Vx])', aspect_ratio=1, xlim=extrema(xv), title="Vx")
-        # p4 = heatmap(xc, yv, V.y[inx_Vy,iny_Vy]', aspect_ratio=1, xlim=extrema(xc), title="Vy")
-        # p2 = heatmap(xc, yc,  Pt[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Pt")
 
         p1 = plot(xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error", legend=:topright)
         p1 = scatter!(1:niter, log10.(err.x[1:niter]), label="Vx")

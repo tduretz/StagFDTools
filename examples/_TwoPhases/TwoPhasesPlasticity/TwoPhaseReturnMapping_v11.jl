@@ -1,4 +1,4 @@
-using GLMakie, LinearAlgebra, JLD2, StaticArrays
+using CairoMakie, LinearAlgebra, JLD2, StaticArrays
 using StagFDTools#: Duplicated, Const, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
 using DifferentiationInterface
 import ForwardDiff: ForwardDiff

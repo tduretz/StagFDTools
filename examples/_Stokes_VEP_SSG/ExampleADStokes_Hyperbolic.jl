@@ -43,6 +43,7 @@ end
 
     # Material parameters
     materials = ( 
+        g    = [0.0    0.0],
         compressible = true,
         # plasticity   = :tensile,
         plasticity   = :Hyperbolic,

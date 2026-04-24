@@ -2,7 +2,7 @@ using StagFDTools, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseA
 import Statistics:mean
 using DifferentiationInterface
 using StagFDTools: Duplicated, Const, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
-# import GLMakie
+# import CairoMakie
 
 struct NumberingV <: AbstractPattern
     Vx
@@ -716,7 +716,7 @@ let
     # #--------------------------------------------#
     # Kdiff = K - K'
     # dropzeros!(Kdiff)
-    # f = GLMakie.spy(rotr90(Kdiff))
-    # GLMakie.DataInspector(f)
+    # f = CairoMakie.spy(rotr90(Kdiff))
+    # CairoMakie.DataInspector(f)
     # display(f)
 end
