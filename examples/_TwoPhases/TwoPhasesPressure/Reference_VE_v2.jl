@@ -7,7 +7,7 @@ using Enzyme  # AD backends you want to use
     homo   = false
 
     if viscoelastic
-        nt           = 120
+        nt           = 120*1
         make_elastic = 1.0
     else
         nt           = 1
@@ -30,13 +30,14 @@ using Enzyme  # AD backends you want to use
     ηbi    = Ωη * ηsi        # Bulk viscosity
     k_ηΦ   = δ^2 / (ηbi + 4/3 * ηsi) # Permeability / fluid viscosity
     r      = Ωr * L          # Inclusion radius
-    ηs_inc = Ωηi * ηsi       # Inclusion shear viscosity
-    ε̇      = Ωp * Pi / ηsi   # Background strain rate
+    ηs_inc = Ωηi * ηsi# * 5
+          # Inclusion shear viscosity
+    ε̇bg      = Ωp * Pi / ηsi #* 5 # Background strain rate
     # Time integration
     Δt0    = 2.5e-4 #1 / ε̇ / nc.x / 2 / 40  
 
     # Velocity gradient matrix
-    D_BC = @SMatrix( [ε̇ 0; 0 -ε̇] )
+    D_BC = @SMatrix( [ε̇bg 0; 0 -ε̇bg] )
 
     τxx_ini = 0.0
     τyy_ini = 0.0
@@ -49,19 +50,19 @@ using Enzyme  # AD backends you want to use
         plasticity   = :off,
         linearizeϕ   = false, 
         single_phase = false,
-        conservative = false,
+        conservative = true,
         n     = [1.0  1.0],
         m     = [0.0  0.0],
         n_CK  = [n_CK n_CK],
-        ηs0   = [ηsi  ηs_inc], 
-        ηΦ0   = [ηbi  ηbi],
-        G     = [1e0  1e0] * 2000 * make_elastic, 
+        ηs0   = [ηsi  ηs_inc] * 1, 
+        ηΦ0   = [ηbi  ηbi],#      ,
+        G     = [1e0  1e0] * 2000 * make_elastic / 1, 
         ρs    = [1.0  1.0 ],
         ρf    = [1.0  1.0 ],
         Kd    = [1e30 1e30],
-        Ks    = [1e0 1e0] * 1.1e4 * make_elastic,
+        Ks    = [1e0 1e0] * 1.1e4 * make_elastic ,
         Kf    = [1e0 1e0] * 1e4 * make_elastic,
-        KΦ    = [1e0 1e0] * 9e3 * make_elastic,
+        KΦ    = [1e0 1e0] * 9e3 * make_elastic,#   * 1,
         k_ηf0 = [k_ηΦ/Φi^n_CK k_ηΦ/Φi^n_CK],
         ψ     = [10.    10.  ],
         ϕ     = [35.    35.  ],
@@ -552,6 +553,8 @@ using Enzyme  # AD backends you want to use
 
         #-------------------------------------------# 
 
+        # save("./examples/_TwoPhases/TwoPhasesPressure/Viscoelastic_omega_l$(Ωl)_step$(@sprintf("%04d", it)).jld2", "Ωl", Ωl, "Ωη", Ωη, "probes", probes, "X", X, "P", P, "phases", phases, "τ", τ )
+
     end
 
     #--------------------------------------------#
@@ -562,8 +565,17 @@ using Enzyme  # AD backends you want to use
     @show τ.II[ix, iy]
     @show Δt0
 
-    # if viscoelastic
-        save("./examples/_TwoPhases/TwoPhasesPressure/Viscoelastic_mean.jld2", "Ωl", Ωl, "Ωη", Ωη, "probes", probes, "X", X, "P", P, "phases", phases, "τ", τ )
+    # if viscoelastic 
+        save("./examples/_TwoPhases/TwoPhasesPressure/Viscoelastic_conservtative.jld2", "Ωl", Ωl, "Ωη", Ωη, "probes", probes, "X", X, "P", P, "phases", phases, "τ", τ )
+        # save("./examples/_TwoPhases/TwoPhasesPressure/Viscoelastic_syst_omega_l$(Ωl)_Kphi$(materials.KΦ[1]).jld2", "Ωl", Ωl, "Ωη", Ωη, "probes", probes, "X", X, "P", P, "phases", phases, "τ", τ )
+        # save("./examples/_TwoPhases/TwoPhasesPressure/Viscoelastic_syst_omega_l$(Ωl)_Kphi$(materials.KΦ[1])_etaphi$(materials.ηΦ0[1]).jld2", "Ωl", Ωl, "Ωη", Ωη, "probes", probes, "X", X, "P", P, "phases", phases, "τ", τ )
+        # save("./examples/_TwoPhases/TwoPhasesPressure/Viscoelastic_syst_omega_l$(Ωl)_G$(materials.G[1]).jld2", "Ωl", Ωl, "Ωη", Ωη, "probes", probes, "X", X, "P", P, "phases", phases, "τ", τ )
+        # save("./examples/_TwoPhases/TwoPhasesPressure/Viscoelastic_syst_omega_l$(Ωl)_Kf$(materials.Kf[1]).jld2", "Ωl", Ωl, "Ωη", Ωη, "probes", probes, "X", X, "P", P, "phases", phases, "τ", τ )
+        # save("./examples/_TwoPhases/TwoPhasesPressure/Viscoelastic_syst_omega_l$(Ωl)_etaphi$(materials.ηΦ0[1]).jld2", "Ωl", Ωl, "Ωη", Ωη, "probes", probes, "X", X, "P", P, "phases", phases, "τ", τ )
+        # save("./examples/_TwoPhases/TwoPhasesPressure/Viscoelastic_syst_omega_l$(Ωl)_etas$(materials.ηs0[1]).jld2", "Ωl", Ωl, "Ωη", Ωη, "probes", probes, "X", X, "P", P, "phases", phases, "τ", τ )
+        # save("./examples/_TwoPhases/TwoPhasesPressure/Viscoelastic_syst_omega_l$(Ωl)_ebg$(ε̇bg).jld2", "Ωl", Ωl, "Ωη", Ωη, "probes", probes, "X", X, "P", P, "phases", phases, "τ", τ )
+        # save("./examples/_TwoPhases/TwoPhasesPressure/Viscoelastic_syst_omega_l$(Ωl)_etasinc$(ηs_inc).jld2", "Ωl", Ωl, "Ωη", Ωη, "probes", probes, "X", X, "P", P, "phases", phases, "τ", τ )
+
     # else
     #     save("./examples/_TwoPhases/TwoPhasesPressure/ReferenceModel.jld2", "Ωl", Ωl, "Ωη", Ωη, "probes", probes, "X", X, "P", P, "phases", phases, "τ", τ)
     # end
@@ -579,6 +591,17 @@ function Run()
     # Mode 0   
     Ωη = 10^(2)
     Ωl = 0.15
+    # Ωl = .045
+    # Ωl = 2.0   
+    # Ωl = 1.5
+    # Ωl = 1.0
+
+    # Ωl = 1.5e-1 # with kphi*3 
+    # Ωl = 1.0e-0 # with kphi*3, kphi_3, G*3 
+    # Ωl = 1.5e-0 # with kphi*3 
+
+    # Ωl = .55 # with kphi*3 
+   
     # main(nc, Ωl, Ωη, false);
     main(nc, Ωl, Ωη, true);
 
