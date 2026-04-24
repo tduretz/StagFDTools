@@ -1,5 +1,8 @@
 using StagFDTools, StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, CairoMakie, LinearAlgebra, SparseArrays, Printf, JLD2
 import Statistics:mean
+using Enzyme  # AD backends you want to use
+
+
 let 
 
     Ωl = 0.15      # ---> δ/r
@@ -32,7 +35,8 @@ end
 
     # Adimensionnal numbers
     Ωr     = 0.1             # Ratio inclusion radius / L
-    Ωηi    = 1e-1            # Ratio (inclusion viscosity) / (matrix viscosity)
+    # DIFFERENT FROM REFERENCE
+    Ωηi    = 1e2            # Ratio (inclusion viscosity) / (matrix viscosity)
     Ωp     = 1.              # Ratio (ε̇bg * ηs) / P0
     # Independant
     ηsi    = 1.              # Shear viscosity
@@ -47,6 +51,7 @@ end
     k_ηΦ   = δ^2 / (ηbi + 4/3 * ηsi) # Permeability / fluid viscosity
     r      = Ωr * L          # Inclusion radius
     ηs_inc = Ωηi * ηsi       # Inclusion shear viscosity
+    # DIFFERENT FROM REFERENCE
     ε̇      = Ωp * Pi / ηsi   # Background strain rate
     # Time integration
     nt     = 1
@@ -88,6 +93,10 @@ end
 
     k_ηf0 = materials.k_ηf0[1]
     lc = sqrt((k_ηf0) * (materials.ηΦ0[1] + 4/3*materials.ηs0[1])) 
+
+    # @show k_ηf0, lc
+
+    # error()
 
     # For plasticity
     @. materials.cosϕ  = cosd(materials.ϕ)
@@ -398,9 +407,18 @@ end
         @show Pfvis = norm(P.f[inx_c,iny_c]) / sqrt(nc.x*nc.y)
         @show Peffvis = norm(P.t[inx_c,iny_c] .- P.f[inx_c,iny_c]) / sqrt(nc.x*nc.y)
 
-        # P.t .-= mean(P.t[inx_c,iny_c]) 
-        # P.f .-= mean(P.f[inx_c,iny_c])
+        P.t .-= mean(P.t[inx_c,iny_c]) 
+        P.f .-= mean(P.f[inx_c,iny_c])
 
+        # # p1 = heatmap(xc, yc, Vs[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Vs")
+        # p1 = heatmap(xv, yc, V.x[inx_Vx,iny_Vx]', aspect_ratio=1, xlim=extrema(xc), title="Vf")
+        # p2 = heatmap(xc, yc, Φ.c[inx_c,iny_c]', aspect_ratio=1, xlim=extrema(xc), title="Φ")
+        # # p3 = heatmap(xc, yc, τII[inx_c,iny_c]',   aspect_ratio=1, xlim=extrema(xc), title="Pt", clims=(-3,3))
+        # st = 20
+        # p3 = quiver(Xc[1:st:end,1:st:end], Yc[1:st:end,1:st:end], quiver=(Vxsc[1:st:end,1:st:end],Vysc[1:st:end,1:st:end]), c=:black,  aspect_ratio=1, xlim=extrema(xc), title="Pt", clims=(-3,3))
+        # # divV = diff(V.x[2:end-1,3:end-2], dims=1)/Δ.x  + diff(V.y[3:end-2,2:end-1], dims=2)/Δ.y
+        # # p3 = heatmap(xc, yc, divV',   aspect_ratio=1, xlim=extrema(xc), title="Pt")
+        
         # cmap = (CairoMakie.Reverse(:matter), 1)
         cmap = :jet1
         st  = 15
@@ -422,11 +440,11 @@ end
         # arrows2d!(ax2, xc[ind], yc[ind], σ1.x[ind,ind], σ1.y[ind,ind], lengthscale = 7e-2, color = :white, tipwidth = 0)
 
         ax1 = Axis(fig[2,1],  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect()) #, title=L"$P^\text{t}$"
-        hm1=heatmap!(ax1, xc, yc, P.t[inx_c,iny_c] .- mean(P.t[inx_c,iny_c]), colormap=cmap, colorrange=(-3,3)) 
+        hm1=heatmap!(ax1, xc, yc, P.t[inx_c,iny_c], colormap=cmap, colorrange=(-3,3)) 
         # hm1=heatmap!(ax1, xc, yc, Vs.x, colormap=cmap) 
 
         ax2 = Axis(fig[2,2],  xlabel=L"$x$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect()) # , title=L"$P^\text{f}$"
-        hm2=heatmap!(ax2, xc, yc, P.f[inx_c,iny_c] .- mean(P.f[inx_c,iny_c]), colormap=cmap, colorrange=(-3,3)) 
+        hm2=heatmap!(ax2, xc, yc, P.f[inx_c,iny_c], colormap=cmap, colorrange=(-3,3)) 
         
         ax3 = Axis(fig[2,3],  xlabel=L"$x$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect()) # , title=L"$\dot{\phi}$"
         hm3=heatmap!(ax3, xc, yc, dΦdt[inx_c,iny_c]*100, colormap=cmap, colorrange=(-10.e-1, 10.e-1)) 
@@ -454,29 +472,25 @@ end
         probes.Pf[it]   = norm(P.f)
         probes.t[it]    = it*Δ.t
 
-        @show mean(P.t[inx_c,iny_c])
-        @show mean(P.f[inx_c,iny_c])
-
-        @show norm(P.t[inx_c,iny_c]) / sqrt(nc.x*nc.y)
-        @show norm(P.f[inx_c,iny_c]) / sqrt(nc.x*nc.y)
-
-        save("./examples/_TwoPhases/TwoPhasesPressure/PoroviscousReference_200x200_omega$(Ωl).jld2", "Ωl", Ωl, "Ωη", Ωη,"x", (c=xc, v=xv), "y", (c=yc, v=yv), "P", P, "dΦdt", dΦdt, "Φ", Φ, "τ", τ, "Vs", (x=Vxsc, y=Vysc), "Vf", (x=Vxfc, y=Vyfc), "τvis", τvis, "Ptvis", Ptvis, "Pfvis", Pfvis, "Peffvis", Peffvis)
+        # @show mean(P.t[phases.c.==2])
+        # @show mean(P.f[phases.c.==2])
 
         # save("./examples/_TwoPhases/TwoPhasesPressure/PoroviscousReference.jld2", "Ωl", Ωl, "Ωη", Ωη,"x", (c=xc, v=xv), "y", (c=yc, v=yv), "P", P, "dΦdt", dΦdt, "Φ", Φ, "τ", τ, "Vs", (x=Vxsc, y=Vysc), "Vf", (x=Vxfc, y=Vyfc), "τvis", τvis, "Ptvis", Ptvis, "Pfvis", Pfvis, "Peffvis", Peffvis)
         # save("./examples/_TwoPhases/TwoPhasesPressure/PoroviscousReference_endmember1.jld2", "Ωl", Ωl, "Ωη", Ωη,"x", (c=xc, v=xv), "y", (c=yc, v=yv), "P", P, "dΦdt", dΦdt, "Φ", Φ, "τ", τ, "Vs", (x=Vxsc, y=Vysc), "Vf", (x=Vxfc, y=Vyfc))
         # save("./examples/_TwoPhases/TwoPhasesPressure/PoroviscousReference_middle.jld2", "Ωl", Ωl, "Ωη", Ωη,"x", (c=xc, v=xv), "y", (c=yc, v=yv), "P", P, "dΦdt", dΦdt, "Φ", Φ, "τ", τ, "Vs", (x=Vxsc, y=Vysc), "Vf", (x=Vxfc, y=Vyfc))
         # save("./examples/_TwoPhases/TwoPhasesPressure/PoroviscousReference_endmember2.jld2", "Ωl", Ωl, "Ωη", Ωη,"x", (c=xc, v=xv), "y", (c=yc, v=yv), "P", P, "dΦdt", dΦdt, "Φ", Φ, "τ", τ, "Vs", (x=Vxsc, y=Vysc), "Vf", (x=Vxfc, y=Vyfc))        
+
+        save("./examples/_TwoPhases/TwoPhasesPressure/PoroviscousReference_hext_stronginc.jld2", "Ωl", Ωl, "Ωη", Ωη,"x", (c=xc, v=xv), "y", (c=yc, v=yv), "P", P, "dΦdt", dΦdt, "Φ", Φ, "τ", τ, "Vs", (x=Vxsc, y=Vysc), "Vf", (x=Vxfc, y=Vyfc), "τvis", τvis, "Ptvis", Ptvis, "Pfvis", Pfvis, "Peffvis", Peffvis)
     end
 
-    @show extrema(P.t[inx_c,iny_c]) 
-    @show extrema(P.f[inx_c,iny_c]) 
-    @show extrema(τ.II[inx_c,iny_c])
-
-
+    @show maximum(P.t[inx_c,iny_c])  - minimum(P.t[inx_c,iny_c]) 
+    @show maximum(P.f[inx_c,iny_c])  - minimum(P.f[inx_c,iny_c]) 
+    @show maximum(τ.II[inx_c,iny_c])
 
     #--------------------------------------------#
     
     @show Δt0
+
 
     return P, Δ, (c=xc, v=xv), (c=yc, v=yv)
 end
@@ -485,7 +499,7 @@ function Run()
 
     nc = (x=300, y=300)
 
-    nc = (x=200, y=200)
+    # nc = (x=200, y=200)
 
     # Mode 0   
     # Ωl = 10^(-1.7) # ---> δ/r
@@ -496,9 +510,7 @@ function Run()
     # Ωl = 0.045 # end member 1
     # Ωl = 0.55  # middle
     # Ωl = 2.5   # end member 2
-    # Ωl = 2.0   
-    # Ωl = 1.5
-    # Ωl = 1.0
+
     main(nc,  Ωl, Ωη);
     
 end

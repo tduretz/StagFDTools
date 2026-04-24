@@ -2,17 +2,52 @@ using StagFDTools, StagFDTools.TwoPhases
 using JLD2, ExtendableSparse, StaticArrays, CairoMakie, LinearAlgebra, SparseArrays, Printf, JLD2, ExactFieldSolutions, GridGeometryUtils
 import Statistics:mean
 using DifferentiationInterface
+using Enzyme  # AD backends you want to use
+
+function test_sol2( X; params=(η0=1.0, η1=1e-1, ξ0=1e30, ξ1=1e30, R=0.1, γ̇=1.0) )
+    η0, η1, ξ0, ξ1, R, γ̇ = params
+    β  = -2*η0*γ̇ 
+    κ0 = (9*ξ0 + 10*η0)/(9*ξ0 - 2*η0)
+    κ1 = (9*ξ1 + 10*η1)/(9*ξ1 - 2*η1)
+    a  = (η1-η0)*β*R^2/(η0+η1*κ0)
+    b = 0
+    c = a*R^2
+    d = 0
+    e = η1*(κ0+1)*β / (η0+η1*κ0)
+    z = X[1] + im*X[2]
+    r = sqrt(X[1]^2 + X[2]^2)
+    θ = atan(X[2], X[1])
+    if r > R
+        ϕ = a/z
+        ϕ′=-a/z^2
+        ψ = β*z + c/z^2
+        η = η0
+        κ = κ0
+        p = 2*a/r^2*cos(2*θ)
+    else
+        ϕ = .0
+        ϕ′= .0
+        ψ = e*z
+        η = η1
+        κ = κ1
+        p = .0 
+    end
+    W = (κ*ϕ - z*conj(ϕ′) - conj(ψ))/(2*η)
+    return (V=[real(W); imag(W)], p=p)
+end
+
 @views function main(nc)
 
     # Characteristic scales
     sc  = (σ=1e0, t=1e0, L=1e0)
 
     # Parameters of the analytical solution
-    params = (mm = 1.0, mc = 100, rc = 2.0, gr = 0.0, er = 1.0)
+    params = (mm = 1.0, mc = 1e-1, rc = 0.1, gr = 0.0, er = 1.0)
+    params2 = (η0=1.0, η1=1e-1, ξ0=1e0, ξ1=1e0, R=0.1, γ̇=1.0)
 
     # Time steps
     nt     = 1
-    Δt0    = 1/sc.t 
+    Δt0    = 1/sc.t  /1000000
 
     # Newton solver
     niter = 25
@@ -28,7 +63,7 @@ using DifferentiationInterface
     Pi   = 0.
     
     # Geometries
-    L    = (x=10/sc.L, y=10/sc.L)
+    L    = (x=1/sc.L, y=1/sc.L)
     x    = (min=-L.x/2, max=L.x/2)
     y    = (min=-L.y/2, max=L.y/2)
     inc  = Ellipse((0.0, 0.0), params.rc/sc.L, params.rc/sc.L; θ = 0.0)
@@ -42,16 +77,16 @@ using DifferentiationInterface
         oneway       = true,
         compressible = false,
         plasticity   = :off,
-        linearizeϕ   = true,    
+        linearizeϕ   = false,    
         single_phase = false,
-        conservative = false,
+        conservative = true,
         #        mat    inc  
         Φ0    = [1e-16   1e-16],
         n     = [1.0    1.0 ],
         m     = [0.0    0.0 ],
         n_CK  = [1.0    1.0 ],
         ηs0   = [params.mm  params.mc ]./sc.σ/sc.t, 
-        ηΦ0   = [1e30   1e30]./sc.σ/sc.t,
+        ηΦ0   = [1e0   1e0]./sc.σ/sc.t,
         G     = [1e30   1e30] .* kill_elasticity ./sc.σ, 
         ρs    = [2900   2900]/(sc.σ*sc.t^2/sc.L^2),
         ρf    = [2600   2600]/(sc.σ*sc.t^2/sc.L^2),
@@ -67,6 +102,8 @@ using DifferentiationInterface
         sinϕ  = [0.0    0.0 ],
         sinψ  = [0.0    0.0 ],
     )
+
+
 
     # For plasticity
     @. materials.cosϕ  = cosd(materials.ϕ)
@@ -244,13 +281,15 @@ using DifferentiationInterface
 
     for i=1:size(BC.Pf,1), j=1:size(BC.Pf,2)
         # coordinate transform
-        sol = Stokes2D_Schmid2003( [X.c_e.x[i], X.c_e.y[j]]; params )
+        # sol = Stokes2D_Schmid2003( [X.c_e.x[i], X.c_e.y[j]]; params )
+        sol = test_sol2([X.c_e.x[i], X.c_e.y[j]]; params=params2 )
         Pt_ana[i,j] = sol.p
     end
 
     for i=1:size(BC.Vx,1), j=2:size(BC.Vx,2)-1
         # coordinate transform
-        sol = Stokes2D_Schmid2003( [X.v_e.x[i], X.c_e.y[j-1]]; params )
+        # sol = Stokes2D_Schmid2003( [X.v_e.x[i], X.c_e.y[j-1]]; params )
+        sol = test_sol2([X.v_e.x[i], X.c_e.y[j-1]]; params=params2 )
         BC.Vx[i,j] =  sol.V[1]
         V.x[i,j] = sol.V[1]
         V_ana.x[i,j]  = sol.V[1]
@@ -258,7 +297,8 @@ using DifferentiationInterface
 
     for i=2:size(BC.Vy,1)-1, j=1:size(BC.Vy,2)
         # coordinate transform
-        sol = Stokes2D_Schmid2003( [X.c_e.x[i-1], X.v_e.y[j]]; params )
+        # sol = Stokes2D_Schmid2003( [X.c_e.x[i-1], X.v_e.y[j]]; params )
+        sol = test_sol2([X.c_e.x[i-1], X.v_e.y[j]]; params=params2 )
         BC.Vy[i,j] = V.y[i,j] = V_ana.y[i,j]  = sol.V[2]
     end
 
