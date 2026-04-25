@@ -261,8 +261,6 @@ function FluidContinuity(Vx, Vy, Pt_loc, Pf_loc, ΔPf_loc, old, phase, materials
         Φ       = SMatrix{3, 3, Float64}( Φ0 )
         dΦdt    = SMatrix{3, 3, Float64}( zeros(3,3) )
     else
-        # Φ       = SMatrix{3, 3, Float64}( Φ0 )
-        # dΦdt    = SMatrix{3, 3, Float64}( zeros(3,3) )
         Φ       = SMatrix{3, 3, Float64}( Porosity(Φ0[ii], Pt[ii], Pf[ii], Pt0[ii], Pf0[ii], KΦ[ii], ηΦ[ii], m[ii], 0., 0., Δt)[1] for ii in eachindex(Φ0) )
         dΦdt    = SMatrix{3, 3, Float64}( Porosity(Φ0[ii], Pt[ii], Pf[ii], Pt0[ii], Pf0[ii], KΦ[ii], ηΦ[ii], m[ii], 0., 0., Δt)[2] for ii in eachindex(Φ0) )
     end
