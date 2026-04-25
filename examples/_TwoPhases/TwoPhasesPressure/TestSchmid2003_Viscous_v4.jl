@@ -249,15 +249,15 @@ using Enzyme  # AD backends you want to use
     for i=1:size(BC.Vx,1), j=2:size(BC.Vx,2)-1
         # coordinate transform
         sol = Stokes2D_Schmid2003( [X.v_e.x[i], X.c_e.y[j-1]]; params )
+        V.x[i,j] = V_ana.x[i,j] = sol.V[1]
         BC.Vx[i,j] =  sol.V[1]
-        V.x[i,j] = sol.V[1]
-        V_ana.x[i,j]  = sol.V[1]
     end
 
     for i=2:size(BC.Vy,1)-1, j=1:size(BC.Vy,2)
         # coordinate transform
         sol = Stokes2D_Schmid2003( [X.c_e.x[i-1], X.v_e.y[j]]; params )
-        BC.Vy[i,j] = V.y[i,j] = V_ana.y[i,j]  = sol.V[2]
+        V.y[i,j] = V_ana.y[i,j] = sol.V[2]
+        BC.Vy[i,j] = sol.V[2]
     end
 
     #--------------------------------------------#
@@ -500,4 +500,4 @@ function Run(n)
 
 end
 
-Run(50)
+Run(200)
