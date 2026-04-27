@@ -1,4 +1,5 @@
-using CairoMakie, Enzyme, StaticArrays, ExtendableSparse, LinearAlgebra, Printf, JLD2
+using CairoMakie, StaticArrays, ExtendableSparse, LinearAlgebra, Printf, JLD2
+using StagFDTools: Duplicated, Const, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
 
 yr  = 365.25*24*3600
 cmy = 100*yr
@@ -145,7 +146,7 @@ function momentum!(M, r, Vys, Pt, Pf, ϕ0, BC, num, p, Δy, Δt)
         fill!(∂R∂Vy, 0.0)
         fill!(∂R∂Pt, 0.0)
         fill!(∂R∂Pf, 0.0)
-        autodiff(Enzyme.Reverse, momemtum_local, Duplicated(Vyˡ, ∂R∂Vy), Duplicated(Ptˡ, ∂R∂Pt), Duplicated(Pfˡ, ∂R∂Pf), Const(ϕ0ˡ), Const(tagˡ), Const(p), Const(Δy), Const(Δt))
+        forwarddiff_gradients!(momemtum_local, Duplicated(Vyˡ, ∂R∂Vy), Duplicated(Ptˡ, ∂R∂Pt), Duplicated(Pfˡ, ∂R∂Pf), Const(ϕ0ˡ), Const(tagˡ), Const(p), Const(Δy), Const(Δt))
 
         # Vys --- Vys
         connect = SVector{3}( num.Vys[jj]   for jj in j-1:j+1 )
@@ -196,7 +197,7 @@ function continuity!(M, r, Vys, Pt, Pf, ϕ0, BC, num, p, Δy, Δt)
         fill!(∂R∂Vy, 0.0)
         fill!(∂R∂Pt, 0.0)
         fill!(∂R∂Pf, 0.0)
-        autodiff(Enzyme.Reverse, continuity_local, Duplicated(Vyˡ, ∂R∂Vy), Duplicated(Ptˡ, ∂R∂Pt), Duplicated(Pfˡ, ∂R∂Pf), Const(ϕ0ˡ), Const(tagˡ), Const(p), Const(Δy), Const(Δt))
+        forwarddiff_gradients!(continuity_local, Duplicated(Vyˡ, ∂R∂Vy), Duplicated(Ptˡ, ∂R∂Pt), Duplicated(Pfˡ, ∂R∂Pf), Const(ϕ0ˡ), Const(tagˡ), Const(p), Const(Δy), Const(Δt))
 
         # Pt --- Vys
         connect = SVector{2}( num.Vys[jj]   for jj in j:j+1 )
@@ -229,7 +230,7 @@ function continuity!(M, r, Vys, Pt, Pf, ϕ0, BC, num, p, Δy, Δt)
         fill!(∂R∂Vy, 0.0)
         fill!(∂R∂Pt, 0.0)
         fill!(∂R∂Pf, 0.0)
-        autodiff(Enzyme.Reverse, fluid_continuity_local, Duplicated(Vyˡ, ∂R∂Vy), Duplicated(Ptˡ, ∂R∂Pt), Duplicated(Pfˡ, ∂R∂Pf), Const(ϕ0ˡ), Const(tagˡ), Const(p), Const(Δy), Const(Δt))
+        forwarddiff_gradients!(fluid_continuity_local, Duplicated(Vyˡ, ∂R∂Vy), Duplicated(Ptˡ, ∂R∂Pt), Duplicated(Pfˡ, ∂R∂Pf), Const(ϕ0ˡ), Const(tagˡ), Const(p), Const(Δy), Const(Δt))
 
         # Pt --- Vys
         connect = SVector{2}( num.Vys[jj]   for jj in j:j+1 )

@@ -401,7 +401,10 @@ function AssembleContinuity2D!(K, V, P, Pt0, ΔP, τ0, 𝐷, Jinv, phases, mater
         fill!(∂R∂Vx, 0e0)
         fill!(∂R∂Vy, 0e0)
         fill!(∂R∂P , 0e0)
-        autodiff(Enzyme.Reverse, Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂P), Const(Pt0[i,j]), Const(D), Const(Jinv_c), Const(phases.c[i,j]), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+        ∂Vx, ∂Vy, ∂P = ad_partial_gradients(Continuity, (Vx_loc, Vy_loc, P_loc), Pt0[i,j], D, Jinv_c, phases.c[i,j], materials, type_loc, bcv_loc, Δ)
+        ∂R∂Vx .= ∂Vx
+        ∂R∂Vy .= ∂Vy
+        ∂R∂P  .= ∂P
 
         K31 = K[3][1]
         K32 = K[3][2]
@@ -637,7 +640,10 @@ function AssembleMomentum2D_x!(K, V, P, P0, ΔP, τ0, 𝐷, Jinv, phases, materi
             fill!(∂R∂Vx, 0e0)
             fill!(∂R∂Vy, 0e0)
             fill!(∂R∂Pt, 0e0)
-            autodiff(Enzyme.Reverse, SMomentum_x_Generic, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ΔP_loc), Const(τ0_loc), Const(D), Const(Jinv_loc), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+            ∂Vx, ∂Vy, ∂Pt = ad_partial_gradients(SMomentum_x_Generic, (Vx_loc, Vy_loc, P_loc), ΔP_loc, τ0_loc, D, Jinv_loc, ph_loc, materials, type_loc, bcv_loc, Δ)
+            ∂R∂Vx .= ∂Vx
+            ∂R∂Vy .= ∂Vy
+            ∂R∂Pt .= ∂Pt
             
             num_Vx = @inbounds num.Vx[i,j]
             bounds_Vx = num_Vx > 0
@@ -848,7 +854,10 @@ function AssembleMomentum2D_y!(K, V, P, P0, ΔP, τ0, 𝐷, Jinv, phases, materi
             fill!(∂R∂Vx, 0.0)
             fill!(∂R∂Vy, 0.0)
             fill!(∂R∂Pt, 0.0)
-            autodiff(Enzyme.Reverse, SMomentum_y_Generic, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ΔP_loc), Const(τ0_loc), Const(D), Const(Jinv_loc), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+            ∂Vx, ∂Vy, ∂Pt = ad_partial_gradients(SMomentum_y_Generic, (Vx_loc, Vy_loc, P_loc), ΔP_loc, τ0_loc, D, Jinv_loc, ph_loc, materials, type_loc, bcv_loc, Δ)
+            ∂R∂Vx .= ∂Vx
+            ∂R∂Vy .= ∂Vy
+            ∂R∂Pt .= ∂Pt
             
             num_Vy = @inbounds num.Vy[i,j]
             bounds_Vy = num_Vy > 0
@@ -949,26 +958,23 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, ΔPt,
             ε̇vec = @SVector([ε̇xx[1]+τ0.xx[i,j]/(2*G[1]*Δ.t), ε̇yy[1]+τ0.yy[i,j]/(2*G[1]*Δ.t), ε̇̄xy[1]+τ̄xy0[1]/(2*G[1]*Δ.t), Pt[i,j]])
 
             # Tangent operator used for Newton Linearisation
-            jac  = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector!, ε̇vec, Const(materials), Const(phases.c[i,j]), Const(Δ))
-            
-            # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
-            @views 𝐷_ctl.c[i,j][:,1] .= jac.derivs[1][1][1]
-            @views 𝐷_ctl.c[i,j][:,2] .= jac.derivs[1][2][1]
-            @views 𝐷_ctl.c[i,j][:,3] .= jac.derivs[1][3][1]
-            @views 𝐷_ctl.c[i,j][:,4] .= jac.derivs[1][4][1]
+            stress_state, τ_vec, jac = ad_value_and_jacobian_first(StressVector!, ε̇vec, materials, phases.c[i,j], Δ)
+            _, η_local, λ̇_local, _ = stress_state
+
+            @views 𝐷_ctl.c[i,j] .= jac
 
             # Tangent operator used for Picard Linearisation
-            𝐷.c[i,j] .= diagm(2*jac.val[2] * _ones)
+            𝐷.c[i,j] .= diagm(2 * η_local * _ones)
             𝐷.c[i,j][4,4] = 1
 
             # Update stress
-            τ.xx[i,j]  = jac.val[1][1]
-            τ.yy[i,j]  = jac.val[1][2]
+            τ.xx[i,j]  = τ_vec[1]
+            τ.yy[i,j]  = τ_vec[2]
             ε̇.xx[i,j]  = ε̇xx[1]
             ε̇.yy[i,j]  = ε̇yy[1]
-            λ̇.c[i,j]   = jac.val[3]
-            η.c[i,j]   = jac.val[2]
-            ΔPt.c[i,j] = (jac.val[1][4] - Pt[i,j])
+            λ̇.c[i,j]   = λ̇_local
+            η.c[i,j]   = η_local
+            ΔPt.c[i,j] = (τ_vec[4] - Pt[i,j])
         end
     end
 
@@ -1012,23 +1018,20 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, ΔPt,
         ε̇vec  = @SVector([ε̇̄xx[1]+τ̄xx0[1]/(2*G[1]*Δ.t), ε̇̄yy[1]+τ̄yy0[1]/(2*G[1]*Δ.t), ε̇xy[1]+τ0.xy[i,j]/(2*G[1]*Δ.t), P̄[1]])
         
         # Tangent operator used for Newton Linearisation
-        jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector!, ε̇vec, Const(materials), Const(phases.v[i,j]), Const(Δ))
+        stress_state, τ_vec, jac = ad_value_and_jacobian_first(StressVector!, ε̇vec, materials, phases.v[i,j], Δ)
+        _, η_local, λ̇_local, _ = stress_state
 
-        # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
-        @views 𝐷_ctl.v[i,j][:,1] .= jac.derivs[1][1][1]
-        @views 𝐷_ctl.v[i,j][:,2] .= jac.derivs[1][2][1]
-        @views 𝐷_ctl.v[i,j][:,3] .= jac.derivs[1][3][1]
-        @views 𝐷_ctl.v[i,j][:,4] .= jac.derivs[1][4][1]
+        @views 𝐷_ctl.v[i,j] .= jac
 
         # Tangent operator used for Picard Linearisation
-        𝐷.v[i,j] .= diagm(2*jac.val[2] * _ones)
+        𝐷.v[i,j] .= diagm(2 * η_local * _ones)
         𝐷.v[i,j][4,4] = 1
 
         # Update stress
-        τ.xy[i,j] = jac.val[1][3]
+        τ.xy[i,j] = τ_vec[3]
         ε̇.xy[i,j] = ε̇xy[1]
-        λ̇.v[i,j]  = jac.val[3]
-        η.v[i,j]  = jac.val[2]
+        λ̇.v[i,j]  = λ̇_local
+        η.v[i,j]  = η_local
         # τ.xy[i+1,j+1] = 2*jac.val[2]*(ε̇xy[1]+τ0.xy[i+1,j+1]/(2*G[1]*Δ.t))
     end
 end

@@ -1,7 +1,6 @@
 using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf, GridGeometryUtils
 import Statistics:mean
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
 using TimerOutputs, CairoMakie
 
 function line(p, K, Δt, η_ve, ψ, p1, t1)
@@ -44,6 +43,7 @@ end
 
     # Material parameters
     materials = ( 
+        g    = [0. 0.],
         compressible = true,
         # plasticity   = :tensile,
         # plasticity   = :DruckerPrager1,
@@ -51,7 +51,6 @@ end
         # plasticity   = :Hyperbolic,
         # plasticity   = :DruckerPrager,
         # plasticity   = :Kiss2023,
-        g    = [0. 0.],
         #      rock   gouge  salt 
         ρ    = [0.0    0.0    0.0 ],
         n    = [1.0    1.0    1.0 ],      # Power law exponent

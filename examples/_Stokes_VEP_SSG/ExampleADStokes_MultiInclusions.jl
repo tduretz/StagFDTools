@@ -1,8 +1,7 @@
-using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, GLMakie, LinearAlgebra, SparseArrays, Printf, JLD2
+using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, CairoMakie, LinearAlgebra, SparseArrays, Printf, JLD2
 using GridGeometryUtils
 import Statistics:mean
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
 using TimerOutputs
 
 @views function main(BC_template, D_template)
@@ -17,8 +16,10 @@ using TimerOutputs
 
     # Material parameters
     materials = ( 
+        g    = [0.0    0.0],
         compressible = false,
         plasticity   = :none,
+        ρ    = [1.0    1.0    1.0  ],
         n    = [1.0    1.0    1.0  ],
         η0   = [1e0    1e-3   1e+3 ], 
         G    = [1e6    1e6    1e6  ],

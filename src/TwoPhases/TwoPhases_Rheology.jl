@@ -157,13 +157,12 @@ function LocalRheology(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases
         tol = 1e-10
 
         for iter=1:10
-            J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase, x, Const(ηve), Const(Δ.t), Const(ε̇II_eff), Const(Pt), Const(Pf), Const(Φ), Const(Pt0), Const(Pf0), Const(Φ0), Const(ηΦ), Const(KΦ), Const(Ks), Const(Kf), Const(C), Const(cosϕ), Const(sinϕ), Const(sinψ), Const(ηvp), Const(materials.single_phase) )
-            # display(J.derivs[1])
-            x .-= J.derivs[1]\J.val
+            R, J = ad_value_and_jacobian(residual_two_phase, x, ηve, Δ.t, ε̇II_eff, Pt, Pf, Φ, Pt0, Pf0, Φ0, ηΦ, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, materials.single_phase)
+            x .-= J \ R
             if iter==1 
-                r0 = norm(J.val)
+                r0 = norm(R)
             end
-            r = norm(J.val)/r0
+            r = norm(R)/r0
 
             R = residual_two_phase( x, (ηve), (Δ.t), (ε̇II_eff), (Pt), (Pf), (Φ), (Pt0), (Pf0), (Φ0), (ηΦ), (KΦ), (Ks), (Kf), (C), (cosϕ), (sinϕ), (sinψ), (ηvp), (materials.single_phase))
 
@@ -237,13 +236,12 @@ function Pressures(div, Pt0, Pf0, Φ0, KΦ, Ks, Kf, ηΦ, Δt)
     tol = 1e-13
 
     for iter=1:10
-        J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase_div_pressure, x, Const(divVs), Const(divqD), Const(Pt0), Const(Pf0), Const(Φ0),  Const(KΦ), Const(Ks), Const(Kf), Const(ηΦ), Const(Δt))
-        # display(J.derivs[1])
-        x .-= J.derivs[1]\J.val
+        R, J = ad_value_and_jacobian(residual_two_phase_div_pressure, x, divVs, divqD, Pt0, Pf0, Φ0, KΦ, Ks, Kf, ηΦ, Δt)
+        x .-= J \ R
         if iter==1 
-            r0 = norm(J.val)
+            r0 = norm(R)
         end
-        r = norm(J.val)/r0
+        r = norm(R)/r0
         # @show iter, r
         if r<tol
             break
@@ -303,13 +301,12 @@ function LocalRheology_div(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, ph
         tol = 1e-10
 
         for iter=1:10
-            J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase_div, x, Const(ηve), Const(Δ.t), Const(ε̇II_eff), Const(divVs), Const(divqD), Const(Φ), Const(Pt0), Const(Pf0), Const(Φ0), Const(ηΦ), Const(KΦ), Const(Ks), Const(Kf), Const(C), Const(cosϕ), Const(sinϕ), Const(sinψ), Const(ηvp), Const(materials.single_phase) )
-            # display(J.derivs[1])
-            x .-= J.derivs[1]\J.val
+            R, J = ad_value_and_jacobian(residual_two_phase_div, x, ηve, Δ.t, ε̇II_eff, divVs, divqD, Φ, Pt0, Pf0, Φ0, ηΦ, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, materials.single_phase)
+            x .-= J \ R
             if iter==1 
-                r0 = norm(J.val)
+                r0 = norm(R)
             end
-            r = norm(J.val)/r0
+            r = norm(R)/r0
 
             R = residual_two_phase( x, (ηve), (Δ.t), (ε̇II_eff), (Pt), (Pf), (Φ), (Pt0), (Pf0), (Φ0), (ηΦ), (KΦ), (Ks), (Kf), (C), (cosϕ), (sinϕ), (sinψ), (ηvp), (materials.single_phase))
 
@@ -414,14 +411,10 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
         ##################################
 
         # Tangent operator used for Newton Linearisation
-        jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector!, ε̇vec, Const(Dkk[1]), Const(divqD), Const(P0.t[i,j]), Const(P0.f[i,j]), Const(Φ0.c[i,j]), Const(τ0_loc), Const(materials), Const(phases.c[i,j]), Const(Δ))
-        
-        # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
-        @views 𝐷_ctl.c[i,j][:,1] .= jac.derivs[1][1][1]
-        @views 𝐷_ctl.c[i,j][:,2] .= jac.derivs[1][2][1]
-        @views 𝐷_ctl.c[i,j][:,3] .= jac.derivs[1][3][1]
-        @views 𝐷_ctl.c[i,j][:,4] .= jac.derivs[1][4][1]
-        @views 𝐷_ctl.c[i,j][:,5] .= jac.derivs[1][5][1]
+        stress_state, τ_vec, jac = ad_value_and_jacobian_first(StressVector!, ε̇vec, Dkk[1], divqD, P0.t[i,j], P0.f[i,j], Φ0.c[i,j], τ0_loc, materials, phases.c[i,j], Δ)
+        _, η_local, λ̇_local, τII_local, Φ_local, f_local = stress_state
+
+        @views 𝐷_ctl.c[i,j] .= jac
 
         ##################################
 
@@ -431,19 +424,14 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
         Kf      = materials.Kf[phases.c[i,j]]
         ηΦ      = materials.ηΦ0[phases.c[i,j]]
         x = @SVector[Dkk[1], divqD]
-        J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, Pressures, x, Const(P0.t[i,j]), Const(P0.f[i,j]), Const(Φ0.c[i,j]), Const(KΦ), Const(Ks), Const(Kf), Const(ηΦ), Const(Δ.t))
-        Jp =  J.derivs[1]
+        Jp = ad_jacobian(Pressures, x, P0.t[i,j], P0.f[i,j], Φ0.c[i,j], KΦ, Ks, Kf, ηΦ, Δ.t)
 
         @views C[4:5,4:5] .=  inv(Jp[1:2,1:2])
 
         ε̇vec   = @SVector([ε̇xx[1]+τ0.xx[i,j]/(2*G[1]*Δ.t), ε̇yy[1]+τ0.yy[i,j]/(2*G[1]*Δ.t), ε̇̄xy[1]+τ̄xy0[1]/(2*G[1]*Δ.t), Dkk[1], divqD])
-        jac2   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_div!, ε̇vec, Const(Dkk[1]), Const(divqD), Const(P0.t[i,j]), Const(P0.f[i,j]), Const(Φ0.c[i,j]), Const(τ0_loc), Const(materials), Const(phases.c[i,j]), Const(Δ))
+        _, _, jac2 = ad_value_and_jacobian_first(StressVector_div!, ε̇vec, Dkk[1], divqD, P0.t[i,j], P0.f[i,j], Φ0.c[i,j], τ0_loc, materials, phases.c[i,j], Δ)
 
-        @views D_test[:,1] .= jac2.derivs[1][1][1]
-        @views D_test[:,2] .= jac2.derivs[1][2][1]
-        @views D_test[:,3] .= jac2.derivs[1][3][1]
-        @views D_test[:,4] .= jac2.derivs[1][4][1]
-        @views D_test[:,5] .= jac2.derivs[1][5][1]
+        @views D_test .= jac2
 
         𝐷_ctl.c[i,j] .= D_test * C
 
@@ -462,25 +450,25 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
         ##################################
 
         # Tangent operator used for Picard Linearisation
-        𝐷.c[i,j] .= diagm(2*jac.val[2] * _ones)
+        𝐷.c[i,j] .= diagm(2 * η_local * _ones)
         𝐷.c[i,j][4,4] = 1
         𝐷.c[i,j][5,5] = 1
 
         ##################################
 
         # Update stress
-        τ.xx[i,j] = jac.val[1][1]
-        τ.yy[i,j] = jac.val[1][2]
-        τ.II[i,j] = jac.val[4]
-        τ.f[i,j]  = jac.val[6]
+        τ.xx[i,j] = τ_vec[1]
+        τ.yy[i,j] = τ_vec[2]
+        τ.II[i,j] = τII_local
+        τ.f[i,j]  = f_local
         ε̇.xx[i,j] = ε̇xx[1]
         ε̇.yy[i,j] = ε̇yy[1]
         ε̇.II[i,j] = invII( @SVector([ε̇xx[1], ε̇yy[1], ε̇̄xy[1]]) )
-        λ̇.c[i,j]  = jac.val[3]
-        Φ.c[i,j]  = jac.val[5]
-        η.c[i,j]  = jac.val[2]
-        ΔP.t[i,j] = jac.val[1][4] - P.t[i,j]
-        ΔP.f[i,j] = jac.val[1][5] - P.f[i,j]
+        λ̇.c[i,j]  = λ̇_local
+        Φ.c[i,j]  = Φ_local
+        η.c[i,j]  = η_local
+        ΔP.t[i,j] = τ_vec[4] - P.t[i,j]
+        ΔP.f[i,j] = τ_vec[5] - P.f[i,j]
     end
 
     # Loop over vertices
@@ -543,14 +531,10 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
         ##################################
 
         # Tangent operator used for Newton Linearisation
-        jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector!, ε̇vec, Const(D̄kk[1]), Const(divqD̄), Const(P̄t0[1]), Const(P̄f0[1]), Const(ϕ̄0[1]), Const(τ0_loc), Const(materials), Const(phases.v[i,j]), Const(Δ))
+        stress_state, τ_vec, jac = ad_value_and_jacobian_first(StressVector!, ε̇vec, D̄kk[1], divqD̄, P̄t0[1], P̄f0[1], ϕ̄0[1], τ0_loc, materials, phases.v[i,j], Δ)
+        _, η_local, λ̇_local, _, _, _ = stress_state
 
-        # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
-        @views 𝐷_ctl.v[i,j][:,1] .= jac.derivs[1][1][1]
-        @views 𝐷_ctl.v[i,j][:,2] .= jac.derivs[1][2][1]
-        @views 𝐷_ctl.v[i,j][:,3] .= jac.derivs[1][3][1]
-        @views 𝐷_ctl.v[i,j][:,4] .= jac.derivs[1][4][1]
-        @views 𝐷_ctl.v[i,j][:,5] .= jac.derivs[1][5][1]
+        @views 𝐷_ctl.v[i,j] .= jac
 
         ##################################
 
@@ -560,19 +544,14 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
         Kf      = materials.Kf[phases.v[i,j]]
         ηΦ      = materials.ηΦ0[phases.v[i,j]]
         x = @SVector[D̄kk[1], divqD̄]
-        J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, Pressures, x, Const(P̄t0[1]), Const(P̄f0[1]), Const(ϕ̄0[1]), Const(KΦ), Const(Ks), Const(Kf), Const(ηΦ), Const(Δ.t))
-        Jp =  J.derivs[1]
+        Jp = ad_jacobian(Pressures, x, P̄t0[1], P̄f0[1], ϕ̄0[1], KΦ, Ks, Kf, ηΦ, Δ.t)
 
         @views C[4:5,4:5] .=  inv(Jp[1:2,1:2])
 
         ε̇vec  = @SVector([ε̇̄xx[1]+τ̄xx0[1]/(2*G[1]*Δ.t), ε̇̄yy[1]+τ̄yy0[1]/(2*G[1]*Δ.t), ε̇xy[1]+τ0.xy[i,j]/(2*G[1]*Δ.t), D̄kk[1], divqD̄])
-        jac2   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_div!, ε̇vec, Const(D̄kk[1]), Const(divqD̄), Const(P̄t0[1]), Const(P̄f0[1]), Const(ϕ̄0[1]), Const(τ0_loc), Const(materials), Const(phases.v[i,j]), Const(Δ))
+        _, _, jac2 = ad_value_and_jacobian_first(StressVector_div!, ε̇vec, D̄kk[1], divqD̄, P̄t0[1], P̄f0[1], ϕ̄0[1], τ0_loc, materials, phases.v[i,j], Δ)
 
-        @views D_test[:,1] .= jac2.derivs[1][1][1]
-        @views D_test[:,2] .= jac2.derivs[1][2][1]
-        @views D_test[:,3] .= jac2.derivs[1][3][1]
-        @views D_test[:,4] .= jac2.derivs[1][4][1]
-        @views D_test[:,5] .= jac2.derivs[1][5][1]
+        @views D_test .= jac2
 
         # Derr = (𝐷_ctl.v[i,j] .- D_test * C)
         # if norm(Derr)>1e-10
@@ -587,14 +566,14 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
         ##################################
 
         # Tangent operator used for Picard Linearisation
-        𝐷.v[i,j] .= diagm(2*jac.val[2] * _ones)
+        𝐷.v[i,j] .= diagm(2 * η_local * _ones)
         𝐷.v[i,j][4,4] = 1
         𝐷.v[i,j][5,5] = 1
 
         # Update stress
-        τ.xy[i,j] = jac.val[1][3]
+        τ.xy[i,j] = τ_vec[3]
         ε̇.xy[i,j] = ε̇xy[1]
-        λ̇.v[i,j]  = jac.val[3]
-        η.v[i,j]  = jac.val[2]
+        λ̇.v[i,j]  = λ̇_local
+        η.v[i,j]  = η_local
     end
 end

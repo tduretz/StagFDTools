@@ -144,8 +144,8 @@ import Statistics:mean
     V   = (x=zeros(size_x...), y=zeros(size_y...))
     Vi  = (x=zeros(size_x...), y=zeros(size_y...))
     η   = (c  =  ones(size_c...), v  =  ones(size_v...) )
-    Φ   = (c=zeros(size_c...), v=zeros(size_v...) )
-    Φ0  = (c=zeros(size_c...), v=zeros(size_v...) )
+    Φ   = (c=materials.Φ0[1]*ones(size_c...), v=materials.Φ0[1]*ones(size_v...) )
+    Φ0  = (c=materials.Φ0[1]*ones(size_c...), v=materials.Φ0[1]*ones(size_v...) )
     εp  = zeros(size_c...)
     ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     τ0      = (xx = ones(size_c...), yy = ones(size_c...), xy = zeros(size_v...) )
@@ -176,9 +176,9 @@ import Statistics:mean
     P.t[inx_c, iny_c ]  .= 0.                 
     UpdateSolution!(V, P, dx, number, type, nc)
 
-    Φ.c .=  materials.Φ0[1]
-    for i in inx_c, j in iny_c   # loop on inner centroids
-        𝐱 = @SVector([X.c.x[i-1], X.c.y[j-1]])
+    for I in CartesianIndices(Φ.c)   # loop on all centroids !
+        i, j = I[1], I[2]
+        𝐱 = @SVector([X.c_e.x[i], X.c_e.y[j]])
         phases.c[i, j] = 1
         if  inside(𝐱, inc)
             phases.c[i, j] = 2
@@ -342,6 +342,14 @@ import Statistics:mean
             AssembleMomentum2D_y!(M, V, P, P0, ΔP, τ0, Φ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
             AssembleContinuity2D!(M, V, P, (P0, Φ0, ρ0), phases, materials, number, pattern, type, BC, nc, Δ)
             AssembleFluidContinuity2D!(M, V, P, ΔP, (P0, Φ0, ρ0), phases, materials, number, pattern, type, BC, nc, Δ)
+
+            @show extrema(M.Vx.Vx)
+            @show extrema(M.Vx.Pt)
+            @show extrema(M.Vx.Pf)
+            @show extrema(M.Pt.Pt)
+            @show extrema(M.Pt.Pf)
+            @show extrema(M.Pf.Pf)
+
 
             # Two-phases operator as block matrix
             𝑀 = [

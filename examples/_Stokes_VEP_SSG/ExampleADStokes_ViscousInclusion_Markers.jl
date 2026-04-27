@@ -1,7 +1,6 @@
 using StagFDTools, StagFDTools.StokesJustPIC, StagFDTools.Rheology, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
 using TimerOutputs
 using GridGeometryUtils
 
@@ -18,10 +17,12 @@ using GridGeometryUtils
     D_BC   = D_template
 
     # Material parameters
-    materials = ( 
+    materials = (
+        g     = [0.0   0.0],
         compressible = false,
         plasticity   = :none,
         phase_avg    = :arithmetic,
+        ρ    = [1.0    1.0  ],
         n    = [1.0    1.0  ],
         η0   = [1e0    1e5  ], 
         G    = [1e6    1e6  ],

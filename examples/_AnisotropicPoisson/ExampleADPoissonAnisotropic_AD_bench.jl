@@ -1,7 +1,7 @@
 using StagFDTools, ExtendableSparse, StaticArrays, LinearAlgebra, Statistics
 using TimerOutputs
 using DifferentiationInterface
-import ForwardDiff, Enzyme, ReverseDiff, Zygote, FastDifferentiation  # AD backends you want to use 
+import ForwardDiff, ReverseDiff, Zygote, FastDifferentiation  # AD backends you want to use 
 
 # const fns = AutoEnzyme, AutoForwardDiff,  AutoReverseDiff, AutoZygote, AutoFastDifferentiation
 const fns = AutoForwardDiff,  AutoReverseDiff, AutoZygote, AutoFastDifferentiation

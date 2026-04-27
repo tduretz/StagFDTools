@@ -22,18 +22,17 @@ function Porosity(Φ0, Pt, Pf, Pt0, Pf0, KΦ, ηΦ0, m, λ̇, sinψ, Δt)
     Φ        = Φ0  + dΦdt * Δt
     r0       = 1.0
     for iter=1:2
-        J     = Enzyme.gradient(Enzyme.ForwardWithPrimal, PorosityResidual, Φ, Const(Φ0), Const(Pt), Const(Pf), Const(Pt0), Const(Pf0), Const(KΦ), Const(ηΦ0), Const(m), Const(λ̇), Const(sinψ), Const(Δt) )
-        r     = J.val[1]
+        r, dresdΦ = ad_value_and_derivative(PorosityResidual, Φ, Φ0, Pt, Pf, Pt0, Pf0, KΦ, ηΦ0, m, λ̇, sinψ, Δt)
         if iter==1 r0 = abs(r) + 1e-10 end
         # @show iter, abs(r), abs(r)/r0
         # if min(abs(r), abs(r)/r0 ) < 1e-10 break end
-        Φ    -=  J.derivs[1] \ J.val[1]
+        Φ    -=  r / dresdΦ
     end
     dΦdt, ηΦ = PorosityRate(Φ, Pt, Pf, Pt0, Pf0, KΦ, ηΦ0, m, λ̇, sinψ, Δt)
     return Φ, dΦdt, ηΦ 
 end
 
-function ΔP_Trial(x, Pt_trial, Pf_trial, Φ, divVs, divqD, λ̇, Pt0, Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, sinψ, Δt )
+function ΔP_Trial(x, Pt, Pf, divVs, divqD, λ̇, Pt0, Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, sinψ, Δt )
 
     Pt, Pf = x[1], x[2]
 
@@ -61,16 +60,16 @@ function ΔP_Trial(x, Pt_trial, Pf_trial, Φ, divVs, divqD, λ̇, Pt0, Pf0, Φ0,
     ]
 end
 
-function ΔP(Pt_trial, Pf_trial, Φ_trial, divVs, divqD, λ̇, Pt0, Pf0, Φ0, ηΦ,  KΦ, Ks, Kf, sinψ, Δt)
+function ΔP(Pt_trial, Pf_trial, divVs, divqD, λ̇, Pt0, Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, sinψ, Δt)
 
     x   = @SVector[0.0, 0.0]
     r0  = 1.0
     tol = 1e-13
 
     for iter=1:10
-        J  = Enzyme.jacobian(Enzyme.ForwardWithPrimal,  ΔP_Trial, x, Const(Pt_trial), Const(Pf_trial), Const(Φ_trial), Const(0*divVs), Const(0*divqD), Const(λ̇), Const(0*Pt0), Const(0*Pf0), Const(Φ0), Const(ηΦ), Const(m),  Const(KΦ), Const(Ks), Const(Kf), Const(sinψ), Const(Δt))
-        x  = x .- J.derivs[1]\J.val
-        nr = mynorm(J.val)
+        R, J = ad_value_and_jacobian(ΔP_Trial, x, Pt_trial, Pf_trial, 0 * divVs, 0 * divqD, λ̇, 0 * Pt0, 0 * Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, sinψ, Δt)
+        x  = x .- J \ R
+        nr = mynorm(R)
         if iter==1 && nr>1e-17
             r0 = nr
         end
@@ -83,41 +82,51 @@ function ΔP(Pt_trial, Pf_trial, Φ_trial, divVs, divqD, λ̇, Pt0, Pf0, Φ0, η
 end
 
 
-function residual_two_phase_P(x, ηve, Δt, ε̇II_eff, Pt_trial, Pf_trial, divVs, divqD, Φ_trial, Pt0, Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, single_phase )
+# function residual_two_phase_P(x, ηve, Δt, ε̇II_eff, Pt_trial, Pf_trial, divVs, divqD, Φ_trial, Pt0, Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, single_phase )
      
-    τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
-    α1 = single_phase ? 0.0 : 1.0 
+#     τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
+    # α1 = single_phase ? 0.0 : 1.0 
 
-    # Pressure corrections
-    # ΔPt = KΦ .* sinψ .* Δt .* Φ_trial .* ηΦ .* λ̇ .* (-Kf + Ks) ./ (-Kf .* KΦ .* Δt .* Φ_trial + Kf .* KΦ .* Δt - Kf .* Φ_trial .* ηΦ + Kf .* ηΦ + Ks .* KΦ .* Δt .* Φ_trial + Ks .* Φ_trial .* ηΦ + KΦ .* Φ_trial .* ηΦ)
-    # ΔPf = Kf .* KΦ .* sinψ .* Δt .* ηΦ .* λ̇ ./ (Kf .* KΦ .* Δt .* Φ_trial - Kf .* KΦ .* Δt + Kf .* Φ_trial .* ηΦ - Kf .* ηΦ - Ks .* KΦ .* Δt .* Φ_trial - Ks .* Φ_trial .* ηΦ - KΦ .* Φ_trial .* ηΦ)
+    # # Pressure corrections
+    # # ΔPt = KΦ .* sinψ .* Δt .* Φ_trial .* ηΦ .* λ̇ .* (-Kf + Ks) ./ (-Kf .* KΦ .* Δt .* Φ_trial + Kf .* KΦ .* Δt - Kf .* Φ_trial .* ηΦ + Kf .* ηΦ + Ks .* KΦ .* Δt .* Φ_trial + Ks .* Φ_trial .* ηΦ + KΦ .* Φ_trial .* ηΦ)
+    # # ΔPf = Kf .* KΦ .* sinψ .* Δt .* ηΦ .* λ̇ ./ (Kf .* KΦ .* Δt .* Φ_trial - Kf .* KΦ .* Δt + Kf .* Φ_trial .* ηΦ - Kf .* ηΦ - Ks .* KΦ .* Δt .* Φ_trial - Ks .* Φ_trial .* ηΦ - KΦ .* Φ_trial .* ηΦ)
     
-    # Pressure corrections
-    ΔPt_1, ΔPf = ΔP(Pt_trial, Pf_trial, Φ_trial, divVs, divqD, λ̇, Pt0, Pf0, Φ0, ηΦ,  KΦ, Ks, Kf, sinψ, Δt)
+    # # Pressure corrections
+    # ΔPt_1, ΔPf = ΔP(Pt_trial, Pf_trial, divVs, divqD, λ̇, Pt0, Pf0, Φ0, ηΦ, m,  KΦ, Ks, Kf, sinψ, Δt)
 
-    # Check yield
+    # # Check yield
 
-    f = if single_phase
-            τII - C*cosϕ - Pt*sinϕ 
-        else
-            F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, α1)
-        end
+    # f = if single_phase
+    #         τII - C*cosϕ - Pt*sinϕ 
+    #     else
+    #         F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, α1)
+    #     end
 
-    ΔPt =   if single_phase
-        Ks .* sinψ .* Δt .* λ̇
-        else
-            ΔPt_1
-        end
+    # ΔPt = if single_phase
+    #     Ks .* sinψ .* Δt .* λ̇
+    #     else
+    #         ΔPt_1
+    #     end
 
+    # return @SVector [ 
+    #     ε̇II_eff   -  τII/(2*ηve) - λ̇/2,
+    #     Pt - (Pt_trial + ΔPt),
+    #     Pf - (Pf_trial + ΔPf),
+    #     f, 
+    # ]
+
+function residual_two_phase_P(x ::SVector{N, D}, ηve, Δt, ε̇II_eff, Pt_trial, Pf_trial, divVs, divqD, Φ_trial, Pt0, Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, single_phase ) where {N, D}
+    τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
+    # α1 = single_phase ? D(0.0) : D(1.0)
     return @SVector [ 
-        ε̇II_eff   -  τII/(2*ηve) - λ̇/2,
-        Pt - (Pt_trial + ΔPt),
-        Pf - (Pf_trial + ΔPf),
-        f, 
+        1.0,
+        1.0,
+        1.0,
+        1.0, 
     ]
 end
 
-function LocalRheology_P(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases, Δ)
+function LocalRheology_P(ε̇ ::SVector{N, D}, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases, Δ) where {N, D}
 
     # Effective strain rate & pressure
     ε̇II_eff  = invII(ε̇)
@@ -141,49 +150,57 @@ function LocalRheology_P(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phas
     sinψ = materials.sinψ[phases]    
     sinϕ = materials.sinϕ[phases] 
     cosϕ = materials.cosϕ[phases]  
+
+    # ηvep, λ̇, Pt, Pf, τII, Φ, f  = 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0
     
     α1 = materials.single_phase ? 0.0 : 1.0 
 
     # Initial guess
-    η         = (η0 .* ε̇II_eff.^(1 ./ n .- 1.0 ))[1]
+    η         = (η0 .* ε̇II_eff.^(1 ./ n .- 1.0 ))
     ηve       = inv(1/η + 1/(G*Δ.t))
-    τII = 2*ηve*ε̇II_eff
+    τII       = 2*ηve*ε̇II_eff
+    ηvep      = ηve
 
     # Trial porosity
-    Φ = (KΦ .* Δ.t .* (Pf - Pt) + KΦ .* Φ0 .* ηΦ + ηΦ .* (Pf - Pf0 - Pt + Pt0)) ./ (KΦ .* ηΦ)
+    # Φ = 0.1
+    # Φ = (KΦ * Δ.t * (Pf - Pt) + KΦ * Φ0 * ηΦ + ηΦ * (Pf - Pf0 - Pt + Pt0)) / (KΦ * ηΦ)
+    Φ = if materials.single_phase
+        zero(D)
+    else
+        Porosity(Φ0, Pt, Pf, Pt0, Pf0, KΦ, ηΦ, m, 0.0, 0.0, Δ.t)[1]
+    end
 
     # Check yield
-    λ̇  = 0.0
+    λ̇  = zero(D)
 
-    # # # f        = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, 0.0)
-    # # # if f>0
-    # # #     λ̇ = f / (KΦ .* Δ.t * sinϕ * sinψ + ηve + ηvp)
-    # # #     f  = τII - λ̇*ηve - C*cosϕ - (Pt + KΦ .* Δ.t * sinψ * λ̇)*sinϕ
-    # # #     # @show f, λ̇
-    # # #     # error()
+    # # # # f        = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, 0.0)
+    # # # # if f>0
+    # # # #     λ̇ = f / (KΦ .* Δ.t * sinϕ * sinψ + ηve + ηvp)
+    # # # #     f  = τII - λ̇*ηve - C*cosϕ - (Pt + KΦ .* Δ.t * sinψ * λ̇)*sinϕ
+    # # # #     # @show f, λ̇
+    # # # #     # error()
 
-    # # #     τII = τII - λ̇*ηve
-    # # #     Pt  = Pt + KΦ .* Δ.t * sinψ * λ̇
-    # # # end
+    # # # #     τII = τII - λ̇*ηve
+    # # # #     Pt  = Pt + KΦ .* Δ.t * sinψ * λ̇
+    # # # # end
 
-    #############################
+    # #############################
 
-    f  = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, α1)
+    f  = F(τII, Pt, Pf, Φ, C, cosϕ, sinϕ, λ̇, ηvp, α1)
 
-    x = @MVector ([τII, Pt, Pf, 0.0])
+    x = @SVector [τII, Pt, Pf, λ̇]
 
     nr   = 1.0
     nr0  = 1.0
     tol  = 1e-10
 
     # Return mapping
-    if f>-1e-13
+    if f > D(-1e-13)
         # This is the proper return mapping with plasticity
         for iter=1:10
-            J = Enzyme.jacobian(Enzyme.ForwardWithPrimal, residual_two_phase_P, x, Const(ηve), Const(Δ.t), Const(ε̇II_eff), Const(Pt_trial), Const(Pf_trial), Const(divVs), Const(divqD), Const(Φ_trial), Const(Pt0), Const(Pf0), Const(Φ0), Const(ηΦ), Const(m), Const(KΦ), Const(Ks), Const(Kf), Const(C), Const(cosϕ), Const(sinϕ), Const(sinψ), Const(ηvp), Const(materials.single_phase) )
-            # # display(J.derivs[1])
-            x .= x .- J.derivs[1]\J.val
-            nr = mynorm(J.val[:])
+            R, J = ad_value_and_jacobian(residual_two_phase_P, x, ηve, Δ.t, ε̇II_eff, Pt, Pf, divVs, divqD, Φ, Pt0, Pf0, Φ0, ηΦ, m, KΦ, Ks, Kf, C, cosϕ, sinϕ, sinψ, ηvp, materials.single_phase)
+            x -= J \ R
+            nr = mynorm(R)
             if iter==1 
                 nr0 = nr
             end
@@ -195,17 +212,17 @@ function LocalRheology_P(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phas
     τII, Pt, Pf, λ̇ = x[1], x[2], x[3], x[4]
 
     Φ = if materials.single_phase
-            0.0
-        else
-            Porosity(Φ0, Pt, Pf, Pt0, Pf0, KΦ, ηΦ, m, λ̇, sinψ, Δ.t)[1]
-        end
+        zero(D)
+    else
+        Porosity(Φ0, Pt, Pf, Pt0, Pf0, KΦ, ηΦ, m, λ̇, sinψ, Δ.t)[1]
+    end
 
     #############################
 
     # Effective viscosity
     ηvep = τII/(2*ε̇II_eff)
 
-    f       = F(τII, Pt, Pf, 0.0, C, cosϕ, sinϕ, λ̇, ηvp, α1)
+    f       = F(τII, Pt, Pf, Φ, C, cosϕ, sinϕ, λ̇, ηvp, α1)
 
     return ηvep, λ̇, Pt, Pf, τII, Φ, f 
 end
@@ -221,6 +238,15 @@ function StressVector_P!(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phas
     return τ, η, λ̇, τII, Φ, f
 end
 
+function StressVector_P2!(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases, Δ) 
+    η, λ̇, Pt, Pf, τII, Φ, f = LocalRheology_P(ε̇, divVs, divqD, Pt0, Pf0, Φ0, τ0, materials, phases, Δ)
+    τ  = @SVector([2 * η * ε̇[1],
+                   2 * η * ε̇[2],
+                   2 * η * ε̇[3],
+                             Pt,
+                             Pf,])
+    return τ
+end
 
 function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
 
@@ -307,38 +333,34 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
         ##################################
 
         # Tangent operator used for Newton Linearisation
-        jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_P!, ε̇vec, Const(Dkk[1]), Const(divqD), Const(P0.t[i,j]), Const(P0.f[i,j]), Const(Φ0.c[i,j]), Const(τ0_loc), Const(materials), Const(phases.c[i,j]), Const(Δ))
-        
-        # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
-        @views 𝐷_ctl.c[i,j][:,1] .= jac.derivs[1][1][1]
-        @views 𝐷_ctl.c[i,j][:,2] .= jac.derivs[1][2][1]
-        @views 𝐷_ctl.c[i,j][:,3] .= jac.derivs[1][3][1]
-        @views 𝐷_ctl.c[i,j][:,4] .= jac.derivs[1][4][1]
-        @views 𝐷_ctl.c[i,j][:,5] .= jac.derivs[1][5][1]
+        τ_vec, jac = ad_value_and_jacobian(StressVector_P2!, ε̇vec, Dkk[1], divqD, P0.t[i,j], P0.f[i,j], Φ0.c[i,j], τ0_loc, materials, phases.c[i,j], Δ)
+        η_local, λ̇_local, τII_local, Φ_local, f_local = StagFDTools.TwoPhases.LocalRheology_P(ε̇vec, Dkk[1], divqD, P0.t[i,j], P0.f[i,j], Φ0.c[i,j], τ0_loc, materials, phases.c[i,j], Δ)
 
-        ##################################
+        @views 𝐷_ctl.c[i,j] .= jac
+
+        #################################
 
         # Tangent operator used for Picard Linearisation
-        𝐷.c[i,j] .= diagm(2*jac.val[2] * _ones)
+        𝐷.c[i,j] .= diagm(2 * η_local * _ones)
         𝐷.c[i,j][4,4] = 1
         𝐷.c[i,j][5,5] = 1
 
         ##################################
 
         # Update stress
-        τ.xx[i,j] = jac.val[1][1]
-        τ.yy[i,j] = jac.val[1][2]
-        τ.II[i,j] = jac.val[4]
-        τ.f[i,j]  = jac.val[6]
+        τ.xx[i,j] = τ_vec[1]
+        τ.yy[i,j] = τ_vec[2]
+        τ.II[i,j] = τII_local
+        τ.f[i,j]  = f_local
         ε̇.xx[i,j] = ε̇xx[1]
         ε̇.yy[i,j] = ε̇yy[1]
         ε̇.II[i,j] = invII( @SVector([ε̇xx[1], ε̇yy[1], ε̇̄xy[1]]) )
-        λ̇.c[i,j]  = jac.val[3]
-        Φ.c[i,j]  = jac.val[5]
-        η.c[i,j]  = jac.val[2]
+        λ̇.c[i,j]  = λ̇_local
+        Φ.c[i,j]  = Φ_local
+        η.c[i,j]  = η_local
         if  λ̇.c[i,j] > 0
-            ΔP.t[i,j] =  (jac.val[1][4] - P.t[i,j])
-            ΔP.f[i,j] =  (jac.val[1][5] - P.f[i,j])
+            ΔP.t[i,j] =  (τ_vec[4] - P.t[i,j])
+            ΔP.f[i,j] =  (τ_vec[5] - P.f[i,j])
         end
     end
 
@@ -450,45 +472,41 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, P, ΔP, P
         ##################################
 
         # Tangent operator used for Newton Linearisation
-        jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector_P!, ε̇vec, Const(D̄kk[1]), Const(divqD̄), Const(P̄t0[1]), Const(P̄f0[1]), Const(ϕ̄0[1]), Const(τ0_loc), Const(materials), Const(phases.v[i,j]), Const(Δ))
+        τ_vec, jac = ad_value_and_jacobian(StressVector_P2!, ε̇vec, D̄kk[1], divqD̄, P̄t0[1], P̄f0[1], ϕ̄0[1], τ0_loc, materials, phases.v[i,j], Δ)
+        _, η_local, λ̇_local, _, _, _= LocalRheology_P(ε̇vec, D̄kk[1], divqD̄, P̄t0[1], P̄f0[1], ϕ̄0[1], τ0_loc, materials, phases.v[i,j], Δ)
 
-        # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
-        @views 𝐷_ctl.v[i,j][:,1] .= jac.derivs[1][1][1]
-        @views 𝐷_ctl.v[i,j][:,2] .= jac.derivs[1][2][1]
-        @views 𝐷_ctl.v[i,j][:,3] .= jac.derivs[1][3][1]
-        @views 𝐷_ctl.v[i,j][:,4] .= jac.derivs[1][4][1]
-        @views 𝐷_ctl.v[i,j][:,5] .= jac.derivs[1][5][1]
+        @views 𝐷_ctl.v[i,j] .= jac
 
         ##################################
 
         # Tangent operator used for Picard Linearisation
-        𝐷.v[i,j] .= diagm(2*jac.val[2] * _ones)
+        𝐷.v[i,j] .= diagm(2 * η_local * _ones)
         𝐷.v[i,j][4,4] = 1
         𝐷.v[i,j][5,5] = 1
 
         # Update stress
-        τ.xy[i,j] = jac.val[1][3]
+        τ.xy[i,j] = τ_vec[3]
         ε̇.xy[i,j] = ε̇xy[1]
-        λ̇.v[i,j]  = jac.val[3]
-        η.v[i,j]  = jac.val[2]
+        λ̇.v[i,j]  = λ̇_local
+        η.v[i,j]  = η_local
     end
 
-    # # # Cheap copy edges
-    # # for j=2:size(ε̇.xy,2)-1 
-    # #     i = 2
-    # #     @views 𝐷_ctl.v[i,j] .= 𝐷_ctl.v[3,j]
-    # #     @views 𝐷.v[i,j]     .= 𝐷.v[3,j]
-    # #     i = size(ε̇.xy,1)-1
-    # #     @views 𝐷_ctl.v[i,j] .= 𝐷_ctl.v[end-2,j]
-    # #     @views 𝐷.v[i,j]     .= 𝐷.v[end-2,j]
-    # # end
+    # # Cheap copy edges
+    # for j=2:size(ε̇.xy,2)-1 
+    #     i = 2
+    #     @views 𝐷_ctl.v[i,j] .= 𝐷_ctl.v[3,j]
+    #     @views 𝐷.v[i,j]     .= 𝐷.v[3,j]
+    #     i = size(ε̇.xy,1)-1
+    #     @views 𝐷_ctl.v[i,j] .= 𝐷_ctl.v[end-2,j]
+    #     @views 𝐷.v[i,j]     .= 𝐷.v[end-2,j]
+    # end
 
-    # # for i=2:size(ε̇.xy,1)-1 
-    # #     j = 2
-    # #     @views 𝐷_ctl.v[i,j] .= 𝐷_ctl.v[i,3]
-    # #     @views 𝐷.v[i,j]     .= 𝐷.v[i,3]
-    # #     j = size(ε̇.xy,2)-1
-    # #     @views 𝐷_ctl.v[i,j] .= 𝐷_ctl.v[i,end-2]
-    # #     @views 𝐷.v[i,j]     .= 𝐷.v[i,end-2]
-    # # end
+    # for i=2:size(ε̇.xy,1)-1 
+    #     j = 2
+    #     @views 𝐷_ctl.v[i,j] .= 𝐷_ctl.v[i,3]
+    #     @views 𝐷.v[i,j]     .= 𝐷.v[i,3]
+    #     j = size(ε̇.xy,2)-1
+    #     @views 𝐷_ctl.v[i,j] .= 𝐷_ctl.v[i,end-2]
+    #     @views 𝐷.v[i,j]     .= 𝐷.v[i,end-2]
+    # end
 end

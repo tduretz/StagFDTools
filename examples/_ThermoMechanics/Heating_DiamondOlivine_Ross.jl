@@ -1,6 +1,6 @@
 using StagFDTools, StagFDTools.ThermoMechanics, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf, JLD2
 import Statistics:mean
-using Enzyme, GLMakie, GridGeometryUtils, MineralEoS
+using CairoMakie, GridGeometryUtils, MineralEoS
 
 hours = 3600
 

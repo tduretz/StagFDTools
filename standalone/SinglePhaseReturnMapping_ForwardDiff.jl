@@ -1,4 +1,4 @@
-using GLMakie, LinearAlgebra, ForwardDiff
+using CairoMakie, LinearAlgebra, ForwardDiff
 
 # Intends to implement constitutive updates as in RheologicalCalculator
 
