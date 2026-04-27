@@ -49,8 +49,8 @@ function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, Pf, ΔP, τ0, 𝐷, phases, mat
     τ̄0xy = av(τ0.xy)
 
     # Effective strain rate
-    Gc   = SVector{2, Float64}( materials.G[phases.c] )
-    Gv   = SVector{2, Float64}( materials.G[phases.v] )
+    Gc   = SVector{2}( materials.G[phases.c] )
+    Gv   = SVector{2}( materials.G[phases.v] )
     tmpc = @. inv(2 * Gc * Δ.t)
     tmpv = @. inv(2 * Gv * Δ.t)
     ϵ̇xx  = @. ε̇xx[:,2] + τ0.xx[:,2] * tmpc
@@ -62,15 +62,17 @@ function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, Pf, ΔP, τ0, 𝐷, phases, mat
 
     # Corrected pressure
     comp = materials.compressible
-    Ptc  = SVector{2, Float64}( @. Pt[:,2] + comp * ΔP[:] )
+    Ptc  = SVector{2}( @. Pt[:,2] + comp * ΔP[:] )
 
     # Stress
-    τxx = @MVector zeros(2)
-    τxy = @MVector zeros(2)
-    for i=1:2
-        τxx[i] = (𝐷.c[i][1,1] - 𝐷.c[i][4,1]) * ϵ̇xx[i] + (𝐷.c[i][1,2] - 𝐷.c[i][4,2]) * ϵ̇yy[i] + (𝐷.c[i][1,3] - 𝐷.c[i][4,3]) * ϵ̇̄xy[i] + (𝐷.c[i][1,4] + (1 - 𝐷.c[i][4,4])) * Pt[i,2] + 𝐷.c[i][1,5] * Pf[i,2]
-        τxy[i] = 𝐷.v[i][3,1]                 * ϵ̇̄xx[i] + 𝐷.v[i][3,2]                 * ϵ̇̄yy[i] + 𝐷.v[i][3,3]                  * ϵ̇xy[i] + 𝐷.v[i][3,4]                       * P̄t[i]  +  𝐷.v[i][3,5] * P̄f[i]
-    end
+    τxx = SVector{2}(
+        (𝐷.c[i][1,1] - 𝐷.c[i][4,1]) * ϵ̇xx[i] + (𝐷.c[i][1,2] - 𝐷.c[i][4,2]) * ϵ̇yy[i] + (𝐷.c[i][1,3] - 𝐷.c[i][4,3]) * ϵ̇̄xy[i] + (𝐷.c[i][1,4] + (1 - 𝐷.c[i][4,4])) * Pt[i,2] + 𝐷.c[i][1,5] * Pf[i,2]
+        for i in 1:2
+    )
+    τxy = SVector{2}(
+        𝐷.v[i][3,1] * ϵ̇̄xx[i] + 𝐷.v[i][3,2] * ϵ̇̄yy[i] + 𝐷.v[i][3,3] * ϵ̇xy[i] + 𝐷.v[i][3,4] * P̄t[i] + 𝐷.v[i][3,5] * P̄f[i]
+        for i in 1:2
+    )
 
     # Residual
     fx  = ( τxx[2]  - τxx[1] ) * invΔx
@@ -88,7 +90,7 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt_loc, Pf_loc, ΔP, Pt0, Pf0, Φ0,
     # BC
     Vx   = SetBCVx1(Vx_loc, type.x, bcv.x, Δ)
     Vy   = SetBCVy1(Vy_loc, type.y, bcv.y, Δ)
-    ρ0fg = SMatrix{1,2, Float64}( materials.ρf[phases.c] .* materials.g[2])
+    ρ0fg = SMatrix{1,2}( materials.ρf[phases.c] .* materials.g[2])
     Pt   = SetBCPt1(Pt_loc, type.pt, bcv.pt, Δ, ρ0fg)
     Pf   = SetBCPf1(Pf_loc, type.pf, bcv.pf, Δ, ρ0fg)
 
@@ -116,8 +118,8 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt_loc, Pf_loc, ΔP, Pt0, Pf0, Φ0,
     τ̄0xy = av(τ0.xy)
     
     # Effective strain rate
-    Gc   = SVector{2, Float64}( materials.G[phases.c])
-    Gv   = SVector{2, Float64}( materials.G[phases.v])
+    Gc   = SVector{2}( materials.G[phases.c])
+    Gv   = SVector{2}( materials.G[phases.v])
     tmpc = (2*Gc.*Δ.t)
     tmpv = (2*Gv.*Δ.t)
     ϵ̇xx  = @. ε̇xx[2,:] + τ0.xx[2,:] / tmpc
@@ -129,36 +131,38 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt_loc, Pf_loc, ΔP, Pt0, Pf0, Φ0,
 
     # Corrected pressure
     comp = materials.compressible
-    Ptc  = SVector{2, Float64}( @. Pt[2,:]  + comp * ΔP.t[:] )
-    Ptc0 = SVector{2, Float64}( @. Pt0[2,:] )
-    Pfc  = SVector{2, Float64}( @. Pf[2,:]  + comp * ΔP.f[:] )
-    Pfc0 = SVector{2, Float64}( @. Pf0[2,:] )
+    Ptc  = SVector{2}( @. Pt[2,:]  + comp * ΔP.t[:] )
+    Ptc0 = SVector{2}( @. Pt0[2,:] )
+    Pfc  = SVector{2}( @. Pf[2,:]  + comp * ΔP.f[:] )
+    Pfc0 = SVector{2}( @. Pf0[2,:] )
 
     # Porosity
-    ηΦ      = SVector{2, Float64}( materials.ηΦ0[phases.c])
-    KΦ      = SVector{2, Float64}( materials.KΦ[phases.c])
-    m       = SVector{2, Float64}( materials.m[phases.c])
+    ηΦ      = SVector{2}( materials.ηΦ0[phases.c])
+    KΦ      = SVector{2}( materials.KΦ[phases.c])
+    m       = SVector{2}( materials.m[phases.c])
 
     # THIS IF STATEMENT DOES NOT COMPILE WITH ENZYME
     # if materials.linearizeϕ == true
     #     Φ         = @. Φ0 
     # else 
-        Φ         = SVector{2, Float64}( Porosity(Φ0[ii], Ptc[ii], Pfc[ii], Ptc0[ii], Pfc0[ii], KΦ[ii], ηΦ[ii], m[ii], 0., 0., Δ.t)[1] for ii in eachindex(Φ0))
+        Φ         = SVector{2}( Porosity(Φ0[ii], Ptc[ii], Pfc[ii], Ptc0[ii], Pfc0[ii], KΦ[ii], ηΦ[ii], m[ii], 0., 0., Δ.t)[1] for ii in eachindex(Φ0))
     # end
 
     # Density
-    ρs   = SVector{2, Float64}( materials.ρs[phases.c])
-    ρf   = SVector{2, Float64}( materials.ρf[phases.c])
+    ρs   = SVector{2}( materials.ρs[phases.c])
+    ρf   = SVector{2}( materials.ρf[phases.c])
     ρt   = @. (1-Φ) * ρs + Φ * ρf
     ρg   = materials.g[2] * 0.5*(ρt[1] + ρt[2])
 
     # Stress
-    τyy = @MVector zeros(2)
-    τxy = @MVector zeros(2)
-    for i=1:2
-        τyy[i] = (𝐷.c[i][2,1] - 𝐷.c[i][4,1]) * ϵ̇xx[i] + (𝐷.c[i][2,2] - 𝐷.c[i][4,2]) * ϵ̇yy[i] + (𝐷.c[i][2,3] - 𝐷.c[i][4,3]) * ϵ̇̄xy[i] + (𝐷.c[i][2,4] + (1 - 𝐷.c[i][4,4])) * Pt[2,i] + 𝐷.c[i][2,5] * Pf[2,i]
-        τxy[i] = 𝐷.v[i][3,1]                 * ϵ̇̄xx[i] + 𝐷.v[i][3,2]                 * ϵ̇̄yy[i] + 𝐷.v[i][3,3]                  * ϵ̇xy[i] + 𝐷.v[i][3,4]                       * P̄t[i]   + 𝐷.v[i][3,5] * P̄f[i]
-    end
+    τyy = SVector{2}(
+        (𝐷.c[i][2,1] - 𝐷.c[i][4,1]) * ϵ̇xx[i] + (𝐷.c[i][2,2] - 𝐷.c[i][4,2]) * ϵ̇yy[i] + (𝐷.c[i][2,3] - 𝐷.c[i][4,3]) * ϵ̇̄xy[i] + (𝐷.c[i][2,4] + (1 - 𝐷.c[i][4,4])) * Pt[2,i] + 𝐷.c[i][2,5] * Pf[2,i]
+        for i in 1:2
+    )
+    τxy = SVector{2}(
+        𝐷.v[i][3,1] * ϵ̇̄xx[i] + 𝐷.v[i][3,2] * ϵ̇̄yy[i] + 𝐷.v[i][3,3] * ϵ̇xy[i] + 𝐷.v[i][3,4] * P̄t[i] + 𝐷.v[i][3,5] * P̄f[i]
+        for i in 1:2
+    )
 
     # Residual
     fy  = ( τyy[2]  -  τyy[1] ) * invΔy
@@ -181,32 +185,32 @@ function Continuity(Vx, Vy, Pt_loc, Pf_loc, old, phase, materials, type, bcv, Δ
     Ks      = materials.Ks[phase]
     
     # Density - currently explicit in time (= using old fluid density)
-    ρ0f  = SMatrix{3,3, Float64}( materials.ρf[phase])
-    ρfg  = SVector{2, Float64}(@. materials.g[2] * 0.5*(ρ0f[2,1:end-1] + ρ0f[2,2:end]) )
+    ρ0f  = SMatrix{3,3}( materials.ρf[phase])
+    ρfg  = SVector{2}(@. materials.g[2] * 0.5*(ρ0f[2,1:end-1] + ρ0f[2,2:end]) )
     Pf   = SetBCPf1(Pf_loc, type.pf, bcv.pf, Δ, ρfg)
     Pt   = SetBCPf1(Pt_loc, type.pt, bcv.pt, Δ, ρfg)
 
-    dPtdt   = SMatrix{3, 3, Float64}( @. (Pt - Pt0) / Δt )
-    dPfdt   = SMatrix{3, 3, Float64}( @. (Pf - Pf0) / Δt )
+    dPtdt   = SMatrix{3, 3}( @. (Pt - Pt0) / Δt )
+    dPfdt   = SMatrix{3, 3}( @. (Pf - Pf0) / Δt )
     
     # !!!!!!!!!!!!!!!!!!!!!!!!!!
     if materials.linearizeϕ ||  materials.single_phase
-        Φ       = SMatrix{3, 3, Float64}( Φ0 )
-        dΦdt    = SMatrix{3, 3, Float64}( zeros(3,3) )
+        Φ       = SMatrix{3, 3}( Φ0 )
+        dΦdt    = SMatrix{3, 3}( zeros(3,3) )
     else
-        Φ       = SMatrix{3, 3, Float64}( Porosity(Φ0[ii], Pt[ii], Pf[ii], Pt0[ii], Pf0[ii], KΦ[ii], ηΦ[ii], m[ii], 0., 0., Δt)[1] for ii in eachindex(Φ0) )
-        dΦdt    = SMatrix{3, 3, Float64}( Porosity(Φ0[ii], Pt[ii], Pf[ii], Pt0[ii], Pf0[ii], KΦ[ii], ηΦ[ii], m[ii], 0., 0., Δt)[2] for ii in eachindex(Φ0) )
+        Φ       = SMatrix{3, 3}( Porosity(Φ0[ii], Pt[ii], Pf[ii], Pt0[ii], Pf0[ii], KΦ[ii], ηΦ[ii], m[ii], 0., 0., Δt)[1] for ii in eachindex(Φ0) )
+        dΦdt    = SMatrix{3, 3}( Porosity(Φ0[ii], Pt[ii], Pf[ii], Pt0[ii], Pf0[ii], KΦ[ii], ηΦ[ii], m[ii], 0., 0., Δt)[2] for ii in eachindex(Φ0) )
     end
 
-    dPsdt   = SMatrix{3, 3, Float64}( @. dΦdt*(Pt - Pf*Φ)/(1-Φ)^2 + (dPtdt - Φ*dPfdt - Pf*dΦdt) / (1 - Φ) )
-    dlnρsdt = SMatrix{3, 3, Float64}( @. 1/Ks * ( dPsdt ) )
-    # dlnρsdt = SMatrix{3, 3, Float64}( @. (1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks) ) # approximation in Yarushina's paper
+    dPsdt   = SMatrix{3, 3}( @. dΦdt*(Pt - Pf*Φ)/(1-Φ)^2 + (dPtdt - Φ*dPfdt - Pf*dΦdt) / (1 - Φ) )
+    dlnρsdt = SMatrix{3, 3}( @. 1/Ks * ( dPsdt ) )
+    # dlnρsdt = SMatrix{3, 3}( @. (1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks) ) # approximation in Yarushina's paper
 
     # Single phase
-    # if materials.single_phase
-    #     dPsdt   = dPtdt 
-    #     dlnρsdt = dPsdt / Ks
-    # end
+    if materials.single_phase
+        dPsdt   = dPtdt 
+        dlnρsdt = dPsdt / Ks
+    end
 
     divVs   = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy 
     
@@ -218,18 +222,17 @@ function Continuity(Vx, Vy, Pt_loc, Pf_loc, old, phase, materials, type, bcv, Δ
             fp      = Pt[2,2] - Pf[2,2]
         else
             fp      = dlnρsdt[2,2] - dΦdt[2,2]/(1-Φ[2,2]) + divVs
-            
         end
     else
         # Solid mass / immobile solid mass: ∂ρim∂t  + ∇⋅(q) with q = ρim⋅Vs
-        ρim0   = SMatrix{3, 3, Float64}( @. (1-Φ0) * ρs0 )
-        # lnρs   = SMatrix{3, 3, Float64}( @. log(ρs0) + Δt*dlnρsdt)
-        # ρs     = SMatrix{3, 3, Float64}( @. exp(lnρs) )
-        ρs     = SMatrix{3, 3, Float64}( @. ρs0 + ρs0 * Δt*dlnρsdt)
-        ρim    = SMatrix{3, 3, Float64}( @. (1-Φ ) * ρs )
+        ρim0   = SMatrix{3, 3}( @. (1-Φ0) * ρs0 )
+        # lnρs   = SMatrix{3, 3}( @. log(ρs0) + Δt*dlnρsdt)
+        # ρs     = SMatrix{3, 3}( @. exp(lnρs) )
+        ρs     = SMatrix{3, 3}( @. ρs0 + ρs0 * Δt*dlnρsdt)
+        ρim    = SMatrix{3, 3}( @. (1-Φ ) * ρs )
         ∂ρim∂t = (ρim[2,2] - ρim0[2,2]) / Δt
-        qx     = SVector{2, Float64}( @. (ρim[1:end-1,2] .+  ρim[2:end,2])/2 .* Vx[:,2] ) # Brucite paper, Fowler (1985)
-        qy     = SVector{2, Float64}( @. (ρim[2,1:end-1] .+  ρim[2,2:end])/2 .* Vy[2,:] ) # Brucite paper, Fowler (1985)
+        qx     = SVector{2}( @. (ρim[1:end-1,2] .+  ρim[2:end,2])/2 .* Vx[:,2] ) # Brucite paper, Fowler (1985)
+        qy     = SVector{2}( @. (ρim[2,1:end-1] .+  ρim[2,2:end])/2 .* Vy[2,:] ) # Brucite paper, Fowler (1985)
         fp     = ∂ρim∂t  +  (qx[2] - qx[1]) * invΔx + (qy[2] - qy[1]) * invΔy
         # fp      = dlnρsdt[2,2] - dΦdt[2,2]/(1-Φ[2,2]) +   divVs
     end
@@ -251,19 +254,21 @@ function FluidContinuity(Vx, Vy, Pt_loc, Pf_loc, ΔPf_loc, old, phase, materials
     n       = materials.n_CK[phase] # Carman-Kozeny
 
     # Density - currently explicit in time (= using old fluid density)
-    ρ0f  = SMatrix{3,3, Float64}( materials.ρf[phase])
-    ρfg  = SVector{2, Float64}(@. materials.g[2] * 0.5*(ρ0f[2,1:end-1] + ρ0f[2,2:end]) )
+    ρ0f  = SMatrix{3,3}( materials.ρf[phase])
+    ρfg  = SVector{2}(@. materials.g[2] * 0.5*(ρ0f[2,1:end-1] + ρ0f[2,2:end]) )
     Pf   = SetBCPf1(Pf_loc, type.pf, bcv.pf, Δ, ρfg)
     Pt   = SetBCPf1(Pt_loc, type.pt, bcv.pt, Δ, ρfg)
 
-    dPtdt   = SMatrix{3,3, Float64}( (Pt .- Pt0) / Δt )
-    dPfdt   = SMatrix{3,3, Float64}( (Pf .- Pf0) / Δt )
+    dPtdt   = SMatrix{3,3}( (Pt .- Pt0) / Δt )
+    dPfdt   = SMatrix{3,3}( (Pf .- Pf0) / Δt )
     if materials.linearizeϕ ||  materials.single_phase
-        Φ       = SMatrix{3, 3, Float64}( Φ0 )
-        dΦdt    = SMatrix{3, 3, Float64}( zeros(3,3) )
+        Φ       = SMatrix{3, 3}( Φ0 )
+        dΦdt    = SMatrix{3, 3}( zeros(3,3) )
     else
-        Φ       = SMatrix{3, 3, Float64}( Porosity(Φ0[ii], Pt[ii], Pf[ii], Pt0[ii], Pf0[ii], KΦ[ii], ηΦ[ii], m[ii], 0., 0., Δt)[1] for ii in eachindex(Φ0) )
-        dΦdt    = SMatrix{3, 3, Float64}( Porosity(Φ0[ii], Pt[ii], Pf[ii], Pt0[ii], Pf0[ii], KΦ[ii], ηΦ[ii], m[ii], 0., 0., Δt)[2] for ii in eachindex(Φ0) )
+        # Φ       = SMatrix{3, 3}( Φ0 )
+        # dΦdt    = SMatrix{3, 3}( zeros(3,3) )
+        Φ       = SMatrix{3, 3}( Porosity(Φ0[ii], Pt[ii], Pf[ii], Pt0[ii], Pf0[ii], KΦ[ii], ηΦ[ii], m[ii], 0., 0., Δt)[1] for ii in eachindex(Φ0) )
+        dΦdt    = SMatrix{3, 3}( Porosity(Φ0[ii], Pt[ii], Pf[ii], Pt0[ii], Pf0[ii], KΦ[ii], ηΦ[ii], m[ii], 0., 0., Δt)[2] for ii in eachindex(Φ0) )
     end
 
     if Φ[1]<0 || Φ[2] <0 ||  Φ[3] <0
@@ -274,16 +279,16 @@ function FluidContinuity(Vx, Vy, Pt_loc, Pf_loc, ΔPf_loc, old, phase, materials
         @show Pf0
     end
     
-    dPsdt   = SMatrix{3, 3, Float64}( @. dΦdt*(Pt - Pf*Φ)/(1-Φ)^2 + (dPtdt - Φ*dPfdt - Pf*dΦdt) / (1 - Φ) )
-    dlnρsdt = SMatrix{3, 3, Float64}( @. 1/Ks * ( dPsdt ) )
+    dPsdt   = SMatrix{3, 3}( @. dΦdt*(Pt - Pf*Φ)/(1-Φ)^2 + (dPtdt - Φ*dPfdt - Pf*dΦdt) / (1 - Φ) )
+    dlnρsdt = SMatrix{3, 3}( @. 1/Ks * ( dPsdt ) )
     dlnρfdt = dPfdt[2,2] / Kf[2,2]
 
     # Interpolate porosity to velocity nodes
-    Φxⁿ = SVector{2, Float64}(@. (Φ[1:end-1,2].^n[1:end-1,2] + Φ[2:end,2].^n[2:end,2] )/2 )
-    Φyⁿ = SVector{2, Float64}(@. (Φ[2,1:end-1].^n[2,1:end-1] + Φ[2,2:end].^n[2,2:end] )/2 )
+    Φxⁿ = SVector{2}(@. (Φ[1:end-1,2].^n[1:end-1,2] + Φ[2:end,2].^n[2:end,2] )/2 )
+    Φyⁿ = SVector{2}(@. (Φ[2,1:end-1].^n[2,1:end-1] + Φ[2,2:end].^n[2,2:end] )/2 )
 
-    qx = SVector{2, Float64}(@. -kμ.xx * Φxⁿ * ((Pf[2:end,2] - Pf[1:end-1,2]) * invΔx      )  )
-    qy = SVector{2, Float64}(@. -kμ.yy * Φyⁿ * ((Pf[2,2:end] - Pf[2,1:end-1]) * invΔy - ρfg)  )
+    qx = SVector{2}(@. -kμ.xx * Φxⁿ * ((Pf[2:end,2] - Pf[1:end-1,2]) * invΔx      )  )
+    qy = SVector{2}(@. -kμ.yy * Φyⁿ * ((Pf[2,2:end] - Pf[2,1:end-1]) * invΔy - ρfg)  )
 
     divqD = ( (  qx[2] -   qx[1]) * invΔx + (  qy[2] -   qy[1]) * invΔy)
     divVs = ( (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy) 
@@ -296,25 +301,25 @@ function FluidContinuity(Vx, Vy, Pt_loc, Pf_loc, ΔPf_loc, old, phase, materials
         end
     else
         # Total mass: ∂ρt∂t + ∇⋅(q) with q = ρf⋅qD + ρt⋅qD⋅V
-        lnρs   = SMatrix{3, 3, Float64}( @. log(ρs0) + Δt*dlnρsdt)
-        ρs     = SMatrix{3, 3, Float64}( @. exp(lnρs) )
-        lnρf   = SMatrix{3, 3, Float64}( @. log(ρf0) + Δt*dlnρsdt)
-        ρf     = SMatrix{3, 3, Float64}( @. exp(lnρf) )
-        ρt     = SMatrix{3, 3, Float64}( @. (1-Φ ) * ρs  + Φ  * ρf  )
-        ρt0    = SMatrix{3, 3, Float64}( @. (1-Φ0 )* ρs0 + Φ0 * ρf0 )
+        lnρs   = SMatrix{3, 3}( @. log(ρs0) + Δt*dlnρsdt)
+        ρs     = SMatrix{3, 3}( @. exp(lnρs) )
+        lnρf   = SMatrix{3, 3}( @. log(ρf0) + Δt*dlnρsdt)
+        ρf     = SMatrix{3, 3}( @. exp(lnρf) )
+        ρt     = SMatrix{3, 3}( @. (1-Φ ) * ρs  + Φ  * ρf  )
+        ρt0    = SMatrix{3, 3}( @. (1-Φ0 )* ρs0 + Φ0 * ρf0 )
         
         ∂ρt∂t  = (ρt[2,2] - ρt0[2,2]) / Δt
-        ρfx    = SVector{2, Float64}( @. (ρf[1:end-1,2] + ρf[2:end,2])/2 )
-        ρfy    = SVector{2, Float64}( @. (ρf[2,1:end-1] + ρf[2,2:end])/2 )
-        ρtx    = SVector{2, Float64}( @. (ρt[1:end-1,2] + ρt[2:end,2])/2 )
-        ρty    = SVector{2, Float64}( @. (ρt[2,1:end-1] + ρt[2,2:end])/2 )
-        qρx    = SVector{2, Float64}( @. ρfx * qx +  ρtx * Vx[:,2] )     # Brucite paper, Fowler (1985)
-        qρy    = SVector{2, Float64}( @. ρfy * qy +  ρty * Vy[2,:] )     # Brucite paper, Fowler (1985)    
+        ρfx    = SVector{2}( @. (ρf[1:end-1,2] + ρf[2:end,2])/2 )
+        ρfy    = SVector{2}( @. (ρf[2,1:end-1] + ρf[2,2:end])/2 )
+        ρtx    = SVector{2}( @. (ρt[1:end-1,2] + ρt[2:end,2])/2 )
+        ρty    = SVector{2}( @. (ρt[2,1:end-1] + ρt[2,2:end])/2 )
+        qρx    = SVector{2}( @. ρfx * qx +  ρtx * Vx[:,2] )     # Brucite paper, Fowler (1985)
+        qρy    = SVector{2}( @. ρfy * qy +  ρty * Vy[2,:] )     # Brucite paper, Fowler (1985)    
         
         if materials.oneway
             ∂ρt∂t  = 0*(ρt[2,2] - ρt0[2,2]) / Δt
-            qρx    = SVector{2, Float64}( @. ρfx * qx +  0*ρtx * Vx[:,2] )     # Brucite paper, Fowler (1985)
-            qρy    = SVector{2, Float64}( @. ρfy * qy +  0*ρty * Vy[2,:] ) 
+            qρx    = SVector{2}( @. ρfx * qx +  0*ρtx * Vx[:,2] )     # Brucite paper, Fowler (1985)
+            qρy    = SVector{2}( @. ρfy * qy +  0*ρty * Vy[2,:] ) 
         end
         fp     = ∂ρt∂t  +  (qρx[2] - qρx[1]) * invΔx + (qρy[2] - qρy[1]) * invΔy 
     end
@@ -851,6 +856,176 @@ function ResidualPorosity2D!(R, V, P, P0, Φ, Φ0, phases, materials, number, ty
         end
     end
     return nothing
+end
+
+
+function SetBCPt1(Pt, type, bc, Δ, ρtg  )
+
+    MPt =  MMatrix(Pt)
+
+    # N/S
+    for ii in axes(type, 1)
+        # South
+        if type[ii,1] === :Dirichlet
+            MPt[ii,1] = fma(2, bc[ii,1], -Pt[ii,2])
+        elseif type[ii,1] === :Neumann
+            MPt[ii,1] = Pt[ii,2]
+        end
+
+        # North
+        if type[ii,end] === :Dirichlet
+            MPt[ii,end] = fma(2, bc[ii,end], -Pt[ii,end-1])
+        elseif type[ii,end] === :Dirichlet
+            MPt[ii,end] = Pt[ii,end-1]
+        end
+    end
+
+    # E/W
+    for jj in axes(type, 2)
+        # West
+        if type[1,jj] === :Dirichlet
+            MPt[1,jj] = fma(2, bc[1,jj], - Pt[2,jj])
+        elseif type[1,jj] === :Neumann
+            MPt[1,jj] = Pt[2,jj]
+        end
+
+        # East
+        if type[end,jj] === :Dirichlet
+            MPt[end,jj] = fma(2, bc[end,jj], - Pt[end-1,jj])
+        elseif type[end,jj] === :Neumann
+            MPt[end,jj] = Pt[end-1,jj]
+        end
+    end
+
+    return SMatrix(MPt)
+end
+
+function SetBCPf1(Pf, type, bc, Δ, ρfg  )
+
+    MPf =  MMatrix(Pf)
+
+    # N/S
+    for ii in axes(type, 1)
+        # South
+        if type[ii,1] === :Dirichlet
+            MPf[ii,1] = fma(2, bc[ii,1], -Pf[ii,2])
+
+            # @show  bc[ii,1]*1e6, Pf[ii,2]*1e6
+
+            # ϕS     = (ϕ[1] + ϕ[2])/2
+            # ρtg    = ((1-ϕS)*p.ρs + ϕS*p.ρl) * p.gy
+            # Pt_bot = (y_base-3Δ.y/2)*ρtg
+            # MPf[ii,1] = fma(2, Pt_bot, -Pf[ii,2])
+
+
+        elseif type[ii,1] === :Neumann 
+            MPf[ii,1] = fma(Δ.y, bc[ii,1], Pf[ii,2])
+        elseif type[ii,1] === :no_flux
+            MPf[ii,1] = Pf[ii,2] - ρfg[1]*Δ.y
+        elseif type[ii,1] === :periodic || type[ii,1] === :in || type[ii,1] === :constant
+            MPf[ii,1] = Pf[ii,1]
+        # else
+        #     MPf[ii,1] = 1.0
+        end
+
+        # North
+        if type[ii,end] === :Dirichlet
+            MPf[ii,end] = fma(2, bc[ii,end], -Pf[ii,end-1])
+        elseif type[ii,end] === :Neumann
+            MPf[ii,end] = fma(-Δ.y, bc[ii,end], Pf[ii,end-1])
+        elseif type[ii,end] === :no_flux
+            MPf[ii,end] = Pf[ii,end-1] + ρfg[end]*Δ.y
+        elseif type[ii,end] === :periodic || type[ii,end] === :in || type[ii,end] === :constant
+            MPf[ii,end] = Pf[ii,end]
+        # else
+        #     MPf[ii,end] = 1.0
+        end
+    end
+
+
+    # E/W
+    for jj in axes(type, 2)
+        # West
+        if type[1,jj] === :Dirichlet
+            MPf[1,jj] = fma(2, bc[1,jj], - Pf[2,jj])
+        elseif type[1,jj] === :Neumann
+            MPf[1,jj] = fma(Δ.x, bc[1,jj], Pf[2,jj])
+        elseif type[1,jj] === :periodic || type[1,jj] === :in || type[1,jj] === :constant
+            MPf[1,jj] = Pf[1,jj] 
+        # else
+        #     MPf[1,jj] =  1.0
+        end
+
+        # East
+        if type[end,jj] === :Dirichlet
+            MPf[end,jj] = fma(2, bc[end,jj], - Pf[end-1,jj])
+        elseif type[end,jj] === :Neumann
+            MPf[end,jj] = fma(-Δ.x, bc[end,jj], Pf[end-1,jj])
+        elseif type[end,jj] === :periodic || type[end,jj] === :in || type[end,jj] === :constant
+            MPf[end,jj] = Pf[end,jj] 
+        # else
+        #     MPf[end,jj] =  1.0
+        end
+    end
+
+    return SMatrix(MPf)
+end
+
+function SetBCVx1(Vx, typex, bcx, Δ)
+
+    MVx = MMatrix(Vx)
+    # N/S
+    for ii in axes(typex, 1)
+        if typex[ii,1] == :Dirichlet_tangent
+            MVx[ii,1] = fma(2, bcx[ii,1], -Vx[ii,2])
+        elseif typex[ii,1] == :Neumann_tangent
+            MVx[ii,1] = fma(Δ.y, bcx[ii,1], Vx[ii,2])
+        end
+
+        if typex[ii,end] == :Dirichlet_tangent
+            MVx[ii,end] = fma(2, bcx[ii,end], -Vx[ii,end-1])
+        elseif typex[ii,end] == :Neumann_tangent
+            MVx[ii,end] = fma(Δ.y, bcx[ii,end], Vx[ii,end-1])
+        end
+    end
+    # E/W
+    for jj in axes(typex, 2)
+        if typex[1,jj] == :Neumann_normal
+            MVx[1,jj] = fma(2, Δ.x*bcx[1,jj], Vx[2,jj])
+        end
+        if typex[end,jj] == :Neumann_normal
+            MVx[end,jj] = fma(2,-Δ.x*bcx[end,jj], Vx[end-1,jj])
+        end
+    end
+    return SMatrix(MVx)
+end
+
+function SetBCVy1(Vy, typey, bcy, Δ)
+    MVy = MMatrix(Vy)
+    # E/W
+    for jj in axes(typey, 2)
+        if typey[1,jj] == :Dirichlet_tangent
+            MVy[1,jj] = fma(2, bcy[1,jj], -Vy[2,jj])
+        elseif typey[1,jj] == :Neumann_tangent
+            MVy[1,jj] = fma(Δ.y, bcy[1,jj], Vy[2,jj])
+        end
+
+        if typey[end,jj] == :Dirichlet_tangent
+            MVy[end,jj] = fma(2, bcy[end,jj], -Vy[end-1,jj])
+        elseif typey[end,jj] == :Neumann_tangent
+            MVy[end,jj] = fma(Δ.y, bcy[end,jj], Vy[end-1,jj])
+        end
+    end
+    # N/S
+    for ii in axes(typey, 1)
+        if typey[ii,1] == :Neumann_normal
+            MVy[ii,1] = fma(2, Δ.y*bcy[ii,1], Vy[ii,2])
+        end
+        if typey[ii,end] == :Neumann_normal
+            MVy[ii,end] = fma(2,-0*Δ.y*bcy[ii,end], Vy[ii,end-1])
+        end
+    end
+    return SMatrix(MVy)
 end
 
 function Numbering!(N, type, nc)
