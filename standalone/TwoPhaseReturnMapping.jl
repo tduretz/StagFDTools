@@ -1,4 +1,4 @@
-using GLMakie, Enzyme, LinearAlgebra#, ForwardDiff
+using CairoMakie, Enzyme, LinearAlgebra#, ForwardDiff
 
 # Intends to implement constitutive updates as in RheologicalCalculator
 

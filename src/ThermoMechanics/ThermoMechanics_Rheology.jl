@@ -109,29 +109,25 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, T, P, ΔP
             ε̇vec  = @SVector([ε̇xx[1]+τ0.xx[i,j]/(2*G[1]*Δ.t), ε̇yy[1]+τ0.yy[i,j]/(2*G[1]*Δ.t), ε̇̄xy[1]+τ̄xy0[1]/(2*G[1]*Δ.t), P.t[i,j], T.c[i,j]])
 
             # Tangent operator used for Newton Linearisation
-            jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector!, ε̇vec, Const(materials), Const(phases.c[i,j]), Const(Δ))
-            
-            # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
-            @views 𝐷_ctl.c[i,j][:,1] .= jac.derivs[1][1][1]
-            @views 𝐷_ctl.c[i,j][:,2] .= jac.derivs[1][2][1]
-            @views 𝐷_ctl.c[i,j][:,3] .= jac.derivs[1][3][1]
-            @views 𝐷_ctl.c[i,j][:,4] .= jac.derivs[1][4][1]
-            @views 𝐷_ctl.c[i,j][:,5] .= jac.derivs[1][5][1]
+            stress_state, τ_vec, jac = ad_value_and_jacobian_first(StressVector!, ε̇vec, materials, phases.c[i,j], Δ)
+            _, η_local, λ̇_local, τII_local = stress_state
+
+            @views 𝐷_ctl.c[i,j] .= jac
 
             # Tangent operator used for Picard Linearisation
-            𝐷.c[i,j] .= diagm(2*jac.val[2] * _ones)
+            𝐷.c[i,j] .= diagm(2 * η_local * _ones)
             𝐷.c[i,j][4,4] = 1
             𝐷.c[i,j][5,5] = 1
 
             # Update stress
-            τ.xx[i,j] = jac.val[1][1]
-            τ.yy[i,j] = jac.val[1][2]
-            τ.II[i,j] = jac.val[4]
+            τ.xx[i,j] = τ_vec[1]
+            τ.yy[i,j] = τ_vec[2]
+            τ.II[i,j] = τII_local
             ε̇.xx[i,j] = ε̇xx[1]
             ε̇.yy[i,j] = ε̇yy[1]
-            λ̇.c[i,j]  = jac.val[3]
-            η.c[i,j]  = jac.val[2]
-            ΔP.t[i,j] = (jac.val[1][4] - P.t[i,j])
+            λ̇.c[i,j]  = λ̇_local
+            η.c[i,j]  = η_local
+            ΔP.t[i,j] = (τ_vec[4] - P.t[i,j])
         # end
     end
 
@@ -177,24 +173,20 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, T, P, ΔP
         ε̇vec  = @SVector([ε̇̄xx[1]+τ̄xx0[1]/(2*G[1]*Δ.t), ε̇̄yy[1]+τ̄yy0[1]/(2*G[1]*Δ.t), ε̇xy[1]+τ0.xy[i,j]/(2*G[1]*Δ.t), P̄t[1], T̄[1]])
         
         # Tangent operator used for Newton Linearisation
-        jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector!, ε̇vec, Const(materials), Const(phases.v[i,j]), Const(Δ))
+        stress_state, τ_vec, jac = ad_value_and_jacobian_first(StressVector!, ε̇vec, materials, phases.v[i,j], Δ)
+        _, η_local, λ̇_local, _ = stress_state
 
-        # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
-        @views 𝐷_ctl.v[i,j][:,1] .= jac.derivs[1][1][1]
-        @views 𝐷_ctl.v[i,j][:,2] .= jac.derivs[1][2][1]
-        @views 𝐷_ctl.v[i,j][:,3] .= jac.derivs[1][3][1]
-        @views 𝐷_ctl.v[i,j][:,4] .= jac.derivs[1][4][1]
-        @views 𝐷_ctl.v[i,j][:,5] .= jac.derivs[1][5][1]
+        @views 𝐷_ctl.v[i,j] .= jac
 
         # Tangent operator used for Picard Linearisation
-        𝐷.v[i,j] .= diagm(2*jac.val[2] * _ones)
+        𝐷.v[i,j] .= diagm(2 * η_local * _ones)
         𝐷.v[i,j][4,4] = 1
         𝐷.v[i,j][5,5] = 1
 
         # Update stress
-        τ.xy[i,j] = jac.val[1][3]
+        τ.xy[i,j] = τ_vec[3]
         ε̇.xy[i,j] = ε̇xy[1]
-        λ̇.v[i,j]  = jac.val[3]
-        η.v[i,j]  = jac.val[2]
+        λ̇.v[i,j]  = λ̇_local
+        η.v[i,j]  = η_local
     end
 end

@@ -1,7 +1,5 @@
 using StagFDTools, StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, CairoMakie, LinearAlgebra, SparseArrays, Printf, JLD2, MAT
 import Statistics:mean
-using Enzyme  # AD backends you want to use
-
 @views function main(nc)
 
     sc = (σ = 3e10, L = 1e3, t = 1e10)

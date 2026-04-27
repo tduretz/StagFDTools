@@ -1,8 +1,8 @@
 using StagFDTools, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays
 import Statistics:mean
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
-using GLMakie
+using StagFDTools: Duplicated, Const, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
+using CairoMakie
 
 struct NumberingV <: AbstractPattern
     Vx
@@ -391,8 +391,8 @@ function AssembleMomentum2D_x!(K, V, P, η, num, pattern, type, BC, nc, Δ)
             fill!(∂R∂Vy, zero(eltype(∂R∂Vy)))
             fill!(∂R∂Pt, zero(eltype(∂R∂Pt)))
 
-            autodiff(Enzyme.Reverse, Momentum_x_SA, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(η_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
-            # autodiff(Enzyme.Reverse, Momentum_x, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(η_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
+            forwarddiff_gradients!(Momentum_x_SA, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(η_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
+            # forwarddiff_gradients!(Momentum_x, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(η_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
             # Vx --- Vx
             Local = num.Vx[i-1:i+1,j-2:j+2] .* pattern[1][1]
             for jj in axes(Local,2), ii in axes(Local,1)
@@ -483,8 +483,8 @@ function AssembleMomentum2D_y!(K, V, P, η, num, pattern, type, BC, nc, Δ)
             fill!(∂R∂Vx, zero(eltype(∂R∂Vx)))
             fill!(∂R∂Vy, zero(eltype(∂R∂Vy)))
             fill!(∂R∂Pt, zero(eltype(∂R∂Pt)))
-            autodiff(Enzyme.Reverse, Momentum_y_SA, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(η_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
-            # autodiff(Enzyme.Reverse, Momentum_y, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(η_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
+            forwarddiff_gradients!(Momentum_y_SA, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(η_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
+            # forwarddiff_gradients!(Momentum_y, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(η_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
             # Vy --- Vx
             Local = num.Vx[i-2:i+1,j-1:j+2] .* pattern[2][1]
             for jj in axes(Local,2), ii in axes(Local,1)
@@ -570,7 +570,7 @@ function AssembleContinuity2D!(K, V, P, η, num, pattern, type, BC, nc, Δ)
         
         ∂R∂Vx .= 0.
         ∂R∂Vy .= 0.
-        autodiff(Enzyme.Reverse, Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Const(P[i,j]), Const(η_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
+        forwarddiff_gradients!(Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Const(P[i,j]), Const(η_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
 
         # Pt --- Vx
         Local = num.Vx[i:i+1,j:j+2] .* pattern[3][1]
@@ -610,7 +610,7 @@ function AssembleContinuity2D_SA!(K, V, P, η, num, pattern, type, BC, nc, Δ)
         
         fill!(∂R∂Vx, 0.0)
         fill!(∂R∂Vy, 0.0)
-        autodiff(Enzyme.Reverse, Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Const(P[i,j]), Const(η_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
+        forwarddiff_gradients!(Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Const(P[i,j]), Const(η_loc), Const(type_loc), Const(bcv_loc), Const(Δ))
 
         # Pt --- Vx
         Local = num.Vx[i:i+1,j:j+2] .* pattern[3][1]
@@ -825,8 +825,8 @@ let
     # #--------------------------------------------#
     # Kdiff = K - K'
     # dropzeros!(Kdiff)
-    # f = GLMakie.spy(rotr90(Kdiff))
-    # GLMakie.DataInspector(f)
+    # f = CairoMakie.spy(rotr90(Kdiff))
+    # CairoMakie.DataInspector(f)
     # display(f)
 end
 

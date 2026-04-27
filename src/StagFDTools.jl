@@ -6,7 +6,13 @@ module StagFDTools
 # struct GolchinMCC     <: AbstractYield end
 # export DruckerPrager1, Hyperbolic, GolchinMCC
 
-using StaticArrays, ExtendableSparse, StaticArrays, Printf, LinearAlgebra, Enzyme
+using StaticArrays, ExtendableSparse, StaticArrays, Printf, LinearAlgebra
+using DifferentiationInterface, ForwardDiff
+
+include("AD.jl")
+export ad_gradient, ad_value_and_gradient, ad_derivative, ad_value_and_derivative
+export ad_jacobian, ad_value_and_jacobian, ad_partial_gradients, ad_value_and_jacobian_first
+export Const, Duplicated, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
 
 include("operators.jl")
 export inn, inn_x, inn_y, av, avx, avy, harm, ∂x, ∂y, ∂x_inn, ∂y_inn, ∂kk
@@ -22,7 +28,7 @@ export DecoupledSolver
 #     export PhaseRatios, ...
 # end
 module Rheology
-    using StaticArrays, Enzyme, StagFDTools, LinearAlgebra
+    using StaticArrays, StagFDTools, LinearAlgebra
     include("Rheology.jl")
     export LocalRheology, StressVector!
     export LocalRheology_div, StressVector_div!
@@ -36,7 +42,7 @@ module Poisson
     export Fields, Ranges, Numbering!, SparsityPattern!
 end
 module Stokes
-    using LinearAlgebra, StaticArrays, ExtendableSparse, StaticArrays, Enzyme, StagFDTools, StagFDTools.Rheology
+    using LinearAlgebra, StaticArrays, ExtendableSparse, StaticArrays, StagFDTools, StagFDTools.Rheology
     include("Stokes.jl")
     export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx!, SetBCVy!, set_boundaries_template!, SetBCVx1, SetBCVy1
     export Continuity, SMomentum_x_Generic, SMomentum_y_Generic
@@ -47,7 +53,7 @@ module Stokes
 end
 
 module StokesJustPIC
-    using LinearAlgebra, StaticArrays, ExtendableSparse, StaticArrays, Enzyme, StagFDTools, StagFDTools.Rheology
+    using LinearAlgebra, StaticArrays, ExtendableSparse, StaticArrays, StagFDTools, StagFDTools.Rheology
     using JustPIC, JustPIC._2D
     import JustPIC.@index
     include("StokesJustPIC.jl")
@@ -57,10 +63,12 @@ module StokesJustPIC
     export AssembleContinuity2D!, AssembleMomentum2D_x!, AssembleMomentum2D_y!
     export TangentOperator!
     export LineSearch!
+    include("Particles.jl")
+    export InitialiseParticleField, InitialisePhaseRatios, PhaseRatios!, compute_shear_bulk_moduli!
 end
 
 module StokesDeformed
-    using LinearAlgebra, StaticArrays, ExtendableSparse, StaticArrays, Enzyme, StagFDTools, StagFDTools.Rheology
+    using LinearAlgebra, StaticArrays, ExtendableSparse, StaticArrays, StagFDTools, StagFDTools.Rheology
     include("StokesDeformed.jl")
     export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx!, SetBCVy!, set_boundaries_template!, SetBCVx1, SetBCVy1
     export Continuity, SMomentum_x_Generic, SMomentum_y_Generic
@@ -71,7 +79,7 @@ module StokesDeformed
 end
 
 module StokesFSG
-    using StaticArrays, ExtendableSparse, StaticArrays, Enzyme
+    using StaticArrays, ExtendableSparse, StaticArrays, StagFDTools
     include("StokesFSG.jl")
     export FSG_Array, Fields, Ranges, Numbering!#, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx!, SetBCVy!
     export AllocateSparseMatrix, Patterns
@@ -80,7 +88,7 @@ module StokesFSG
 end
 
 module ThermoMechanics
-    using StagFDTools, StaticArrays, ExtendableSparse, StaticArrays, LinearAlgebra, Enzyme, MineralEoS
+    using StagFDTools, StaticArrays, ExtendableSparse, StaticArrays, LinearAlgebra, MineralEoS
     include("ThermoMechanics/ThermoMechanics.jl")
     export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx1, SetBCVy1
     export AssembleHeatDiffusion2D!, ResidualHeatDiffusion2D!, HeatDiffusion
@@ -93,7 +101,7 @@ module ThermoMechanics
 end
 
 module TwoPhases
-    using StagFDTools, StaticArrays, ExtendableSparse, StaticArrays, LinearAlgebra, Enzyme
+    using StagFDTools, StaticArrays, ExtendableSparse, StaticArrays, LinearAlgebra
     # Material produced before 09/25 wew done with this
     # include("TwoPhases/TwoPhases_v2.jl")
     # Now this one is preferred because it fully accounts for porosity evolution
@@ -122,7 +130,7 @@ module TwoPhases
 end
 
 module TwoPhases_v1
-    using StagFDTools, StaticArrays, ExtendableSparse, StaticArrays, Enzyme
+    using StagFDTools, StaticArrays, ExtendableSparse, StaticArrays
     include("TwoPhases/TwoPhases_v1.jl")
     export Fields, Ranges, Numbering!, SparsityPattern!, SetRHS!, UpdateSolution!, SetBCVx1, SetBCVy1
     export AssembleFluidContinuity2D!, ResidualFluidContinuity2D!, FluidContinuity

@@ -2,8 +2,6 @@ using StagFDTools, StagFDTools.TwoPhases
 using JLD2, ExtendableSparse, StaticArrays, CairoMakie, LinearAlgebra, SparseArrays, Printf, JLD2, ExactFieldSolutions, GridGeometryUtils
 import Statistics:mean
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
-
 @views function main(nc)
 
     # Characteristic scales
@@ -44,7 +42,7 @@ using Enzyme  # AD backends you want to use
         oneway       = true,
         compressible = false,
         plasticity   = :off,
-        linearizeϕ   = false,    
+        linearizeϕ   = true,    
         single_phase = false,
         conservative = false,
         #        mat    inc  
@@ -99,12 +97,16 @@ using Enzyme  # AD backends you want to use
     type.Vy[inx_Vy,end-1]   .= :Dirichlet_normal 
     # -------- Pt -------- #
     type.Pt[2:end-1,2:end-1] .= :in
+    type.Pt[1,:]             .= :Dirichlet 
+    type.Pt[end,:]           .= :Dirichlet 
+    type.Pt[:,1]             .= :Dirichlet
+    type.Pt[:,end]           .= :Dirichlet
     # -------- Pf -------- #
     type.Pf[2:end-1,2:end-1] .= :in
-    type.Pf[1,:]             .= :Neumann 
-    type.Pf[end,:]           .= :Neumann 
-    type.Pf[:,1]             .= :Neumann
-    type.Pf[:,end]           .= :Neumann
+    type.Pf[1,:]             .= :Dirichlet 
+    type.Pf[end,:]           .= :Dirichlet 
+    type.Pf[:,1]             .= :Dirichlet
+    type.Pf[:,end]           .= :Dirichlet
     
     # Equation Fields
     number = Fields(
@@ -483,6 +485,10 @@ using Enzyme  # AD backends you want to use
         #-------------------------------------------# 
 
     end
+
+    @show norm(P.t[inx_c,iny_c])/sqrt(nc.x*nc.y)
+    @show norm(Pt_ana[inx_c,iny_c])/sqrt(nc.x*nc.y)
+    @show extrema(Pt_ana[inx_c,iny_c])
 
     #--------------------------------------------#
 

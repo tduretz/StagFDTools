@@ -1,8 +1,6 @@
 using StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf, JLD2
 import Statistics:mean
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
-
 @views function main(nc, Ωl, Ωη)
 
     # Adimensionnal numbers

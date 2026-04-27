@@ -1,13 +1,13 @@
 using StagFDTools, StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, CairoMakie, LinearAlgebra, SparseArrays, Printf, JLD2
 import Statistics:mean
-using Enzyme  # AD backends you want to use
 
-@views function main(nc, Ωl, Ωη, viscoelastic)
+@views function main(nc, Ωl, Ωη, viscoelastic, fact)
+
 
     homo   = false
 
     if viscoelastic
-        nt           = 50
+        nt           = 50 #200
         make_elastic = 1.0
     else
         nt           = 1
@@ -54,14 +54,14 @@ using Enzyme  # AD backends you want to use
         m     = [0.0  0.0],
         n_CK  = [n_CK n_CK],
         ηs0   = [ηsi  ηs_inc], 
-        ηΦ0   = [ηbi  ηbi],
-        G     = [1e0  1e0] * 2000 * make_elastic, 
+        ηΦ0   = [ηbi  ηbi],       # done not clear
+        G     = [1e0 1e0] * 2000 * make_elastic * fact,  # done
         ρs    = [1.0  1.0 ],
         ρf    = [1.0  1.0 ],
         Kd    = [1e30 1e30],
         Ks    = [1e0 1e0] * 1.1e4 * make_elastic,
         Kf    = [1e0 1e0] * 1e4 * make_elastic,
-        KΦ    = [1e0 1e0] * 9e3 * make_elastic,
+        KΦ    = [1e0 1e0] * 9e3 * make_elastic , # done
         k_ηf0 = [k_ηΦ/Φi^n_CK k_ηΦ/Φi^n_CK],
         ψ     = [10.    10.  ],
         ϕ     = [35.    35.  ],
@@ -109,10 +109,10 @@ using Enzyme  # AD backends you want to use
     type.Pt[2:end-1,2:end-1] .= :in
     # -------- Pf -------- #
     type.Pf[2:end-1,2:end-1] .= :in
-    type.Pf[1,:]             .= :Neumann 
-    type.Pf[end,:]           .= :Neumann 
-    type.Pf[:,1]             .= :Neumann
-    type.Pf[:,end]           .= :Neumann
+    type.Pf[1,:]             .= :Dirichlet 
+    type.Pf[end,:]           .= :Dirichlet 
+    type.Pf[:,1]             .= :Dirichlet
+    type.Pf[:,end]           .= :Dirichlet
     
     # Equation Fields
     number = Fields(
@@ -165,8 +165,8 @@ using Enzyme  # AD backends you want to use
     𝐷_ctl   = (c = D_ctl_c, v = D_ctl_v)
     λ̇       = (c  = zeros(size_c...), v  = zeros(size_v...) )
     phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...), x =ones(Int64, size_x...), y=ones(Int64, size_y...) )  # phase on velocity points
-    P       = (t = Pi.*ones(size_c...), f = Pi.*ones(size_c...))
-    Pi      = (t = Pi.*ones(size_c...), f = Pi.*ones(size_c...))
+    P       = (t = 0.0*ones(size_c...), f = 0.0.*ones(size_c...))
+    Pi      = (t = 0.0*ones(size_c...), f = 0.0.*ones(size_c...))
     P0      = (t = zeros(size_c...), f = zeros(size_c...))
     ΔP      = (t = zeros(size_c...), f = zeros(size_c...))
     ρ       = (s = materials.ρs[1]*ones(size_c...), f = materials.ρf[1]*ones(size_c...), t = zeros(size_c...))
@@ -232,6 +232,14 @@ using Enzyme  # AD backends you want to use
         ΔPt = zeros(nt),
         ΔPf = zeros(nt),
         ΔPe = zeros(nt),
+        normτ   = zeros(nt),
+        normPe  = zeros(nt),
+        normPt  = zeros(nt),
+        normPf  = zeros(nt),
+        meanτ   = zeros(nt),
+        meanPe  = zeros(nt),
+        meanPt  = zeros(nt),
+        meanPf  = zeros(nt),
         Pe  = zeros(nt),
         Pt  = zeros(nt),
         Pf  = zeros(nt),
@@ -240,7 +248,7 @@ using Enzyme  # AD backends you want to use
 
     err  = (x = zeros(niter), y = zeros(niter), pt = zeros(niter), pf = zeros(niter))
     
-    for it=1:1 #nt
+    for it=1:nt
 
         @printf("\nStep %04d\n", it)
         fill!(err.x,  0e0)
@@ -258,7 +266,7 @@ using Enzyme  # AD backends you want to use
         ρ0.s  .= ρ.s
         ρ0.f  .= ρ.f
 
-        for iter=1:1 #niter
+        for iter=1:niter
 
             @printf("     Step %04d --- Iteration %04d\n", it, iter)
 
@@ -268,303 +276,315 @@ using Enzyme  # AD backends you want to use
             #--------------------------------------------#
             # Residual check
             @time TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
-            
-            
-            
-            
-            # @time ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-            # @time ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-            # @time ResidualContinuity2D!(R, V, P, (P0, Φ0, ρ0), phases, materials, number, type, BC, nc, Δ) 
-            # @time ResidualFluidContinuity2D!(R, V, P, ΔP, (P0, Φ0, ρ0), phases, materials, number, type, BC, nc, Δ) 
+            @time ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+            @time ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+            @time ResidualContinuity2D!(R, V, P, (P0, Φ0, ρ0), phases, materials, number, type, BC, nc, Δ) 
+            @time ResidualFluidContinuity2D!(R, V, P, ΔP, (P0, Φ0, ρ0), phases, materials, number, type, BC, nc, Δ) 
 
-            # println("min/max λ̇.c  - ",  extrema(λ̇.c[inx_c,iny_c]))
-            # println("min/max λ̇.v  - ",  extrema(λ̇.v[3:end-2,3:end-2]))
-            # println("min/max ΔP.t - ",  extrema(ΔP.t[inx_c,iny_c]))
-            # println("min/max ΔP.f - ",  extrema(ΔP.f[inx_c,iny_c]))
+            println("min/max λ̇.c  - ",  extrema(λ̇.c[inx_c,iny_c]))
+            println("min/max λ̇.v  - ",  extrema(λ̇.v[3:end-2,3:end-2]))
+            println("min/max ΔP.t - ",  extrema(ΔP.t[inx_c,iny_c]))
+            println("min/max ΔP.f - ",  extrema(ΔP.f[inx_c,iny_c]))
 
-            # @info "Residuals"
-            # @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
-            # @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-            # @show norm(R.pt[inx_c,iny_c])/sqrt(nPt)
-            # @show norm(R.pf[inx_c,iny_c])/sqrt(nPf)
+            @info "Residuals"
+            @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
+            @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
+            @show norm(R.pt[inx_c,iny_c])/sqrt(nPt)
+            @show norm(R.pf[inx_c,iny_c])/sqrt(nPf)
 
-            # err.x[iter]  = @views norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
-            # err.y[iter]  = @views norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-            # err.pt[iter] = @views norm(R.pt[inx_c,iny_c])/sqrt(nPt)
-            # err.pf[iter] = @views norm(R.pf[inx_c,iny_c])/sqrt(nPt)
-            # if max(err.x[iter], err.y[iter], err.pt[iter], err.pf[iter]) < ϵ_nl 
-            #     println("Converged")
-            #     break 
-            # end
+            err.x[iter]  = @views norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
+            err.y[iter]  = @views norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
+            err.pt[iter] = @views norm(R.pt[inx_c,iny_c])/sqrt(nPt)
+            err.pf[iter] = @views norm(R.pf[inx_c,iny_c])/sqrt(nPt)
+            if max(err.x[iter], err.y[iter], err.pt[iter], err.pf[iter]) < ϵ_nl 
+                println("Converged")
+                break 
+            end
 
-            # # Set global residual vector
-            # r = zeros(nVx + nVy + nPt + nPf)
-            # SetRHS!(r, R, number, type, nc)
+            # Set global residual vector
+            r = zeros(nVx + nVy + nPt + nPf)
+            SetRHS!(r, R, number, type, nc)
 
-            # #--------------------------------------------#
-            # # Assembly
-            # @info "Assembly, ndof  = $(nVx + nVy + nPt + nPf)"
-            # AssembleMomentum2D_x!(M, V, P, P0, ΔP, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-            # AssembleMomentum2D_y!(M, V, P, P0, ΔP, τ0, Φ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-            # AssembleContinuity2D!(M, V, P, (P0, Φ0, ρ0), phases, materials, number, pattern, type, BC, nc, Δ)
-            # AssembleFluidContinuity2D!(M, V, P, ΔP, (P0, Φ0, ρ0), phases, materials, number, pattern, type, BC, nc, Δ)
+            #--------------------------------------------#
+            # Assembly
+            @info "Assembly, ndof  = $(nVx + nVy + nPt + nPf)"
+            AssembleMomentum2D_x!(M, V, P, P0, ΔP, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+            AssembleMomentum2D_y!(M, V, P, P0, ΔP, τ0, Φ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+            AssembleContinuity2D!(M, V, P, (P0, Φ0, ρ0), phases, materials, number, pattern, type, BC, nc, Δ)
+            AssembleFluidContinuity2D!(M, V, P, ΔP, (P0, Φ0, ρ0), phases, materials, number, pattern, type, BC, nc, Δ)
 
-            # # Two-phases operator as block matrix
-            # 𝑀 = [
-            #     M.Vx.Vx M.Vx.Vy M.Vx.Pt M.Vx.Pf;
-            #     M.Vy.Vx M.Vy.Vy M.Vy.Pt M.Vy.Pf;
-            #     M.Pt.Vx M.Pt.Vy M.Pt.Pt M.Pt.Pf;
-            #     M.Pf.Vx M.Pf.Vy M.Pf.Pt M.Pf.Pf;
+            # Two-phases operator as block matrix
+            𝑀 = [
+                M.Vx.Vx M.Vx.Vy M.Vx.Pt M.Vx.Pf;
+                M.Vy.Vx M.Vy.Vy M.Vy.Pt M.Vy.Pf;
+                M.Pt.Vx M.Pt.Vy M.Pt.Pt M.Pt.Pf;
+                M.Pf.Vx M.Pf.Vy M.Pf.Pt M.Pf.Pf;
+            ]
+
+
+            # 𝑀1 = [
+            #     M.Vx.Vx 0*M.Vx.Vy 0*M.Vx.Pt 0*M.Vx.Pf;
+            #     0*M.Vy.Vx M.Vy.Vy 0*M.Vy.Pt 0*M.Vy.Pf;
+            #     0*M.Pt.Vx 0*M.Pt.Vy M.Pt.Pt 0*M.Pt.Pf;
+            #     0*M.Pf.Vx 0*M.Pf.Vy 0*M.Pf.Pt M.Pf.Pf;
             # ]
 
-
             # # 𝑀1 = [
-            # #     M.Vx.Vx 0*M.Vx.Vy 0*M.Vx.Pt 0*M.Vx.Pf;
-            # #     0*M.Vy.Vx M.Vy.Vy 0*M.Vy.Pt 0*M.Vy.Pf;
-            # #     0*M.Pt.Vx 0*M.Pt.Vy M.Pt.Pt 0*M.Pt.Pf;
-            # #     0*M.Pf.Vx 0*M.Pf.Vy 0*M.Pf.Pt M.Pf.Pf;
+            # #     M.Vx.Vx 0*M.Vx.Vy 0*M.Vx.Pf;
+            # #     0*M.Vy.Vx M.Vy.Vy 0*M.Vy.Pf;
+            # #     0*M.Pf.Vx 0*M.Pf.Vy M.Pf.Pf
+            # # ]
+            # # 𝑀1 = [
+            # #     M.Vx.Vx 0*M.Vx.Vy;
+            # #     0*M.Vy.Vx M.Vy.Vy;
             # # ]
 
-            # # # 𝑀1 = [
-            # # #     M.Vx.Vx 0*M.Vx.Vy 0*M.Vx.Pf;
-            # # #     0*M.Vy.Vx M.Vy.Vy 0*M.Vy.Pf;
-            # # #     0*M.Pf.Vx 0*M.Pf.Vy M.Pf.Pf
-            # # # ]
-            # # # 𝑀1 = [
-            # # #     M.Vx.Vx 0*M.Vx.Vy;
-            # # #     0*M.Vy.Vx M.Vy.Vy;
-            # # # ]
+            # 𝑀1_sym = 1/2*(𝑀1 + 𝑀1')
+            # dropzeros!(𝑀1_sym)
+            # @time cholesky(𝑀1_sym)
 
-            # # 𝑀1_sym = 1/2*(𝑀1 + 𝑀1')
-            # # dropzeros!(𝑀1_sym)
-            # # @time cholesky(𝑀1_sym)
+            # @save "test_matrix_2phase_$(nc.x).jld2" 𝑀 𝑀1 r
 
-            # # @save "test_matrix_2phase_$(nc.x).jld2" 𝑀 𝑀1 r
-
-            # # error()
+            # error()
   
-            # @info "System symmetry"
-            # 𝑀diff = 𝑀 - 𝑀'
-            # dropzeros!(𝑀diff)
-            # @show norm(𝑀diff)
+            @info "System symmetry"
+            𝑀diff = 𝑀 - 𝑀'
+            dropzeros!(𝑀diff)
+            @show norm(𝑀diff)
 
-            # #--------------------------------------------#
-            # # Direct solver 
-            # @time dx = - 𝑀 \ r
+            #--------------------------------------------#
+            # Direct solver 
+            @time dx = - 𝑀 \ r
 
-            # # # M2Di solver
-            # # fv    = -r[1:(nVx+nVy)]
-            # # fpt   = -r[(nVx+nVy+1):(nVx+nVy+nPt)]
-            # # fpf   = -r[(nVx+nVy+nPt+1):end]
-            # # dv    = zeros(nVx+nVy)
-            # # dpt   = zeros(nPt)
-            # # dpf   = zeros(nPf)
-            # # rv    = zeros(nVx+nVy)
-            # # rpt   = zeros(nPt)
-            # # rpf   = zeros(nPf)
-            # # rv_t  = zeros(nVx+nVy)
-            # # rpt_t = zeros(nPt)
-            # # s     = zeros(nPf)
-            # # ddv   = zeros(nVx+nVy)
-            # # ddpt  = zeros(nPt)
-            # # ddpf  = zeros(nPf)
+            # # M2Di solver
+            # fv    = -r[1:(nVx+nVy)]
+            # fpt   = -r[(nVx+nVy+1):(nVx+nVy+nPt)]
+            # fpf   = -r[(nVx+nVy+nPt+1):end]
+            # dv    = zeros(nVx+nVy)
+            # dpt   = zeros(nPt)
+            # dpf   = zeros(nPf)
+            # rv    = zeros(nVx+nVy)
+            # rpt   = zeros(nPt)
+            # rpf   = zeros(nPf)
+            # rv_t  = zeros(nVx+nVy)
+            # rpt_t = zeros(nPt)
+            # s     = zeros(nPf)
+            # ddv   = zeros(nVx+nVy)
+            # ddpt  = zeros(nPt)
+            # ddpf  = zeros(nPf)
 
-            # # Jvv  = [M.Vx.Vx M.Vx.Vy;
-            # #         M.Vy.Vx M.Vy.Vy]
-            # # Jvp  = [M.Vx.Pt;
-            # #         M.Vy.Pt]
-            # # Jpv  = [M.Pt.Vx M.Pt.Vy]
-            # # Jpp  = M.Pt.Pt
-            # # Jppf = M.Pt.Pf
-            # # Jpfv = [M.Pf.Vx M.Pf.Vy]
-            # # Jpfp = M.Pf.Pt
-            # # Jpf  = M.Pf.Pf
-            # # Kvv  = Jvv
+            # Jvv  = [M.Vx.Vx M.Vx.Vy;
+            #         M.Vy.Vx M.Vy.Vy]
+            # Jvp  = [M.Vx.Pt;
+            #         M.Vy.Pt]
+            # Jpv  = [M.Pt.Vx M.Pt.Vy]
+            # Jpp  = M.Pt.Pt
+            # Jppf = M.Pt.Pf
+            # Jpfv = [M.Pf.Vx M.Pf.Vy]
+            # Jpfp = M.Pf.Pt
+            # Jpf  = M.Pf.Pf
+            # Kvv  = Jvv
 
-            # # @time begin 
-            # #     # γ = 1e-8
-            # #     # Γ = spdiagm(γ*ones(nPt))
-            # #     # Pre-conditionning (~Jacobi)
-            # #     Jpv_t  = Jpv  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfv  
-            # #     Jpp_t  = Jpp  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfp  #.+ Γ
-            # #     Jvv_t  = Kvv  - Jvp *spdiagm(1 ./ diag(Jpp_t))*Jpv 
-            # #     @show typeof(SparseMatrixCSC(Jpf))
-            # #     Jpf_h  = cholesky(Hermitian(SparseMatrixCSC(Jpf)), check = false  )        # Cholesky factors
-            # #     Jvv_th = cholesky(Hermitian(SparseMatrixCSC(Jvv_t)), check = false)        # Cholesky factors
-            # #     Jpp_th = spdiagm(1 ./diag(Jpp_t));             # trivial inverse
-            # #     @views for itPH=1:15
-            # #         rv    .= -( Jvv*dv  + Jvp*dpt             - fv  )
-            # #         rpt   .= -( Jpv*dv  + Jpp*dpt  + Jppf*dpf - fpt )
-            # #         rpf   .= -( Jpfv*dv + Jpfp*dpt + Jpf*dpf  - fpf )
-            # #         s     .= Jpf_h \ rpf
-            # #         rpt_t .= -( Jppf*s - rpt)
-            # #         s     .=    Jpp_th*rpt_t
-            # #         rv_t  .= -( Jvp*s  - rv )
-            # #         ddv   .= Jvv_th \ rv_t
-            # #         s     .= -( Jpv_t*ddv - rpt_t )
-            # #         ddpt  .=    Jpp_th*s
-            # #         s     .= -( Jpfp*ddpt + Jpfv*ddv - rpf )
-            # #         ddpf  .= Jpf_h \ s
-            # #         dv   .+= ddv
-            # #         dpt  .+= ddpt
-            # #         dpf  .+= ddpf
-            # #         @printf("  --- iteration %d --- \n",itPH);
-            # #         @printf("  ||res.v ||=%2.2e\n", norm(rv)/ 1)
-            # #         @printf("  ||res.pt||=%2.2e\n", norm(rpt)/1)
-            # #         @printf("  ||res.pf||=%2.2e\n", norm(rpf)/1)
-            # #     #     if ((norm(rv)/length(rv)) < tol_linv) && ((norm(rpt)/length(rpt)) < tol_linpt) && ((norm(rpf)/length(rpf)) < tol_linpf), break; end
-            # #     #     if ((norm(rv)/length(rv)) > (norm(rv0)/length(rv0)) && norm(rv)/length(rv) < tol_glob && (norm(rpt)/length(rpt)) > (norm(rpt0)/length(rpt0)) && norm(rpt)/length(rpt) < tol_glob && (norm(rpf)/length(rpf)) > (norm(rpf0)/length(rpf0)) && norm(rpf)/length(rpf) < tol_glob),
-            # #     #         if noisy>=1, fprintf(' > Linear residuals do no converge further:\n'); break; end
-            # #     #     end
-            # #     #     rv0=rv; rpt0=rpt; rpf0=rpf; if (itPH==nPH), nfail=nfail+1; end
-            # #     end
-            # # end
+            # @time begin 
+            #     # γ = 1e-8
+            #     # Γ = spdiagm(γ*ones(nPt))
+            #     # Pre-conditionning (~Jacobi)
+            #     Jpv_t  = Jpv  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfv  
+            #     Jpp_t  = Jpp  - Jppf*spdiagm(1 ./ diag(Jpf  ))*Jpfp  #.+ Γ
+            #     Jvv_t  = Kvv  - Jvp *spdiagm(1 ./ diag(Jpp_t))*Jpv 
+            #     @show typeof(SparseMatrixCSC(Jpf))
+            #     Jpf_h  = cholesky(Hermitian(SparseMatrixCSC(Jpf)), check = false  )        # Cholesky factors
+            #     Jvv_th = cholesky(Hermitian(SparseMatrixCSC(Jvv_t)), check = false)        # Cholesky factors
+            #     Jpp_th = spdiagm(1 ./diag(Jpp_t));             # trivial inverse
+            #     @views for itPH=1:15
+            #         rv    .= -( Jvv*dv  + Jvp*dpt             - fv  )
+            #         rpt   .= -( Jpv*dv  + Jpp*dpt  + Jppf*dpf - fpt )
+            #         rpf   .= -( Jpfv*dv + Jpfp*dpt + Jpf*dpf  - fpf )
+            #         s     .= Jpf_h \ rpf
+            #         rpt_t .= -( Jppf*s - rpt)
+            #         s     .=    Jpp_th*rpt_t
+            #         rv_t  .= -( Jvp*s  - rv )
+            #         ddv   .= Jvv_th \ rv_t
+            #         s     .= -( Jpv_t*ddv - rpt_t )
+            #         ddpt  .=    Jpp_th*s
+            #         s     .= -( Jpfp*ddpt + Jpfv*ddv - rpf )
+            #         ddpf  .= Jpf_h \ s
+            #         dv   .+= ddv
+            #         dpt  .+= ddpt
+            #         dpf  .+= ddpf
+            #         @printf("  --- iteration %d --- \n",itPH);
+            #         @printf("  ||res.v ||=%2.2e\n", norm(rv)/ 1)
+            #         @printf("  ||res.pt||=%2.2e\n", norm(rpt)/1)
+            #         @printf("  ||res.pf||=%2.2e\n", norm(rpf)/1)
+            #     #     if ((norm(rv)/length(rv)) < tol_linv) && ((norm(rpt)/length(rpt)) < tol_linpt) && ((norm(rpf)/length(rpf)) < tol_linpf), break; end
+            #     #     if ((norm(rv)/length(rv)) > (norm(rv0)/length(rv0)) && norm(rv)/length(rv) < tol_glob && (norm(rpt)/length(rpt)) > (norm(rpt0)/length(rpt0)) && norm(rpt)/length(rpt) < tol_glob && (norm(rpf)/length(rpf)) > (norm(rpf0)/length(rpf0)) && norm(rpf)/length(rpf) < tol_glob),
+            #     #         if noisy>=1, fprintf(' > Linear residuals do no converge further:\n'); break; end
+            #     #     end
+            #     #     rv0=rv; rpt0=rpt; rpf0=rpf; if (itPH==nPH), nfail=nfail+1; end
+            #     end
+            # end
             
-            # # dx = zeros(nVx + nVy + nPt + nPf)
-            # # dx[1:(nVx+nVy)] .= dv
-            # # dx[(nVx+nVy+1):(nVx+nVy+nPt)] .= dpt
-            # # dx[(nVx+nVy+nPt+1):end] .= dpf
+            # dx = zeros(nVx + nVy + nPt + nPf)
+            # dx[1:(nVx+nVy)] .= dv
+            # dx[(nVx+nVy+1):(nVx+nVy+nPt)] .= dpt
+            # dx[(nVx+nVy+nPt+1):end] .= dpf
 
-            # #--------------------------------------------#
-            # imin = LineSearch!(rvec, α, dx, R, V, P, ε̇, τ, Vi, Pi, ΔP, Φ, (τ0, P0, Φ0, ρ0), λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
-            # UpdateSolution!(V, P, α[imin]*dx, number, type, nc)
+            #--------------------------------------------#
+            imin = LineSearch!(rvec, α, dx, R, V, P, ε̇, τ, Vi, Pi, ΔP, Φ, (τ0, P0, Φ0, ρ0), λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+            UpdateSolution!(V, P, α[imin]*dx, number, type, nc)
         end
 
         #--------------------------------------------#
 
-        # # Residual check
-        # TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
-        # ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-        # ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+        # Residual check
+        TangentOperator!( 𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, P, ΔP, P0, Φ, Φ0, type, BC, materials, phases, Δ)
+        ResidualMomentum2D_x!(R, V, P, P0, ΔP, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+        ResidualMomentum2D_y!(R, V, P, P0, ΔP, τ0, Φ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
 
-        # ResidualContinuity2D!(R, V, P, (P0, Φ0, ρ0), phases, materials, number, type, BC, nc, Δ) 
-        # ResidualFluidContinuity2D!(R, V, P, ΔP, (P0, Φ0, ρ0), phases, materials, number, type, BC, nc, Δ) 
+        ResidualContinuity2D!(R, V, P, (P0, Φ0, ρ0), phases, materials, number, type, BC, nc, Δ) 
+        ResidualFluidContinuity2D!(R, V, P, ΔP, (P0, Φ0, ρ0), phases, materials, number, type, BC, nc, Δ) 
 
-        # @info "Residuals - posteriori"
-        # @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
-        # @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
-        # @show norm(R.pt[inx_c,iny_c])/sqrt(nPt)
-        # @show norm(R.pf[inx_c,iny_c])/sqrt(nPf)
+        @info "Residuals - posteriori"
+        @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
+        @show norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy)
+        @show norm(R.pt[inx_c,iny_c])/sqrt(nPt)
+        @show norm(R.pf[inx_c,iny_c])/sqrt(nPf)
 
-        # # if norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx) > ϵ_nl || norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy) > ϵ_nl
-        # #     error("Global convergence failed !")
-        # # end 
+        # if norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx) > ϵ_nl || norm(R.y[inx_Vy,iny_Vy])/sqrt(nVy) > ϵ_nl
+        #     error("Global convergence failed !")
+        # end 
 
-        # #--------------------------------------------#
+        #--------------------------------------------#
 
-        # # Include plasticity corrections
-        # P.t .= P.t .+ ΔP.t
-        # P.f .= P.f .+ ΔP.f
-        # εp  .+= ε̇.II*Δ.t
+        # Include plasticity corrections
+        P.t .= P.t .+ ΔP.t
+        P.f .= P.f .+ ΔP.f
+        εp  .+= ε̇.II*Δ.t
         
-        # k_ηΦ_x = materials.k_ηf0[1] .* ((Φ.c[2:end,:] .+ Φ.c[1:end-1,:]) / 2).^ materials.n_CK[1]
-        # k_ηΦ_y = materials.k_ηf0[1] .* ((Φ.c[:,2:end] .+ Φ.c[:,1:end-1]) / 2).^ materials.n_CK[1]
+        k_ηΦ_x = materials.k_ηf0[1] .* ((Φ.c[2:end,:] .+ Φ.c[1:end-1,:]) / 2).^ materials.n_CK[1]
+        k_ηΦ_y = materials.k_ηf0[1] .* ((Φ.c[:,2:end] .+ Φ.c[:,1:end-1]) / 2).^ materials.n_CK[1]
 
-        # Vxsc = 0.5*(V.x[1:end-1,2:end-1] + V.x[2:end,2:end-1])
-        # Vysc = 0.5*(V.y[2:end-1,1:end-1] + V.y[2:end-1,2:end])
-        # Vs   = (x=Vxsc, y=Vysc )
-        # Vs_mag   = sqrt.( Vxsc.^2 .+ Vysc.^2)
-        # Vxf  = -k_ηΦ_x .* diff(P.f, dims=1)/Δ.x
-        # Vyf  = -k_ηΦ_y .* diff(P.f, dims=2)/Δ.y
-        # Vxfc = 0.5*(Vxf[1:end-1,2:end-1] .+ Vxf[2:end,2:end-1])
-        # Vyfc = 0.5*(Vyf[2:end-1,1:end-1] .+ Vyf[2:end-1,2:end])
-        # Vf   = (x=Vxfc, y=Vyfc )
-        # Vf_mag   = sqrt.( Vxfc.^2 .+ Vyfc.^2)
+        Vxsc = 0.5*(V.x[1:end-1,2:end-1] + V.x[2:end,2:end-1])
+        Vysc = 0.5*(V.y[2:end-1,1:end-1] + V.y[2:end-1,2:end])
+        Vs   = (x=Vxsc, y=Vysc )
+        Vs_mag   = sqrt.( Vxsc.^2 .+ Vysc.^2)
+        Vxf  = -k_ηΦ_x .* diff(P.f, dims=1)/Δ.x
+        Vyf  = -k_ηΦ_y .* diff(P.f, dims=2)/Δ.y
+        Vxfc = 0.5*(Vxf[1:end-1,2:end-1] .+ Vxf[2:end,2:end-1])
+        Vyfc = 0.5*(Vyf[2:end-1,1:end-1] .+ Vyf[2:end-1,2:end])
+        Vf   = (x=Vxfc, y=Vyfc )
+        Vf_mag   = sqrt.( Vxfc.^2 .+ Vyfc.^2)
 
-        # dΦdt = (Φ.c .- Φ0.c) / Δ.t
+        dΦdt = (Φ.c .- Φ0.c) / Δ.t
 
-        # #--------------------------------------------#
-        # probes.Pti[it]   = mean(P.t[phases.c.==2])
-        # probes.Pfi[it]   = mean(P.f[phases.c.==2])
-        # probes.Pei[it]   = mean(P.t[phases.c.==2] .- P.f[phases.c.==2])
-        # probes.ΔPt[it]   = maximum(P.t) - minimum(P.t)
-        # probes.ΔPf[it]   = maximum(P.f) - minimum(P.f)
-        # probes.ΔPe[it]   = maximum(P.t .- P.f) - minimum(P.t .- P.f) 
-        # probes.Pe[it]    = norm(P.t .- P.f)
-        # probes.Pt[it]    = norm(P.t)
-        # probes.Pf[it]    = norm(P.f)
-        # probes.t[it]     = it*Δ.t
-        # # probes.maxPt[it] = maximum(P.t.-mean(P.t[inx_c,iny_c]) )
-        # # probes.maxPf[it] = maximum(P.f.-mean(P.f[inx_c,iny_c]) )
-        # probes.maxPt[it] = (P.t .- mean(P.t[inx_c,iny_c]))[ix, iy_mid]
-        # probes.maxPf[it] = (P.f .- mean(P.f[inx_c,iny_c]))[ix, iy_mid]
-        # probes.maxτ[it]  = τ.II[ix,iy]
+        #--------------------------------------------#
+        probes.Pti[it]   = mean(P.t[phases.c.==2])
+        probes.Pfi[it]   = mean(P.f[phases.c.==2])
+        probes.Pei[it]   = mean(P.t[phases.c.==2] .- P.f[phases.c.==2])
+        probes.ΔPt[it]   = maximum(P.t) - minimum(P.t)
+        probes.ΔPf[it]   = maximum(P.f) - minimum(P.f)
+        probes.ΔPe[it]   = maximum(P.t .- P.f) - minimum(P.t .- P.f) 
+        probes.normτ[it]  = norm(τ.II[inx_c,iny_c])
+        probes.normPe[it] = norm(P.t[inx_c,iny_c] .- P.f[inx_c,iny_c])
+        probes.normPt[it] = norm(P.t[inx_c,iny_c])
+        probes.normPf[it] = norm(P.f[inx_c,iny_c])
+        probes.meanτ[it]  = mean(τ.II[inx_c,iny_c])
+        probes.meanPe[it] = mean(P.t[inx_c,iny_c] .- P.f[inx_c,iny_c])
+        probes.meanPt[it] = mean(P.t[inx_c,iny_c])
+        probes.meanPf[it] = mean(P.f[inx_c,iny_c])
+        probes.Pe[it]    = norm(P.t .- P.f)
+        probes.Pt[it]    = norm(P.t)
+        probes.Pf[it]    = norm(P.f)
+        probes.t[it]     = it*Δ.t
+        # probes.maxPt[it] = maximum(P.t.-mean(P.t[inx_c,iny_c]) )
+        # probes.maxPf[it] = maximum(P.f.-mean(P.f[inx_c,iny_c]) )
+        probes.maxPt[it] = (P.t .- 0*mean(P.t[inx_c,iny_c]))[ix, iy_mid]
+        probes.maxPf[it] = (P.f .- 0*mean(P.f[inx_c,iny_c]))[ix, iy_mid]
+        probes.maxτ[it]  = τ.II[ix,iy]
+
+        @show (P.t .- mean(P.t[inx_c,iny_c]))[ix, iy_mid]
+        @show (P.f .- mean(P.f[inx_c,iny_c]))[ix, iy_mid]
+        @show τ.II[ix,iy]
 
         # @show mean(P.t[phases.c.==2])
         # @show mean(P.f[phases.c.==2])
 
-        # #-------------------------------------------# 
+        #-------------------------------------------# 
 
-        # # Visualise
-        # function figure()
+        # Visualise
+        function figure()
 
-        #     xc = X.c.x
-        #     yc = X.c.y
-        #     cmap = :jet1
-        #     st  = 15
-        #     ind = st:st:size(xc,1)-st
+            xc = X.c.x
+            yc = X.c.y
+            cmap = :jet1
+            st  = 15
+            ind = st:st:size(xc,1)-st
 
-        #     fig = Figure(fontsize = 14, size = (675, 600) ) 
+            fig = Figure(fontsize = 14, size = (675, 600) ) 
 
-        #     ax1 = Axis(fig[3,1],  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect()) #, title=L"$V^\text{s}$"
-        #     hmVs = heatmap!(ax1, xc, yc, Vs_mag, colormap=cmap, colorrange=(0,0.75)) 
-        #     arrows2d!(ax1, xc[ind], yc[ind], Vs.x[ind,ind], Vs.y[ind,ind], lengthscale = 1e-1, color = :white)
+            ax1 = Axis(fig[3,1],  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect()) #, title=L"$V^\text{s}$"
+            hmVs = heatmap!(ax1, xc, yc, Vs_mag, colormap=cmap, colorrange=(0,0.75)) 
+            arrows2d!(ax1, xc[ind], yc[ind], Vs.x[ind,ind], Vs.y[ind,ind], lengthscale = 1e-1, color = :white)
 
-        #     ax2 = Axis(fig[3,2], xlabelsize=20, ylabelsize=20, aspect=DataAspect()) #, title=L"$V^\text{f} \times 1000$"
-        #     hmVf = heatmap!(ax2, xc, yc, Vf_mag*1000, colormap=cmap, colorrange=(0,0.2)) 
-        #     arrows2d!(ax2, xc[ind], yc[ind], Vf.x[ind,ind], Vf.y[ind,ind], lengthscale = 500, color = :white)
-        #     # arrowsize = V.arrow, lengthscale = V.scale)
+            ax2 = Axis(fig[3,2], xlabelsize=20, ylabelsize=20, aspect=DataAspect()) #, title=L"$V^\text{f} \times 1000$"
+            hmVf = heatmap!(ax2, xc, yc, Vf_mag*1000, colormap=cmap, colorrange=(0,0.2)) 
+            arrows2d!(ax2, xc[ind], yc[ind], Vf.x[ind,ind], Vf.y[ind,ind], lengthscale = 500, color = :white)
+            # arrowsize = V.arrow, lengthscale = V.scale)
 
-        #     ax2 = Axis(fig[3,3], xlabelsize=20, ylabelsize=20, aspect=DataAspect()) #, title=L"$V^\text{f} \times 1000$"
-        #     hmτ = heatmap!(ax2, xc, yc, τ.II[inx_c,iny_c], colormap=cmap, colorrange=(0,3)) 
-        #     # arrows2d!(ax2, xc[ind], yc[ind], σ1.x[ind,ind], σ1.y[ind,ind], lengthscale = 7e-2, color = :white, tipwidth = 0)
+            ax2 = Axis(fig[3,3], xlabelsize=20, ylabelsize=20, aspect=DataAspect()) #, title=L"$V^\text{f} \times 1000$"
+            hmτ = heatmap!(ax2, xc, yc, τ.II[inx_c,iny_c], colormap=cmap, colorrange=(0,3)) 
+            # arrows2d!(ax2, xc[ind], yc[ind], σ1.x[ind,ind], σ1.y[ind,ind], lengthscale = 7e-2, color = :white, tipwidth = 0)
 
-        #     ax1 = Axis(fig[2,1],  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect()) #, title=L"$P^\text{t}$"
-        #     hm1=heatmap!(ax1, xc, yc, P.t[inx_c,iny_c].-mean(P.t[inx_c,iny_c]), colormap=cmap, colorrange=(-3,3))
-        #     # hm1=heatmap!(ax1, xc, yc, Vs.x, colormap=cmap) 
+            ax1 = Axis(fig[2,1],  xlabel=L"$x$ [-]",  ylabel=L"$y$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect()) #, title=L"$P^\text{t}$"
+            hm1=heatmap!(ax1, xc, yc, P.t[inx_c,iny_c].-mean(P.t[inx_c,iny_c]), colormap=cmap, colorrange=(-3,3))
+            # hm1=heatmap!(ax1, xc, yc, Vs.x, colormap=cmap) 
 
-        #     ax2 = Axis(fig[2,2],  xlabel=L"$x$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect()) # , title=L"$P^\text{f}$"
-        #     hm2=heatmap!(ax2, xc, yc, P.f[inx_c,iny_c].-mean(P.f[inx_c,iny_c]), colormap=cmap, colorrange=(-3,3))
+            ax2 = Axis(fig[2,2],  xlabel=L"$x$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect()) # , title=L"$P^\text{f}$"
+            hm2=heatmap!(ax2, xc, yc, P.f[inx_c,iny_c].-mean(P.f[inx_c,iny_c]), colormap=cmap, colorrange=(-3,3))
             
-        #     ax3 = Axis(fig[2,3],  xlabel=L"$x$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect()) # , title=L"$\dot{\phi}$"
-        #     hm3=heatmap!(ax3, xc, yc, dΦdt[inx_c,iny_c]*100, colormap=cmap, colorrange=(-10.e-1, 10.e-1)) 
+            ax3 = Axis(fig[2,3],  xlabel=L"$x$ [-]", xlabelsize=20, ylabelsize=20, aspect=DataAspect()) # , title=L"$\dot{\phi}$"
+            hm3=heatmap!(ax3, xc, yc, dΦdt[inx_c,iny_c]*100, colormap=cmap, colorrange=(-10.e-1, 10.e-1)) 
 
-        #     # contour!( ax3, xc, yc, Pe[inx_c,iny_c], levels=[0.1], color=:white)
+            # contour!( ax3, xc, yc, Pe[inx_c,iny_c], levels=[0.1], color=:white)
             
-        #     Colorbar(fig[4,   1], hmVs, label = L"D) $|V^\text{s}|$ [-]", height=10, width = 150, labelsize = 16, ticklabelsize = 12, vertical=false, valign=true, flipaxis = false )
-        #     Colorbar(fig[4,   2], hmVf, label = L"E) $|Q^\text{f}| \times 1000$ [-]", height=10, width = 150, labelsize = 16, ticklabelsize = 12, vertical=false, valign=true, flipaxis = false )
-        #     Colorbar(fig[4,   3], hmτ,  label = L"F) $\tau_{II}$ [-]", height=10, width = 150, labelsize = 16, ticklabelsize = 12, vertical=false, valign=true, flipaxis = false )
+            Colorbar(fig[4,   1], hmVs, label = L"D) $|V^\text{s}|$ [-]", height=10, width = 150, labelsize = 16, ticklabelsize = 12, vertical=false, valign=true, flipaxis = false )
+            Colorbar(fig[4,   2], hmVf, label = L"E) $|Q^\text{f}| \times 1000$ [-]", height=10, width = 150, labelsize = 16, ticklabelsize = 12, vertical=false, valign=true, flipaxis = false )
+            Colorbar(fig[4,   3], hmτ,  label = L"F) $\tau_{II}$ [-]", height=10, width = 150, labelsize = 16, ticklabelsize = 12, vertical=false, valign=true, flipaxis = false )
 
-        #     Colorbar(fig[1, 1], hm1, label = L"A) $P^\text{t}$ [-]", height=10, width = 150, labelsize = 16, ticklabelsize = 12, vertical=false, valign=true, flipaxis = true )
-        #     Colorbar(fig[1, 2], hm2, label = L"B) $P^\text{f}$ [-]", height=10, width = 150, labelsize = 16, ticklabelsize = 12, vertical=false, valign=true, flipaxis = true )
-        #     Colorbar(fig[1, 3], hm3, label = L"C) $\dot{\phi} \times 100$ [-]", height=10, width = 150, labelsize = 16, ticklabelsize = 12, vertical=false, valign=true, flipaxis = true )
+            Colorbar(fig[1, 1], hm1, label = L"A) $P^\text{t}$ [-]", height=10, width = 150, labelsize = 16, ticklabelsize = 12, vertical=false, valign=true, flipaxis = true )
+            Colorbar(fig[1, 2], hm2, label = L"B) $P^\text{f}$ [-]", height=10, width = 150, labelsize = 16, ticklabelsize = 12, vertical=false, valign=true, flipaxis = true )
+            Colorbar(fig[1, 3], hm3, label = L"C) $\dot{\phi} \times 100$ [-]", height=10, width = 150, labelsize = 16, ticklabelsize = 12, vertical=false, valign=true, flipaxis = true )
 
-        #     display(fig)
+            display(fig)
 
-        #     # save("./figures/benchmark_v2.png", f, px_per_unit=4)
+            # save("./figures/benchmark_v2.png", f, px_per_unit=4)
 
-        #     # save("./examples/_TwoPhases/TwoPhasesPressure/PoroviscousReference.jld2", "Ωl", Ωl, "Ωη", Ωη,"x", (c=xc, v=xv), "y", (c=yc, v=yv), "P", P, "dΦdt", dΦdt, "Φ", Φ, "τ", τ, "Vs", (x=Vxsc, y=Vysc), "Vf", (x=Vxfc, y=Vyfc))
+            # save("./examples/_TwoPhases/TwoPhasesPressure/PoroviscousReference.jld2", "Ωl", Ωl, "Ωη", Ωη,"x", (c=xc, v=xv), "y", (c=yc, v=yv), "P", P, "dΦdt", dΦdt, "Φ", Φ, "τ", τ, "Vs", (x=Vxsc, y=Vysc), "Vf", (x=Vxfc, y=Vyfc))
 
-        #     fig = Figure(fontsize = 14, size = (600, 600) )  
-        #     ax = Axis(fig[1,1], xlabelsize=20, ylabelsize=20, title=L"$\text{max} P^t, P^f, \tau_\text{II}$", xlabel = L"$t$ [-]", ylabel = L"$P, \tau$ [-]")
-        #     lines!(ax,  probes.t[1:it], probes.maxPt[1:it], label=L"$$P^t")
-        #     lines!(ax,  probes.t[1:it], probes.maxPf[1:it], label=L"$$P^f")
-        #     lines!(ax,  probes.t[1:it], probes.maxτ[1:it],  label=L"$$\tau_\text{II}")
+            fig = Figure(fontsize = 14, size = (600, 600) )  
+            ax = Axis(fig[1,1], xlabelsize=20, ylabelsize=20, title=L"$\text{max} P^t, P^f, \tau_\text{II}$", xlabel = L"$t$ [-]", ylabel = L"$P, \tau$ [-]")
+            lines!(ax,  probes.t[1:it], probes.maxPt[1:it], label=L"$P^t$")
+            lines!(ax,  probes.t[1:it], probes.maxPf[1:it], label=L"$P^f$")
+            lines!(ax,  probes.t[1:it], probes.maxτ[1:it],  label=L"$\tau_\text{II}$")
 
-        #     if viscoelastic
-        #         # Values at specific locations
-        #         ΔPt_viscous = 1.68*1.0
-        #         ΔPf_viscous = 1.48*1.0
-        #         τ_viscous   = 2.39*1.0
-        #         lines!(ax,  probes.t[1:it], ΔPt_viscous * ones(it)[1:it], label=L"$P^t$ -- V")
-        #         lines!(ax,  probes.t[1:it], ΔPf_viscous * ones(it)[1:it], label=L"$P^f$ -- V")
-        #         lines!(ax,  probes.t[1:it], τ_viscous  * ones(it)[1:it], label=L"$\tau_\text{II}$ -- V")
-        #     end
+            if viscoelastic
+                # Values at specific locations
+                # ΔPt_viscous = 1.68*1.0
+                # ΔPf_viscous = 1.48*1.0
+                # τ_viscous   = 2.39*1.0
+                # 200x200
+                ΔPt_viscous = 1.53*1.0
+                ΔPf_viscous = 1.44*1.0
+                τ_viscous   = 2.37*1.0
+                lines!(ax,  probes.t[1:it], ΔPt_viscous * ones(it)[1:it], label=L"$P^t$ -- V")
+                lines!(ax,  probes.t[1:it], ΔPf_viscous * ones(it)[1:it], label=L"$P^f$ -- V")
+                lines!(ax,  probes.t[1:it], τ_viscous  * ones(it)[1:it], label=L"$\tau_\text{II}$ -- V")
+            end
 
-        #     axislegend(framevisible = false, position=:rb, nbanks = 2)
-        #     display(fig) 
-        # end
-        # with_theme(figure, theme_latexfonts())
+            axislegend(framevisible = false, position=:rb, nbanks = 2)
+            display(fig) 
+        end
+        with_theme(figure, theme_latexfonts())
 
         #-------------------------------------------# 
 
@@ -584,23 +604,40 @@ using Enzyme  # AD backends you want to use
     #     save("./examples/_TwoPhases/TwoPhasesPressure/ReferenceModel.jld2", "Ωl", Ωl, "Ωη", Ωη, "probes", probes, "X", X, "P", P, "phases", phases, "τ", τ)
     # end
 
-    return 
+    return probes, materials
 end
 
-function Run()
+function Systematics()
 
-    nc = (x=400, y=400)
-
-
-    # Mode 0   
+    nc = (x=200, y=200)
     Ωη = 10^(2)
     Ωl = 0.15
-    # main(nc, Ωl, Ωη, false);
-    # main(nc, Ωl, Ωη, true);
 
+    fact = [1/5 1/4 1/3 1/2 1 2 3 4 5]
+    
+    for i in eachindex(fact)
+        r1, r2 = main(nc, Ωl, Ωη, true, fact[i])
+        # jldsave("Syst_kphi_n$(i).jl2d"; r1, r2)
+        jldsave("Syst_G_n$(i).jl2d"; r1, r2)
+        # jldsave("Syst_etaphi_n$(i).jl2d"; r1, r2)
+        # jldsave("Syst_etas$(i).jl2d"; r1, r2)
 
-    main(nc, Ωl, Ωη, true);
+    end 
     
 end
 
-Run()
+Systematics()
+
+# function Run()
+
+#     nc = (x=200, y=200)
+#     # Mode 0   
+#     Ωη = 10^(2)
+#     Ωl = 0.15
+#     main(nc, Ωl, Ωη, false, 1);
+#     # main(nc, Ωl, Ωη, true, 1);
+    
+# end
+
+# Run()
+

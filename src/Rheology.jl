@@ -135,15 +135,15 @@ end
 
 function ResidualDeviator( x, τ_trial, ε̇_eff, ηve, p, model)
     τ, P, λ̇ = x[1], x[2], x[3]
-    ∂Q∂σ = Enzyme.gradient(Enzyme.Forward, Potential, x, Const(p), Const(model))
+    ∂Q∂σ = ad_gradient(Potential, x, p, model)
     # return ε̇_eff -  τ/2/ηve  - λ̇/2*∂Q∂σ[1][1]
-    return τ - τ_trial + ηve*λ̇*∂Q∂σ[1][1]
+    return τ - τ_trial + ηve*λ̇*∂Q∂σ[1]
 end  
 
 function ResidualVolume( x, P_trial, Dkk, P0, K, Δt, p, model)
     τ, P, λ̇ = x[1], x[2], x[3]
-    ∂Q∂σ = Enzyme.gradient(Enzyme.Forward, Potential, x, Const(p), Const(model))
-    return P - P_trial + K*Δt*λ̇*∂Q∂σ[1][2]
+    ∂Q∂σ = ad_gradient(Potential, x, p, model)
+    return P - P_trial + K*Δt*λ̇*∂Q∂σ[2]
 end  
 
 function RheologyResidual(x, trial, plastic, model)
@@ -197,9 +197,9 @@ function NonLinearReturnMapping(τII, P, ε̇_eff, Dkk, P0, ηve, β, Δt, plast
 
         iter += 1
         x0    = copy(x)
-        J     = Enzyme.jacobian(Enzyme.ForwardWithPrimal, RheologyResidual, x, Const(trial), Const(plastic), Const(model))
-        δx    = - J.derivs[1] \ J.val
-        nR    = abs(J.val[3])
+        R, J = ad_value_and_jacobian(RheologyResidual, x, trial, plastic, model)
+        δx    = - J \ R
+        nR    = abs(R[3])
 
         # α = bt_line_search(δx, J.derivs[1], x0, J.val, trial, plastic, model)
         # x .= x0 .+  α*δx
@@ -277,6 +277,36 @@ function StrainRateTrial(τII, G, Δt, B, n)
     return ε̇II_trial
 end
 
+function PhaseAverage_summand(a, phase_ratio, averaging)
+    # summand of phase j for phase averaging
+    if averaging === :harmonic && a != 0.0
+        # Hⱼ = w′ᵢ * aᵢ⁻¹
+        a_j = phase_ratio / a
+    elseif averaging === :geometric && a > 0.0
+        # Gⱼ = w′ᵢ * ln(aᵢ)
+        a_j = phase_ratio * log(a)
+    else # arithmetic
+        # Aⱼ =w′ᵢ * aᵢ
+        a_j = phase_ratio * a
+    end
+    return a_j
+end
+
+function PhaseAverage(a_average, averaging)
+    # finalize phase averaging
+    if averaging === :harmonic && a_average != 0.0
+        # H = (Σⁿᵢ₌₁ w′ᵢ * aᵢ⁻¹)⁻¹ = (Σⁿᵢ₌₁ Hⱼ)⁻¹
+        a_avg = 1 / a_average
+    elseif averaging === :geometric
+        # G = exp(Σⁿᵢ₌₁ w′ᵢ * ln(aᵢ)) = exp(Σⁿᵢ₌₁ Gⱼ)
+        a_avg = exp(a_average)
+    else # arithmetic
+        # A = Σⁿᵢ₌₁ w′ᵢ * aᵢ = Σⁿᵢ₌₁ Aⱼ
+        a_avg = a_average
+    end
+    return a_avg
+end
+
 function LocalRheology(ε̇, Dkk, P0, materials, phases, Δ)
 
     eps0 = 0.0*1e-17
@@ -315,8 +345,8 @@ function LocalRheology(ε̇, Dkk, P0, materials, phases, Δ)
         r      = ε̇II - StrainRateTrial(τII, G, Δ.t, B, n)
         # @show abs(r)
         (abs(r)<ϵ) && break
-        ∂ε̇II∂τII = Enzyme.jacobian(Enzyme.Forward, StrainRateTrial, τII, G, Δ.t, B, n)
-        ∂τII∂ε̇II = inv(∂ε̇II∂τII[1])
+        ∂ε̇II∂τII = ad_derivative(StrainRateTrial, τII, G, Δ.t, B, n)
+        ∂τII∂ε̇II = inv(∂ε̇II∂τII)
         τII     += ∂τII∂ε̇II*r
     end
     isnan(τII) && error()
@@ -398,8 +428,8 @@ function LocalRheology_div(ε̇, Dkk, P0, materials, phases, Δ)
         r      = ε̇II - StrainRateTrial(τII, G, Δ.t, B, n)
         # @show abs(r)
         (abs(r)<ϵ) && break
-        ∂ε̇II∂τII = Enzyme.jacobian(Enzyme.Forward, StrainRateTrial, τII, G, Δ.t, B, n)
-        ∂τII∂ε̇II = inv(∂ε̇II∂τII[1])
+        ∂ε̇II∂τII = ad_derivative(StrainRateTrial, τII, G, Δ.t, B, n)
+        ∂τII∂ε̇II = inv(∂ε̇II∂τII)
         τII     += ∂τII∂ε̇II*r
     end
     isnan(τII) && error()
@@ -437,6 +467,7 @@ end
 function LocalRheology_phase_ratios(ε̇, Dkk, P0, materials, phase_ratios, Δ)
 
     nphases = length(materials.n)
+    phase_avg = materials.phase_avg
 
     eps0 = 1e-17
 
@@ -477,8 +508,8 @@ function LocalRheology_phase_ratios(ε̇, Dkk, P0, materials, phase_ratios, Δ)
             r      = ε̇II - StrainRateTrial(τII, G, Δ.t, B, n)
             # @show abs(r)
             (abs(r)<ϵ) && break
-            ∂ε̇II∂τII = Enzyme.jacobian(Enzyme.Forward, StrainRateTrial, τII, G, Δ.t, B, n)
-            ∂τII∂ε̇II = inv(∂ε̇II∂τII[1])
+            ∂ε̇II∂τII = ad_derivative(StrainRateTrial, τII, G, Δ.t, B, n)
+            ∂τII∂ε̇II = inv(∂ε̇II∂τII)
             τII     += ∂τII∂ε̇II*r
         end
         isnan(τII) && error()
@@ -497,18 +528,22 @@ function LocalRheology_phase_ratios(ε̇, Dkk, P0, materials, phase_ratios, Δ)
         ηvep = τII/(2*ε̇II)
 
         # Phase averaging
-        η_average += phase_ratios[phases] * ηvep
-        P_average += phase_ratios[phases] * P
-        λ̇_average += phase_ratios[phases] * λ̇
-        τ_average += phase_ratios[phases] * τII
+        η_average += PhaseAverage_summand(ηvep, phase_ratios[phases], phase_avg)
+        P_average += PhaseAverage_summand(P   , phase_ratios[phases], phase_avg)
+        λ̇_average += PhaseAverage_summand(λ̇   , phase_ratios[phases], phase_avg)
+        τ_average += PhaseAverage_summand(τII , phase_ratios[phases], phase_avg)
     end
+
+    η_average = PhaseAverage(η_average, phase_avg)
+    P_average = PhaseAverage(P_average, phase_avg)
+    λ̇_average = PhaseAverage(λ̇_average, phase_avg)
+    τ_average = PhaseAverage(τ_average, phase_avg)
 
     return η_average, λ̇_average, P_average, τ_average
 end
 
 function StressVector!(ε̇, Dkk, P0, materials, phases, Δ) 
     η, λ̇, P, τII = LocalRheology(ε̇, Dkk, P0, materials, phases, Δ)
-    λ̇, P, τII = 1.0, 1.0, 1.0
     τ       = @SVector([2 * η * ε̇[1],
                         2 * η * ε̇[2],
                         2 * η * ε̇[3],
@@ -525,12 +560,11 @@ function StressVector_div!(ε̇, Dkk, P0, materials, phases, Δ)
     return τ, η, λ̇, τII
 end
 
-function StressVector_phase_ratios!(ε̇, Dkk, P0, materials, phases, Δ) 
-    η, λ̇, P, τII = LocalRheology_phase_ratios(ε̇, Dkk, P0, materials, phases, Δ)
+function StressVector_phase_ratios!(ε̇, Dkk, P0, materials, phase_ratios, Δ) 
+    η, λ̇, P, τII = LocalRheology_phase_ratios(ε̇, Dkk, P0, materials, phase_ratios, Δ)
     τ       = @SVector([2 * η * ε̇[1],
                         2 * η * ε̇[2],
                         2 * η * ε̇[3],
                                   P])
     return τ, η, λ̇, τII
 end
-
