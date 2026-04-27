@@ -2,13 +2,15 @@ using StagFDTools, StagFDTools.TwoPhases
 using JLD2, ExtendableSparse, StaticArrays, CairoMakie, LinearAlgebra, SparseArrays, Printf, JLD2, ExactFieldSolutions, GridGeometryUtils
 import Statistics:mean
 using DifferentiationInterface
+using Enzyme  # AD backends you want to use
+
 @views function main(nc)
 
     # Characteristic scales
     sc  = (σ=1e0, t=1e0, L=1e0)
 
     # Parameters of the analytical solution
-    params = (mm = 1.0, mc = 100, rc = 2.0, gr = 0.0, er = 1.0)
+    params = (mm = 1.0, mc = 0.1, rc = 0.1, gr = 0.0, er = 1.0)
 
     # Time steps
     nt     = 1
@@ -28,7 +30,7 @@ using DifferentiationInterface
     Pi   = 0.
     
     # Geometries
-    L    = (x=10/sc.L, y=10/sc.L)
+    L    = (x=1/sc.L, y=1/sc.L)
     x    = (min=-L.x/2, max=L.x/2)
     y    = (min=-L.y/2, max=L.y/2)
     inc  = Ellipse((0.0, 0.0), params.rc/sc.L, params.rc/sc.L; θ = 0.0)
@@ -43,7 +45,7 @@ using DifferentiationInterface
         compressible = false,
         plasticity   = :off,
         linearizeϕ   = true,    
-        single_phase = false,
+        single_phase = true,
         conservative = false,
         #        mat    inc  
         Φ0    = [1e-16   1e-16],
@@ -97,16 +99,12 @@ using DifferentiationInterface
     type.Vy[inx_Vy,end-1]   .= :Dirichlet_normal 
     # -------- Pt -------- #
     type.Pt[2:end-1,2:end-1] .= :in
-    type.Pt[1,:]             .= :Dirichlet 
-    type.Pt[end,:]           .= :Dirichlet 
-    type.Pt[:,1]             .= :Dirichlet
-    type.Pt[:,end]           .= :Dirichlet
     # -------- Pf -------- #
     type.Pf[2:end-1,2:end-1] .= :in
-    type.Pf[1,:]             .= :Dirichlet 
-    type.Pf[end,:]           .= :Dirichlet 
-    type.Pf[:,1]             .= :Dirichlet
-    type.Pf[:,end]           .= :Dirichlet
+    type.Pf[1,:]             .= :Neumann 
+    type.Pf[end,:]           .= :Neumann 
+    type.Pf[:,1]             .= :Neumann
+    type.Pf[:,end]           .= :Neumann
     
     # Equation Fields
     number = Fields(
@@ -486,10 +484,6 @@ using DifferentiationInterface
 
     end
 
-    @show norm(P.t[inx_c,iny_c])/sqrt(nc.x*nc.y)
-    @show norm(Pt_ana[inx_c,iny_c])/sqrt(nc.x*nc.y)
-    @show extrema(Pt_ana[inx_c,iny_c])
-
     #--------------------------------------------#
 
     return P, Δ, (c=X.c.x, v=X.v.x), (c=X.c.y, v=X.v.y)
@@ -506,4 +500,4 @@ function Run(n)
 
 end
 
-Run(200)
+Run(101)
