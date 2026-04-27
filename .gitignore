@@ -3,3 +3,4 @@
 /examples/.DS_Store
 .DS_Store
 *.jld2
+*.jl2d

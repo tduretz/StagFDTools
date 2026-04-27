@@ -17,6 +17,9 @@ export GenerateGrid, printxy, av2D
 include("Solvers.jl")
 export DecoupledSolver
 
+include("BCs.jl")
+export SetBCPf1, SetBCPt1, SetBCVx1, SetBCVy1
+
 # module markers
 #     include("markers.jl")
 #     export PhaseRatios, ...

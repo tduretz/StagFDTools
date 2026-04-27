@@ -1,8 +1,6 @@
 using StagFDTools, StagFDTools.TwoPhases 
 using JLD2, ExtendableSparse, StaticArrays, CairoMakie, LinearAlgebra, SparseArrays, Printf, JLD2, ExactFieldSolutions, GridGeometryUtils
 import Statistics:mean
-using DifferentiationInterface
-using Enzyme  # AD backends you want to use
 
 @views function main(nc)
 
@@ -99,16 +97,16 @@ using Enzyme  # AD backends you want to use
     type.Vy[inx_Vy,end-1]   .= :Dirichlet_normal 
     # -------- Pt -------- #
     type.Pt[2:end-1,2:end-1] .= :in
-    type.Pt[1,:]             .= :Dirichlet 
-    type.Pt[end,:]           .= :Dirichlet 
-    type.Pt[:,1]             .= :Dirichlet
-    type.Pt[:,end]           .= :Dirichlet
+    # type.Pt[1,:]             .= :Dirichlet 
+    # type.Pt[end,:]           .= :Dirichlet 
+    # type.Pt[:,1]             .= :Dirichlet
+    # type.Pt[:,end]           .= :Dirichlet
     # -------- Pf -------- #
     type.Pf[2:end-1,2:end-1] .= :in
-    type.Pf[1,:]             .= :Dirichlet 
-    type.Pf[end,:]           .= :Dirichlet 
-    type.Pf[:,1]             .= :Dirichlet
-    type.Pf[:,end]           .= :Dirichlet
+    # type.Pf[1,:]             .= :Dirichlet 
+    # type.Pf[end,:]           .= :Dirichlet 
+    # type.Pf[:,1]             .= :Dirichlet
+    # type.Pf[:,end]           .= :Dirichlet
     
     # Equation Fields
     number = Fields(
@@ -216,14 +214,14 @@ using Enzyme  # AD backends you want to use
 
     # Boundary condition values
     BC = ( Vx = zeros(size_x...), Vy = zeros(size_y...), Pt = zeros(size_c...), Pf = zeros(size_c...))
-    BC.Vx[     2, iny_Vx] .= (type.Vx[     1, iny_Vx] .== :Neumann_normal) .* D_BC[1,1]
-    BC.Vx[ end-1, iny_Vx] .= (type.Vx[   end, iny_Vx] .== :Neumann_normal) .* D_BC[1,1]
-    BC.Vx[inx_Vx,      2] .= (type.Vx[inx_Vx,      2] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[inx_Vx,     2] .== :Dirichlet_tangent) .* (D_BC[1,1]*X.v.x .+ D_BC[1,2]*X.v.y[1]  )
-    BC.Vx[inx_Vx,  end-1] .= (type.Vx[inx_Vx,  end-1] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[inx_Vx, end-1] .== :Dirichlet_tangent) .* (D_BC[1,1]*X.v.x .+ D_BC[1,2]*X.v.y[end])
-    BC.Vy[inx_Vy,     2 ] .= (type.Vy[inx_Vy,     1 ] .== :Neumann_normal) .* D_BC[2,2]
-    BC.Vy[inx_Vy, end-1 ] .= (type.Vy[inx_Vy,   end ] .== :Neumann_normal) .* D_BC[2,2]
-    BC.Vy[     2, iny_Vy] .= (type.Vy[     2, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[    2, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*X.v.x[1]   .+ D_BC[2,2]*X.v.y)
-    BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*X.v.x[end] .+ D_BC[2,2]*X.v.y)
+    # BC.Vx[     2, iny_Vx] .= (type.Vx[     1, iny_Vx] .== :Neumann_normal)  .* D_BC[1,1]
+    # BC.Vx[ end-1, iny_Vx] .= (type.Vx[   end, iny_Vx] .== :Neumann_normal)  .* D_BC[1,1]
+    # BC.Vx[inx_Vx,      2] .= (type.Vx[inx_Vx,      2] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[inx_Vx,     2] .== :Dirichlet_tangent) .* (D_BC[1,1]*X.v.x .+ D_BC[1,2]*X.v.y[1]  )
+    # BC.Vx[inx_Vx,  end-1] .= (type.Vx[inx_Vx,  end-1] .== :Neumann_tangent) .* D_BC[1,2] .+ (type.Vx[inx_Vx, end-1] .== :Dirichlet_tangent) .* (D_BC[1,1]*X.v.x .+ D_BC[1,2]*X.v.y[end])
+    # BC.Vy[inx_Vy,     2 ] .= (type.Vy[inx_Vy,     1 ] .== :Neumann_normal)  .* D_BC[2,2]
+    # BC.Vy[inx_Vy, end-1 ] .= (type.Vy[inx_Vy,   end ] .== :Neumann_normal)  .* D_BC[2,2]
+    # BC.Vy[     2, iny_Vy] .= (type.Vy[     2, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[    2, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*X.v.x[1]   .+ D_BC[2,2]*X.v.y)
+    # BC.Vy[ end-1, iny_Vy] .= (type.Vy[ end-1, iny_Vy] .== :Neumann_tangent) .* D_BC[2,1] .+ (type.Vy[end-1, iny_Vy] .== :Dirichlet_tangent) .* (D_BC[2,1]*X.v.x[end] .+ D_BC[2,2]*X.v.y)
     BC.Pf[     :,     1 ] .= Pf_bot
 
     # Set material geometry 
@@ -244,24 +242,26 @@ using Enzyme  # AD backends you want to use
     )
     ϵP   = zero(BC.Pt)
 
+    # Get P analytics 
     for i=1:size(BC.Pf,1), j=1:size(BC.Pf,2)
-        # coordinate transform
         sol = Stokes2D_Schmid2003( [X.c_e.x[i], X.c_e.y[j]]; params )
         Pt_ana[i,j] = sol.p
     end
 
+    # Get Vx analytics 
     for i=1:size(BC.Vx,1), j=2:size(BC.Vx,2)-1
-        # coordinate transform
         sol = Stokes2D_Schmid2003( [X.v_e.x[i], X.c_e.y[j-1]]; params )
-        BC.Vx[i,j] =  sol.V[1]
-        V.x[i,j] = sol.V[1]
-        V_ana.x[i,j]  = sol.V[1]
+        BC.Vx[i,j]   =  sol.V[1]
+        V.x[i,j]     = sol.V[1]
+        V_ana.x[i,j] = sol.V[1]
     end
 
+    # Get Vy analytics 
     for i=2:size(BC.Vy,1)-1, j=1:size(BC.Vy,2)
-        # coordinate transform
         sol = Stokes2D_Schmid2003( [X.c_e.x[i-1], X.v_e.y[j]]; params )
-        BC.Vy[i,j] = V.y[i,j] = V_ana.y[i,j]  = sol.V[2]
+        # BC.Vy[i,j]   = sol.V[2] 
+        V.y[i,j]     = sol.V[2] 
+        V_ana.y[i,j] = sol.V[2]
     end
 
     #--------------------------------------------#
@@ -420,10 +420,15 @@ using Enzyme  # AD backends you want to use
         Vx_viz = copy(V.x)
         Vx_viz[V.x.>maximum(V_ana.x)] .= maximum(V_ana.x)
         Vx_viz[V.x.<minimum(V_ana.x)] .= minimum(V_ana.x)
+
+        Vy_viz = copy(V.y)
+        Vy_viz[V.y.>maximum(V_ana.y)] .= maximum(V_ana.y)
+        Vy_viz[V.y.<minimum(V_ana.y)] .= minimum(V_ana.y)
+        #--------------------------------------------#
         
         # Visualise
         function figure()
-            fig  = Figure(fontsize = 20, size = (900, 600) )    
+            fig  = Figure(fontsize = 20, size = (900, 900) )    
             step = 10
             ftsz = 15
             eps  = 1e-10
@@ -471,6 +476,28 @@ using Enzyme  # AD backends you want to use
             hidexdecorations!(ax)
             Colorbar(fig[4, 3], hm, label = L"$V_{x}$ analytics", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
 
+            ###########################
+            ax    = Axis(fig[5,1], aspect=DataAspect(), title=L"$V_{x}$ numerics", xlabel=L"x", ylabel=L"y")
+            field = (Vy_viz)[inx_Vx,iny_Vx].*sc.σ
+            hm    = heatmap!(ax, X.v.x, X.c.y, field, colormap=(Makie.Reverse(:matter), 1), colorrange=(minimum(field)-eps, maximum(field)+eps))
+            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
+            hidexdecorations!(ax)
+            Colorbar(fig[6, 1], hm, label = L"$V_{y}$ numerics", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+            
+            ax    = Axis(fig[5,2], aspect=DataAspect(), title=L"$V_{x}$ analytics", xlabel=L"x", ylabel=L"y")
+            field = (V_ana.y)[inx_Vx,iny_Vx].*sc.σ
+            hm    = heatmap!(ax, X.c.x, X.v.y, field, colormap=(Makie.Reverse(:matter), 1), colorrange=(minimum(field)-eps, maximum(field)+eps))
+            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
+            hidexdecorations!(ax)
+            Colorbar(fig[6, 2], hm, label = L"$V_{y}$ analytics", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+
+            ax    = Axis(fig[5,3], aspect=DataAspect(), title=L"$V_{x}$ error", xlabel=L"x", ylabel=L"y")
+            field = (ϵV.y)[inx_Vy,iny_Vy].*sc.σ
+            hm    = heatmap!(ax, X.c.x, X.v.y, field, colormap=(Makie.Reverse(:matter), 1), colorrange=(minimum(field)-eps, maximum(field)+eps))
+            contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
+            hidexdecorations!(ax)
+            Colorbar(fig[6, 3], hm, label = L"$V_{y}$ analytics", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
+
             display(fig) 
             DataInspector(fig)
         end
@@ -500,4 +527,4 @@ function Run(n)
 
 end
 
-Run(50)
+Run(100)
