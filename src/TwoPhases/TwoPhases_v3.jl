@@ -203,10 +203,10 @@ function Continuity(Vx, Vy, Pt_loc, Pf_loc, old, phase, materials, type, bcv, Δ
     # dlnρsdt = SMatrix{3, 3, Float64}( @. (1/(1-Φ) *(dPtdt - Φ*dPfdt) / Ks) ) # approximation in Yarushina's paper
 
     # Single phase
-    if materials.single_phase
-        dPsdt   = dPtdt 
-        dlnρsdt = dPsdt / Ks
-    end
+    # if materials.single_phase
+    #     dPsdt   = dPtdt 
+    #     dlnρsdt = dPsdt / Ks
+    # end
 
     divVs   = (Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy 
     
@@ -218,6 +218,7 @@ function Continuity(Vx, Vy, Pt_loc, Pf_loc, old, phase, materials, type, bcv, Δ
             fp      = Pt[2,2] - Pf[2,2]
         else
             fp      = dlnρsdt[2,2] - dΦdt[2,2]/(1-Φ[2,2]) + divVs
+            
         end
     else
         # Solid mass / immobile solid mass: ∂ρim∂t  + ∇⋅(q) with q = ρim⋅Vs
@@ -956,6 +957,8 @@ function SetBCVx1(Vx, typex, bcx, Δ)
     for ii in axes(typex, 1)
         if typex[ii,1] == :Dirichlet_tangent
             MVx[ii,1] = fma(2, bcx[ii,1], -Vx[ii,2])
+            # @show Vx[ii,2]
+            # error()
         elseif typex[ii,1] == :Neumann_tangent
             MVx[ii,1] = fma(Δ.y, bcx[ii,1], Vx[ii,2])
         end
