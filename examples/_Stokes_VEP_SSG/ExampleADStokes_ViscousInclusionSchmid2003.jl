@@ -23,19 +23,9 @@ using ExactFieldSolutions
                         0  -params.er] )
 
     # Material parameters
-    materials_properties =  initialize_materials( 2 )
-                                  # 1        # 2
-    materials_properties.g    .= [0.0,       0.0  ]
-    materials_properties.ρ    .= [1.0,       1.0  ]
-    materials_properties.n    .= [1.0,       1.0  ]
-    materials_properties.η0   .= [params.mm, params.mc] 
-    materials_properties.G    .= [1e50,      1e50 ]
-    materials_properties.C    .= [150,       150  ]
-    materials_properties.ϕ    .= [30.,       30.  ]
-    materials_properties.ηvp  .= [0.5,       0.5  ]
-    materials_properties.β    .= [1e-2,      1e-2 ]
-    materials_properties.ψ    .= [3.0,       3.0  ]
-    materials = preprocess_materials( materials_properties )
+    materials_properties     = initialize_materials( 2 )
+    materials_properties.η0 .= [params.mm, params.mc] 
+    materials                = preprocess_materials( materials_properties )
 
     # Time steps
     Δt0   = 0.5
