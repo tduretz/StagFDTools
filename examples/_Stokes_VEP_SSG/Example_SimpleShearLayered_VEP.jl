@@ -354,8 +354,8 @@ let
     τ_cart_ana = zeros(nθ)
 
     #  Anisotropy parameters
-    η2 = 2.0
-    m  = 10
+    η2 = 1e10
+    m  = 1
     η1 = η2 / m
 
     α2 = 0.5
@@ -366,11 +366,8 @@ let
 
     # elasticity
     tmax = 1.0
-    G1 = η1/tmax
-    G2 = η2/tmax
-    C1 = 1.0
-    C2 = 2.0
-    η1, η2 = η1*1e6, η2*1e6 
+    G2 = G1 = 1.0
+    C2 = C1 = 10
 
     # Run them all
     for iθ in eachindex(θ)
