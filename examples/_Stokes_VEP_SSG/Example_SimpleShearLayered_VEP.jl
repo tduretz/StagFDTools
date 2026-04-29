@@ -1,6 +1,5 @@
-using StagFDTools, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf
+using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
-import StagFDTools.Stokes as Sk
 using DifferentiationInterface
 using Enzyme  # AD backends you want to use
 using TimerOutputs, Interpolations, GridGeometryUtils
@@ -36,55 +35,6 @@ function Analytical(θ, η, δ, D_BC)
     return τ_II
 end
 
-function StressVectorCartesian!(ε̇, η_n, θ, δ)
-    # Transformation from cartesian to material coordinates
-    Q         = @SMatrix([cos(θ) sin(θ); -sin(θ) cos(θ)])
-    ε̇_tensor  = @SMatrix([ε̇[1] ε̇[3]; ε̇[3] ε̇[2]])
-    ε̇_mat     = Q * ε̇_tensor * Q'
-
-    # calculate stress in material coordinates
-    τ_mat_vec = @SVector([2 * η_n   * ε̇_mat[1,1],
-                          2 * η_n   * ε̇_mat[2,2],
-                          2 * η_n/δ * ε̇_mat[1,2]])
-
-    # convert stress to cartesian coordinates
-    τ_mat   = @SMatrix([τ_mat_vec[1] τ_mat_vec[3]; τ_mat_vec[3] τ_mat_vec[2]])
-    τ_cart  = Q' * τ_mat * Q
-    τ_cart_vec = @SVector([τ_cart[1,1], τ_cart[2,2], τ_cart[1,2]])
-    return τ_cart_vec
-end
-
-
-function ViscousRheology(θ, η_n, δ, D_BC)
-    #= define velocity gradient components and resulting deviatoric strain rate components
-    pure shear ε̇ = [ε̇xx 0; 0 -ε̇xx]
-    simple shear ε̇ = [0 ε̇xy; ε̇xy 0]
-    =#
-    # pureshear = 1 # = 0 for simple shear
-    # Dxx = pureshear * 1
-    # Dyy = -Dxx
-    # Dxy = (1-pureshear) * 1.0
-    Dxx = D_BC[1,1]
-    Dyy = - Dxx
-    Dxy = D_BC[1,2]
-    Dkk = Dxx + Dyy
-
-    ε̇	= @SVector([Dxx - Dkk/3, Dyy - Dkk/3, Dxy])
-
-    D_clt = zeros(3,3)
-
-    jac = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVectorCartesian!, ε̇, Const(η_n), Const(θ), Const(δ))
-
-    D_clt[:,:] .= jac.derivs[1]
-
-    τxx  = jac.val[1]
-    τyy  = jac.val[2]
-    τxy  = jac.val[3]
-
-    τ_II = sqrt(0.5 * (τxx^2 + τyy^2 + (-τxx - τyy)^2) + τxy^2)
-    return τ_II
-end
-
 @views function main(nc, layering, BC_template, D_template, factorization, η1 , η2, G1, G2, C1, C2)
     #--------------------------------------------#   
 
@@ -94,7 +44,7 @@ end
 
     # Material parameters
     materials = ( 
-        compressible = false,
+        compressible = true,
         plasticity   = :DruckerPrager,
         g    = [0.0    0.0  ],
         ρ    = [1.0    1.0  ],
@@ -125,44 +75,44 @@ end
     α     = LinRange(0.05, 1.0, 10)
 
     # Grid bounds
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, inx_v, iny_v, size_x, size_y, size_c, size_v = Sk.Ranges(nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, inx_v, iny_v, size_x, size_y, size_c, size_v = Ranges(nc)
 
     #--------------------------------------------#
     # Boundary conditions
 
     # Define node types and set BC flags
-    type = Sk.Fields(
+    type = Fields(
         fill(:out, (nc.x+3, nc.y+4)),
         fill(:out, (nc.x+4, nc.y+3)),
         fill(:out, (nc.x+2, nc.y+2)),
     )
-    Sk.set_boundaries_template!(type, config, nc)
+    set_boundaries_template!(type, config, nc)
 
     #--------------------------------------------#
     # Equation numbering
-    number = Sk.Fields(
+    number = Fields(
         fill(0, size_x),
         fill(0, size_y),
         fill(0, size_c),
     )
-    Sk.Numbering!(number, type, nc)
+    Numbering!(number, type, nc)
 
     #--------------------------------------------#
     # Stencil extent for each block matrix
-    pattern = Sk.Fields(
-        Sk.Fields(@SMatrix([1 1 1; 1 1 1; 1 1 1]),                 @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([1 1 1; 1 1 1])), 
-        Sk.Fields(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]),  @SMatrix([1 1 1; 1 1 1; 1 1 1]),                @SMatrix([1 1; 1 1; 1 1])), 
-        Sk.Fields(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]))
+    pattern = Fields(
+        Fields(@SMatrix([1 1 1; 1 1 1; 1 1 1]),                 @SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]), @SMatrix([1 1 1; 1 1 1])), 
+        Fields(@SMatrix([0 1 1 0; 1 1 1 1; 1 1 1 1; 0 1 1 0]),  @SMatrix([1 1 1; 1 1 1; 1 1 1]),                @SMatrix([1 1; 1 1; 1 1])), 
+        Fields(@SMatrix([0 1 0; 0 1 0]),                        @SMatrix([0 0; 1 1; 0 0]),                      @SMatrix([1]))
     )
 
     # Sparse matrix assembly
     nVx   = maximum(number.Vx)
     nVy   = maximum(number.Vy)
     nPt   = maximum(number.Pt)
-    M = Sk.Fields(
-        Sk.Fields(ExtendableSparseMatrix(nVx, nVx), ExtendableSparseMatrix(nVx, nVy), ExtendableSparseMatrix(nVx, nPt)), 
-        Sk.Fields(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt)), 
-        Sk.Fields(ExtendableSparseMatrix(nPt, nVx), ExtendableSparseMatrix(nPt, nVy), ExtendableSparseMatrix(nPt, nPt))
+    M = Fields(
+        Fields(ExtendableSparseMatrix(nVx, nVx), ExtendableSparseMatrix(nVx, nVy), ExtendableSparseMatrix(nVx, nPt)), 
+        Fields(ExtendableSparseMatrix(nVy, nVx), ExtendableSparseMatrix(nVy, nVy), ExtendableSparseMatrix(nVy, nPt)), 
+        Fields(ExtendableSparseMatrix(nPt, nVx), ExtendableSparseMatrix(nPt, nVy), ExtendableSparseMatrix(nPt, nPt))
     )
     𝐊  = ExtendableSparseMatrix(nVx + nVy, nVx + nVy)
     𝐐  = ExtendableSparseMatrix(nVx + nVy, nPt)
@@ -220,7 +170,7 @@ end
     V.x[inx_Vx,iny_Vx] .= D_BC[1,1]*xv .+ D_BC[1,2]*yc' 
     V.y[inx_Vy,iny_Vy] .= D_BC[2,1]*xc .+ D_BC[2,2]*yv'
     Pt[inx_c, iny_c ]  .= 10.                 
-    Sk.UpdateSolution!(V, Pt, dx, number, type, nc)
+    UpdateSolution!(V, Pt, dx, number, type, nc)
 
     # Boundary condition values
     BC = ( Vx = zeros(size_x...), Vy = zeros(size_y...))
@@ -278,10 +228,10 @@ end
             #--------------------------------------------#
             # Residual check        
             @timeit to "Residual" begin
-                Sk.TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
-                Sk.ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
-                Sk.ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
-                Sk.ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
+                ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
+                ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
+                ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
             end
 
             err.x[iter] = norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
@@ -291,14 +241,14 @@ end
 
             #--------------------------------------------#
             # Set global residual vector
-            Sk.SetRHS!(r, R, number, type, nc)
+            SetRHS!(r, R, number, type, nc)
 
             #--------------------------------------------#
             # Assembly
             @timeit to "Assembly" begin
-                Sk.AssembleContinuity2D!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-                Sk.AssembleMomentum2D_x!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
-                Sk.AssembleMomentum2D_y!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+                AssembleContinuity2D!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+                AssembleMomentum2D_x!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
+                AssembleMomentum2D_y!(M, V, Pt, Pt0, ΔPt, τ0, 𝐷_ctl, phases, materials, number, pattern, type, BC, nc, Δ)
             end
 
             #--------------------------------------------# 
@@ -313,15 +263,15 @@ end
             # Direct-iterative solver
             fu   = -r[1:size(𝐊,1)]
             fp   = -r[size(𝐊,1)+1:end]
-            u, p = Sk.DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=factorization,  ηb=1e3, niter_l=10, ϵ_l=1e-9)
+            u, p = DecoupledSolver(𝐊, 𝐐, 𝐐ᵀ, 𝐏, fu, fp; fact=factorization,  ηb=1e3, niter_l=10, ϵ_l=1e-9)
             dx[1:size(𝐊,1)]     .= u
             dx[size(𝐊,1)+1:end] .= p
 
             #--------------------------------------------#
             # Line search & solution update
-            @timeit to "Line search" imin = Sk.LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
-            Sk.UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
-            Sk.TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
+            @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+            UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
+            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
 
         end
 
@@ -368,7 +318,7 @@ end
 
         ax5 = cm.Axis(fig[3,1:4])
         cm.xlims!(ax5, 0, nt)
-        cm.ylims!(ax5, 0, 5)
+        cm.ylims!(ax5, 0, 2)
         cm.lines!(ax5, 1:it, τIIev[1:it])
         display(fig)
         display(fig)
@@ -401,8 +351,6 @@ let
     θ          = 0# LinRange(0, π, nθ)
     τ_cart     = zeros(nθ)
     τ_cart_lay = zeros(nθ)
-    τ_cart_trf0d = zeros(nθ)
-    τ_cart_trf2d = zeros(nθ)
     τ_cart_ana = zeros(nθ)
 
     #  Anisotropy parameters
@@ -437,7 +385,6 @@ let
         )
 
         τ_cart_lay[iθ] = main( nc, layering, BCs[1], D_BCs[1], :chol, η1, η2, G1, G2, C1, C2)
-        τ_cart_trf0d[iθ] = ViscousRheology(θ[iθ], ηn, δ, D_BCs[1])
         τ_cart_ana[iθ] = Analytical(θ[iθ], ηn, δ, D_BCs[1])
 
     end
@@ -461,7 +408,6 @@ let
     # cm.lines!(ax, θ*180/π, τstrong*ones(size(θ)), color=:gray, linestyle=:dash, label="End-Member (Biot et al., 1965)")
     # cm.lines!(ax, θ*180/π, τweak*ones(size(θ)), color=:gray, linestyle=:dash, label="End-Member (Biot et al., 1965)")
     # cm.scatter!(ax, θ[1:6:end]*180/π, τ_cart[1:6:end], label="Expression", markersize=10)
-    # cm.scatter!(ax, θ[1:10:end]*180/π, τ_cart_trf0d[1:10:end], label="Transformation 0D",  markersize=10, color=cm.Cycled(2))
     # cm.scatter!(ax, θ[1:8:end]*180/π, τ_cart_ana[1:8:end], label="Analytical", marker=:utriangle, markersize=10, color=cm.Cycled(3))
     # cm.Legend(fig[2,1], ax, framevisible=false, orientation=:horizontal, unique=true, nbanks=3, cm.L"$\tau_{II}$    ($δ \approx$ %$(round(Int,δ)))")
     # display(fig)

@@ -2,7 +2,6 @@ using StagFDTools, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearA
 import Statistics:mean
 import StagFDTools.StokesJustPIC as SkJP
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
 using TimerOutputs, Interpolations, GridGeometryUtils
 import CairoMakie as cm
 
@@ -36,54 +35,54 @@ function Analytical(θ, η, δ, D_BC)
     return τ_II
 end
 
-function StressVectorCartesian!(ε̇, η_n, θ, δ)
-    # Transformation from cartesian to material coordinates
-    Q         = @SMatrix([cos(θ) sin(θ); -sin(θ) cos(θ)])
-    ε̇_tensor  = @SMatrix([ε̇[1] ε̇[3]; ε̇[3] ε̇[2]])
-    ε̇_mat     = Q * ε̇_tensor * Q'
+# function StressVectorCartesian!(ε̇, η_n, θ, δ)
+#     # Transformation from cartesian to material coordinates
+#     Q         = @SMatrix([cos(θ) sin(θ); -sin(θ) cos(θ)])
+#     ε̇_tensor  = @SMatrix([ε̇[1] ε̇[3]; ε̇[3] ε̇[2]])
+#     ε̇_mat     = Q * ε̇_tensor * Q'
 
-    # calculate stress in material coordinates
-    τ_mat_vec = @SVector([2 * η_n   * ε̇_mat[1,1],
-                          2 * η_n   * ε̇_mat[2,2],
-                          2 * η_n/δ * ε̇_mat[1,2]])
+#     # calculate stress in material coordinates
+#     τ_mat_vec = @SVector([2 * η_n   * ε̇_mat[1,1],
+#                           2 * η_n   * ε̇_mat[2,2],
+#                           2 * η_n/δ * ε̇_mat[1,2]])
 
-    # convert stress to cartesian coordinates
-    τ_mat   = @SMatrix([τ_mat_vec[1] τ_mat_vec[3]; τ_mat_vec[3] τ_mat_vec[2]])
-    τ_cart  = Q' * τ_mat * Q
-    τ_cart_vec = @SVector([τ_cart[1,1], τ_cart[2,2], τ_cart[1,2]])
-    return τ_cart_vec
-end
+#     # convert stress to cartesian coordinates
+#     τ_mat   = @SMatrix([τ_mat_vec[1] τ_mat_vec[3]; τ_mat_vec[3] τ_mat_vec[2]])
+#     τ_cart  = Q' * τ_mat * Q
+#     τ_cart_vec = @SVector([τ_cart[1,1], τ_cart[2,2], τ_cart[1,2]])
+#     return τ_cart_vec
+# end
 
 
-function ViscousRheology(θ, η_n, δ, D_BC)
-    #= define velocity gradient components and resulting deviatoric strain rate components
-    pure shear ε̇ = [ε̇xx 0; 0 -ε̇xx]
-    simple shear ε̇ = [0 ε̇xy; ε̇xy 0]
-    =#
-    # pureshear = 1 # = 0 for simple shear
-    # Dxx = pureshear * 1
-    # Dyy = -Dxx
-    # Dxy = (1-pureshear) * 1.0
-    Dxx = D_BC[1,1]
-    Dyy = - Dxx
-    Dxy = D_BC[1,2]
-    Dkk = Dxx + Dyy
+# function ViscousRheology(θ, η_n, δ, D_BC)
+#     #= define velocity gradient components and resulting deviatoric strain rate components
+#     pure shear ε̇ = [ε̇xx 0; 0 -ε̇xx]
+#     simple shear ε̇ = [0 ε̇xy; ε̇xy 0]
+#     =#
+#     # pureshear = 1 # = 0 for simple shear
+#     # Dxx = pureshear * 1
+#     # Dyy = -Dxx
+#     # Dxy = (1-pureshear) * 1.0
+#     Dxx = D_BC[1,1]
+#     Dyy = - Dxx
+#     Dxy = D_BC[1,2]
+#     Dkk = Dxx + Dyy
 
-    ε̇	= @SVector([Dxx - Dkk/3, Dyy - Dkk/3, Dxy])
+#     ε̇	= @SVector([Dxx - Dkk/3, Dyy - Dkk/3, Dxy])
 
-    D_clt = zeros(3,3)
+#     D_clt = zeros(3,3)
 
-    jac = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVectorCartesian!, ε̇, Const(η_n), Const(θ), Const(δ))
+#     jac = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVectorCartesian!, ε̇, Const(η_n), Const(θ), Const(δ))
 
-    D_clt[:,:] .= jac.derivs[1]
+#     D_clt[:,:] .= jac.derivs[1]
 
-    τxx  = jac.val[1]
-    τyy  = jac.val[2]
-    τxy  = jac.val[3]
+#     τxx  = jac.val[1]
+#     τyy  = jac.val[2]
+#     τxy  = jac.val[3]
 
-    τ_II = sqrt(0.5 * (τxx^2 + τyy^2 + (-τxx - τyy)^2) + τxy^2)
-    return τ_II
-end
+#     τ_II = sqrt(0.5 * (τxx^2 + τyy^2 + (-τxx - τyy)^2) + τxy^2)
+#     return τ_II
+# end
 
 @views function main(nc, layering, BC_template, D_template, factorization, η1 , η2)
     #--------------------------------------------#   
@@ -100,6 +99,8 @@ end
         compressible = false,
         plasticity   = :none,
         phase_avg    = :geometric,
+        g    = [0.0    0.0  ],
+        ρ    = [1.0    1.0  ],
         n    = [1.0    1.0 ],
         η0   = [η1     η2  ], 
         G    = [1e6    1e6 ],

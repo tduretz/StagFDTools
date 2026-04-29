@@ -36,54 +36,54 @@ function Analytical(θ, η, δ, D_BC)
     return τ_II
 end
 
-function StressVectorCartesian!(ε̇, η_n, θ, δ)
-    # Transformation from cartesian to material coordinates
-    Q         = @SMatrix([cos(θ) sin(θ); -sin(θ) cos(θ)])
-    ε̇_tensor  = @SMatrix([ε̇[1] ε̇[3]; ε̇[3] ε̇[2]])
-    ε̇_mat     = Q * ε̇_tensor * Q'
+# function StressVectorCartesian!(ε̇, η_n, θ, δ)
+#     # Transformation from cartesian to material coordinates
+#     Q         = @SMatrix([cos(θ) sin(θ); -sin(θ) cos(θ)])
+#     ε̇_tensor  = @SMatrix([ε̇[1] ε̇[3]; ε̇[3] ε̇[2]])
+#     ε̇_mat     = Q * ε̇_tensor * Q'
 
-    # calculate stress in material coordinates
-    τ_mat_vec = @SVector([2 * η_n   * ε̇_mat[1,1],
-                          2 * η_n   * ε̇_mat[2,2],
-                          2 * η_n/δ * ε̇_mat[1,2]])
+#     # calculate stress in material coordinates
+#     τ_mat_vec = @SVector([2 * η_n   * ε̇_mat[1,1],
+#                           2 * η_n   * ε̇_mat[2,2],
+#                           2 * η_n/δ * ε̇_mat[1,2]])
 
-    # convert stress to cartesian coordinates
-    τ_mat   = @SMatrix([τ_mat_vec[1] τ_mat_vec[3]; τ_mat_vec[3] τ_mat_vec[2]])
-    τ_cart  = Q' * τ_mat * Q
-    τ_cart_vec = @SVector([τ_cart[1,1], τ_cart[2,2], τ_cart[1,2]])
-    return τ_cart_vec
-end
+#     # convert stress to cartesian coordinates
+#     τ_mat   = @SMatrix([τ_mat_vec[1] τ_mat_vec[3]; τ_mat_vec[3] τ_mat_vec[2]])
+#     τ_cart  = Q' * τ_mat * Q
+#     τ_cart_vec = @SVector([τ_cart[1,1], τ_cart[2,2], τ_cart[1,2]])
+#     return τ_cart_vec
+# end
 
 
-function ViscousRheology(θ, η_n, δ, D_BC)
-    #= define velocity gradient components and resulting deviatoric strain rate components
-    pure shear ε̇ = [ε̇xx 0; 0 -ε̇xx]
-    simple shear ε̇ = [0 ε̇xy; ε̇xy 0]
-    =#
-    # pureshear = 1 # = 0 for simple shear
-    # Dxx = pureshear * 1
-    # Dyy = -Dxx
-    # Dxy = (1-pureshear) * 1.0
-    Dxx = D_BC[1,1]
-    Dyy = - Dxx
-    Dxy = D_BC[1,2]
-    Dkk = Dxx + Dyy
+# function ViscousRheology(θ, η_n, δ, D_BC)
+#     #= define velocity gradient components and resulting deviatoric strain rate components
+#     pure shear ε̇ = [ε̇xx 0; 0 -ε̇xx]
+#     simple shear ε̇ = [0 ε̇xy; ε̇xy 0]
+#     =#
+#     # pureshear = 1 # = 0 for simple shear
+#     # Dxx = pureshear * 1
+#     # Dyy = -Dxx
+#     # Dxy = (1-pureshear) * 1.0
+#     Dxx = D_BC[1,1]
+#     Dyy = - Dxx
+#     Dxy = D_BC[1,2]
+#     Dkk = Dxx + Dyy
 
-    ε̇	= @SVector([Dxx - Dkk/3, Dyy - Dkk/3, Dxy])
+#     ε̇	= @SVector([Dxx - Dkk/3, Dyy - Dkk/3, Dxy])
 
-    D_clt = zeros(3,3)
+#     D_clt = zeros(3,3)
 
-    jac = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVectorCartesian!, ε̇, Const(η_n), Const(θ), Const(δ))
+#     jac = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVectorCartesian!, ε̇, Const(η_n), Const(θ), Const(δ))
 
-    D_clt[:,:] .= jac.derivs[1]
+#     D_clt[:,:] .= jac.derivs[1]
 
-    τxx  = jac.val[1]
-    τyy  = jac.val[2]
-    τxy  = jac.val[3]
+#     τxx  = jac.val[1]
+#     τyy  = jac.val[2]
+#     τxy  = jac.val[3]
 
-    τ_II = sqrt(0.5 * (τxx^2 + τyy^2 + (-τxx - τyy)^2) + τxy^2)
-    return τ_II
-end
+#     τ_II = sqrt(0.5 * (τxx^2 + τyy^2 + (-τxx - τyy)^2) + τxy^2)
+#     return τ_II
+# end
 
 @views function main(nc, layering, BC_template, D_template, factorization, η1 , η2)
     #--------------------------------------------#   
@@ -389,12 +389,12 @@ let
     nc = (x = 200, y = 200)
 
     # Discretise angle of layer 
-    nθ         = 1
-    θ          = π/2 # LinRange(0, π, nθ)
+    nθ         = 30
+    θ          = LinRange(0, π, nθ)
     τ_cart     = zeros(nθ)
     τ_cart_lay = zeros(nθ)
-    τ_cart_trf0d = zeros(nθ)
-    τ_cart_trf2d = zeros(nθ)
+    # τ_cart_trf0d = zeros(nθ)
+    # τ_cart_trf2d = zeros(nθ)
     τ_cart_ana = zeros(nθ)
 
     #  Anisotropy parameters
@@ -402,7 +402,7 @@ let
     m  = 10
     η1 = η2 / m
 
-    α2 = 0.5
+    α2 = 0.2
     α1 = 1 - α2
 
     ηn = α1 * η1 + α2 * η2
@@ -421,7 +421,7 @@ let
         )
 
         τ_cart_lay[iθ] = main( nc, layering, BCs[1], D_BCs[1], :chol, η1, η2)
-        τ_cart_trf0d[iθ] = ViscousRheology(θ[iθ], ηn, δ, D_BCs[1])
+        # τ_cart_trf0d[iθ] = ViscousRheology(θ[iθ], ηn, δ, D_BCs[1])
         τ_cart_ana[iθ] = Analytical(θ[iθ], ηn, δ, D_BCs[1])
 
     end
@@ -437,18 +437,19 @@ let
     @show τweak      = 2*ηeff*ε̇bg
 
     τ_cart .= τstrong * sqrt.(((δ^2 - 1) * cos.(2 .* θ).^2 .+ 1) / (δ^2))
-
-    # cm.with_theme(cm.theme_latexfonts()) do
-    # fig   = cm.Figure(fontsize=15)
-    # ax    = cm.Axis(fig[1,1], xlabel= cm.L"$\theta$ [$^{\circ}$]", ylabel=cm.L"$\tau_{II}$ [-]")
-    # cm.lines!(ax, θ*180/π, τ_cart_lay, label="Layering")
-    # cm.lines!(ax, θ*180/π, τstrong*ones(size(θ)), color=:gray, linestyle=:dash, label="End-Member (Biot et al., 1965)")
-    # cm.lines!(ax, θ*180/π, τweak*ones(size(θ)), color=:gray, linestyle=:dash, label="End-Member (Biot et al., 1965)")
-    # cm.scatter!(ax, θ[1:6:end]*180/π, τ_cart[1:6:end], label="Expression", markersize=10)
-    # cm.scatter!(ax, θ[1:10:end]*180/π, τ_cart_trf0d[1:10:end], label="Transformation 0D",  markersize=10, color=cm.Cycled(2))
-    # cm.scatter!(ax, θ[1:8:end]*180/π, τ_cart_ana[1:8:end], label="Analytical", marker=:utriangle, markersize=10, color=cm.Cycled(3))
-    # cm.Legend(fig[2,1], ax, framevisible=false, orientation=:horizontal, unique=true, nbanks=3, cm.L"$\tau_{II}$    ($δ \approx$ %$(round(Int,δ)))")
-    # display(fig)
-    # end
+    if nθ > 1
+        cm.with_theme(cm.theme_latexfonts()) do
+        fig   = cm.Figure(fontsize=15)
+        ax    = cm.Axis(fig[1,1], xlabel= cm.L"$\theta$ [$^{\circ}$]", ylabel=cm.L"$\tau_{II}$ [-]")
+        cm.lines!(ax, θ*180/π, τ_cart_lay, label="Layering")
+        cm.lines!(ax, θ*180/π, τstrong*ones(size(θ)), color=:gray, linestyle=:dash, label="End-Member (Biot et al., 1965)")
+        cm.lines!(ax, θ*180/π, τweak*ones(size(θ)), color=:gray, linestyle=:dash, label="End-Member (Biot et al., 1965)")
+        cm.scatter!(ax, θ[1:6:end]*180/π, τ_cart[1:6:end], label="Expression", markersize=10)
+        # cm.scatter!(ax, θ[1:10:end]*180/π, τ_cart_trf0d[1:10:end], label="Transformation 0D",  markersize=10, color=cm.Cycled(2))
+        cm.scatter!(ax, θ[1:8:end]*180/π, τ_cart_ana[1:8:end], label="Analytical", marker=:utriangle, markersize=10, color=cm.Cycled(3))
+        cm.Legend(fig[2,1], ax, framevisible=false, orientation=:horizontal, unique=true, nbanks=3, cm.L"$\tau_{II}$    ($δ \approx$ %$(round(Int,δ)))")
+        display(fig)
+        end
+    end
 
 end
