@@ -17,21 +17,21 @@ end
 Base.@kwdef  struct Materials
     plasticity          ::Union{Symbol, Missing}               = :none
     compressible        ::Union{Bool, Missing}                 = false
-    g                   ::Union{Vector{Float64},  Missing}     = [0.0, 0.0]
-    ρ                   ::Union{Vector{Float64},  Missing}     = missing
-    n                   ::Union{Vector{Float64},  Missing}     = missing 
-    η0                  ::Union{Vector{Float64},  Missing}     = missing 
-    ξ0                  ::Union{Vector{Float64},  Missing}     = missing  
-    G                   ::Union{Vector{Float64},  Missing}     = missing 
-    C                   ::Union{Vector{Float64},  Missing}     = missing 
-    ϕ                   ::Union{Vector{Float64},  Missing}     = missing 
-    ηvp                 ::Union{Vector{Float64},  Missing}     = missing 
-    β                   ::Union{Vector{Float64},  Missing}     = missing 
-    ψ                   ::Union{Vector{Float64},  Missing}     = missing 
-    B                   ::Union{Vector{Float64},  Missing}     = missing 
-    cosϕ                ::Union{Vector{Float64},  Missing}     = missing 
-    sinϕ                ::Union{Vector{Float64},  Missing}     = missing 
-    sinψ                ::Union{Vector{Float64},  Missing}     = missing 
+    g                   ::Union{Vector{Float64}, Tuple{Vararg{Float64}},  Missing}     = [0.0, 0.0]
+    ρ                   ::Union{Vector{Float64}, Tuple{Vararg{Float64}},  Missing}     = missing
+    n                   ::Union{Vector{Float64}, Tuple{Vararg{Float64}},  Missing}     = missing 
+    η0                  ::Union{Vector{Float64}, Tuple{Vararg{Float64}},  Missing}     = missing 
+    ξ0                  ::Union{Vector{Float64}, Tuple{Vararg{Float64}},  Missing}     = missing  
+    G                   ::Union{Vector{Float64}, Tuple{Vararg{Float64}},  Missing}     = missing 
+    C                   ::Union{Vector{Float64}, Tuple{Vararg{Float64}},  Missing}     = missing 
+    ϕ                   ::Union{Vector{Float64}, Tuple{Vararg{Float64}},  Missing}     = missing 
+    ηvp                 ::Union{Vector{Float64}, Tuple{Vararg{Float64}},  Missing}     = missing 
+    β                   ::Union{Vector{Float64}, Tuple{Vararg{Float64}},  Missing}     = missing 
+    ψ                   ::Union{Vector{Float64}, Tuple{Vararg{Float64}},  Missing}     = missing 
+    B                   ::Union{Vector{Float64}, Tuple{Vararg{Float64}},  Missing}     = missing 
+    cosϕ                ::Union{Vector{Float64}, Tuple{Vararg{Float64}},  Missing}     = missing 
+    sinϕ                ::Union{Vector{Float64}, Tuple{Vararg{Float64}},  Missing}     = missing 
+    sinψ                ::Union{Vector{Float64}, Tuple{Vararg{Float64}},  Missing}     = missing 
 end
 
 function initialize_materials(n)
@@ -54,11 +54,12 @@ function initialize_materials(n)
     return materials
 end
 
-function preprocess_materials!(materials)
+function preprocess_materials(materials)
     materials.B    .= (2*materials.η0).^(-materials.n)
     materials.cosϕ .= cosd.(materials.ϕ)
     materials.sinϕ .= sind.(materials.ϕ)
     materials.sinψ .= sind.(materials.ψ)
+    return struct_to_namedtuple( materials )
 end
 
 function set_boundaries_template!(type, config, nc)
@@ -233,8 +234,8 @@ function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materia
     τ̄0xy = av(τ0.xy)
 
     # Effective strain rate
-    Gc   = SVector{2, Float64}( materials.G[phases.c] )
-    Gv   = SVector{2, Float64}( materials.G[phases.v] )
+    Gc   = SVector{2, Float64}( materials.G[phases.c[i]] for i=1:2)
+    Gv   = SVector{2, Float64}( materials.G[phases.v[i]] for i=1:2)
     tmpc = @. inv(2 * Gc * Δ.t)
     tmpv = @. inv(2 * Gv * Δ.t)
     ϵ̇xx  = @. ε̇xx[:,2] + τ0.xx[:,2] * tmpc
@@ -304,8 +305,8 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materia
     τ̄0xy = av(τ0.xy)
     
     # Effective strain rate
-    Gc   = SVector{2, Float64}( materials.G[phases.c])
-    Gv   = SVector{2, Float64}( materials.G[phases.v])
+    Gc   = SVector{2, Float64}( materials.G[phases.c[i]] for i=1:2)
+    Gv   = SVector{2, Float64}( materials.G[phases.v[i]] for i=1:2)
     tmpc = (2*Gc.*Δ.t)
     tmpv = (2*Gv.*Δ.t)
     ϵ̇xx  = @. ε̇xx[2,:] + τ0.xx[2,:] / tmpc
@@ -329,7 +330,7 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materia
     end
 
     # Gravity
-    ρ    = SVector{2, Float64}( materials.ρ[phases.c])
+    ρ    = SVector{2, Float64}( materials.ρ[phases.c[i]] for i=1:2)
     ρg   = materials.g[2] * 0.5*(ρ[1] + ρ[2])
 
     # Residual

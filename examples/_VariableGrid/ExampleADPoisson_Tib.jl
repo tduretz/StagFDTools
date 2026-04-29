@@ -332,7 +332,8 @@ let
     nu  = maximum(number.u)
     M   = Fields( Fields( ExtendableSparseMatrix(nu, nu) )) 
     
-    @timeit to "Assembly Enzyme" begin
+    @timeit to "Assembly
+" begin
         AssemblyPoisson_Enzyme!(M, u, k, s, number, type, pattern, bc_val, nc, Δ)
     end
     #@timeit to "Assembly ForwardDiff" begin

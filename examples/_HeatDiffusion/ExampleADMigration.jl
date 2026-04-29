@@ -342,7 +342,8 @@ function RunDiffusion(n)
         @timeit to "Residual" ResidualPoisson2D!(r, u, k, s, number, type, bc_val, nc, Δ, u0, ρ, cp) 
         @info norm(r)/sqrt(length(r))
         
-        @timeit to "Assembly Enzyme" begin
+        @timeit to "Assembly
+" begin
             AssemblyPoisson_Enzyme!(M, u, k, s, number, type, pattern, bc_val, nc, Δ, u0, ρ, cp)
         end
 

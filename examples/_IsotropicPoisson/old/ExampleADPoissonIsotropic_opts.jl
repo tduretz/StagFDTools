@@ -204,7 +204,8 @@ let
     @info norm(r)/sqrt(length(r))
     # Assembly
     K = AssemblyPoisson_Enzyme(u, k, s, numbering, nc, Δ) # allocate pattern 
-    @timeit to "Assembly Enzyme" begin
+    @timeit to "Assembly
+" begin
         AssemblyPoisson_Enzyme!(K, u, k, s, numbering, nc, Δ)
     end
     # K = AssemblyPoisson_ForwardDiff(u, k, s, numbering, nc, Δ) # allocate pattern 
@@ -242,7 +243,8 @@ end
 
 # Section           ncalls     time    %tot     avg     alloc    %tot      avg
 # ────────────────────────────────────────────────────────────────────────────
-# Assembly Enzyme        1    115μs   81.7%   137μs    388KiB  100.0%   388KiB
+# Assembly
+        1    115μs   81.7%   137μs    388KiB  100.0%   388KiB
 # Residual               1   30.8μs   18.3%  30.8μs     32.0B    0.0%    32.0B
 # ────────────────────────────────────────────────────────────────────────────
 

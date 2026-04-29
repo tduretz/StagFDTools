@@ -392,7 +392,8 @@ let
     #     Residual_and_AssemblyPoisson_ForwardDiff!(r, K, u, k, s, numbering, nc, Δ)
     # end
 
-    @timeit to "Residual+Assembly Enzyme" begin
+    @timeit to "Residual+Assembly
+" begin
         Residual_and_AssemblyPoisson_ForwardDiff!(r, K, u, k, s, numbering, nc, Δ)
     end
     @show norm(K-K')
@@ -447,7 +448,8 @@ end
 # Section   ncalls        time    %tot     avg     alloc    %tot      avg
 # ────────────────────────────────────────────────────────────────────
 # Solver                    1    658ms   92.1%   658ms    507MiB   80.7%   507MiB
-# Residual+Assembly Enzyme  1   56.1ms    7.9%  56.1ms    121MiB   19.3%   121MiB
+# Residual+Assembly
+  1   56.1ms    7.9%  56.1ms    121MiB   19.3%   121MiB
 # ────────────────────────────────────────────────────────────────────
 
 # ForwardDiff.jl
