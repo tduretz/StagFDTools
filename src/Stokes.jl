@@ -14,6 +14,52 @@ end
 function Ranges(nc)     
     return (inx_Vx = 2:nc.x+2, iny_Vx = 3:nc.y+2, inx_Vy = 3:nc.x+2, iny_Vy = 2:nc.y+2, inx_c = 2:nc.x+1, iny_c = 2:nc.y+1, inx_v = 2:nc.x+2, iny_v = 2:nc.y+2, size_x = (nc.x+3, nc.y+4), size_y = (nc.x+4, nc.y+3), size_c = (nc.x+2, nc.y+2), size_v = (nc.x+3, nc.y+3))
 end
+Base.@kwdef  struct Materials
+    plasticity          ::Union{Symbol, Missing}               = :none
+    compressible        ::Union{Bool, Missing}                 = false
+    g                   ::Union{Vector{Float64},  Missing}     = [0.0, 0.0]
+    ρ                   ::Union{Vector{Float64},  Missing}     = missing
+    n                   ::Union{Vector{Float64},  Missing}     = missing 
+    η0                  ::Union{Vector{Float64},  Missing}     = missing 
+    ξ0                  ::Union{Vector{Float64},  Missing}     = missing  
+    G                   ::Union{Vector{Float64},  Missing}     = missing 
+    C                   ::Union{Vector{Float64},  Missing}     = missing 
+    ϕ                   ::Union{Vector{Float64},  Missing}     = missing 
+    ηvp                 ::Union{Vector{Float64},  Missing}     = missing 
+    β                   ::Union{Vector{Float64},  Missing}     = missing 
+    ψ                   ::Union{Vector{Float64},  Missing}     = missing 
+    B                   ::Union{Vector{Float64},  Missing}     = missing 
+    cosϕ                ::Union{Vector{Float64},  Missing}     = missing 
+    sinϕ                ::Union{Vector{Float64},  Missing}     = missing 
+    sinψ                ::Union{Vector{Float64},  Missing}     = missing 
+end
+
+function initialize_materials(n)
+    materials = Materials(;
+        ρ     =       ones(n),
+        n     =       ones(n), 
+        η0    =       ones(n), 
+        ξ0    =  1e50*ones(n),   
+        G     =  1e50*ones(n), 
+        C     =  1e50*ones(n), 
+        ϕ     =       ones(n), 
+        ηvp   =       ones(n), 
+        β     = 1e-50*ones(n), 
+        ψ     =       ones(n), 
+        B     =       ones(n), 
+        cosϕ  =       ones(n), 
+        sinϕ  =       ones(n), 
+        sinψ  =       ones(n), 
+    )
+    return materials
+end
+
+function preprocess_materials!(materials)
+    materials.B    .= (2*materials.η0).^(-materials.n)
+    materials.cosϕ .= cosd.(materials.ϕ)
+    materials.sinϕ .= sind.(materials.ϕ)
+    materials.sinψ .= sind.(materials.ψ)
+end
 
 function set_boundaries_template!(type, config, nc)
     
@@ -301,9 +347,10 @@ function Continuity(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δ)
     invΔy = 1 / Δ.y
     invΔt = 1 / Δ.t
     β     = materials.β[phase]
+    ξ     = materials.ξ0[phase]
     η     = materials.β[phase]
     comp  = materials.compressible
-    f     = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy) + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
+    f     = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy) + comp * β * (Pt[1] - Pt0) * invΔt + comp * Pt[1]/ξ 
     # f    *= max(invΔx, invΔy)
     return f
 end
@@ -875,7 +922,7 @@ function Numbering!(N, type, nc)
 end
 
 
-function LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+function LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, ξ, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
     
     inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, inx_v, iny_v, size_x, size_y, size_c, size_v = Ranges(nc)
 
@@ -887,7 +934,7 @@ function LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, 
         V.y .= Vi.y
         Pt  .= Pti
         UpdateSolution!(V, Pt, α[i].*dx, number, type, nc)
-        TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
+        TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, ξ, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
         ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
         ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
         ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
@@ -900,7 +947,7 @@ function LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, 
     return imin
 end
 
-function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
+function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, ξ, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
 
     _ones = @SVector ones(4)
     D_test = @MMatrix ones(4,4)

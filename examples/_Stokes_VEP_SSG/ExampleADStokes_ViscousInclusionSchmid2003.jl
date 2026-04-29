@@ -23,26 +23,20 @@ using ExactFieldSolutions
                         0  -params.er] )
 
     # Material parameters
-    materials = ( 
-        compressible = false,
-        plasticity   = :none,
-        g    = [0.0    0.0  ],
-        ρ    = [1.0    1.0  ],
-        n    = [1.0    1.0  ],
-        η0   = [params.mm    params.mc], 
-        G    = [1e50   1e50  ],
-        C    = [150    150  ],
-        ϕ    = [30.    30.  ],
-        ηvp  = [0.5    0.5  ],
-        β    = [1e-2   1e-2 ],
-        ψ    = [3.0    3.0  ],
-        B    = [0.     0.   ],
-        cosϕ = [0.0    0.0  ],
-        sinϕ = [0.0    0.0  ],
-        sinψ = [0.0    0.0  ],
-    )           # 1     # 2
-    materials.B   .= (2*materials.η0).^(-materials.n)
-
+    materials =  initialize_materials( 2 )
+    # 1        # 2
+    materials.g    .= [0.0,       0.0  ]
+    materials.ρ    .= [1.0,       1.0  ]
+    materials.n    .= [1.0,       1.0  ]
+    materials.η0   .= [params.mm, params.mc] 
+    materials.G    .= [1e50,      1e50 ]
+    materials.C    .= [150,       150  ]
+    materials.ϕ    .= [30.,       30.  ]
+    materials.ηvp  .= [0.5,       0.5  ]
+    materials.β    .= [1e-2,      1e-2 ]
+    materials.ψ    .= [3.0,       3.0  ]
+    preprocess_materials!( materials )
+    
     # Time steps
     Δt0   = 0.5
     nt    = 1
@@ -111,6 +105,7 @@ using ExactFieldSolutions
     V       = (x  = zeros(size_x...), y  = zeros(size_y...))
     Vi      = (x  = zeros(size_x...), y  = zeros(size_y...))
     η       = (c  =  ones(size_c...), v  =  ones(size_v...) )
+    ξ       = (c  =  ones(size_c...), v  =  ones(size_v...) )
     λ̇       = (c  = zeros(size_c...), v  = zeros(size_v...) )
     ε̇       = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...), II = zeros(size_c...) )
     τ0      = (xx = zeros(size_c...), yy = zeros(size_c...), xy = zeros(size_v...) )
@@ -216,7 +211,7 @@ using ExactFieldSolutions
             #--------------------------------------------#
             # Residual check        
             @timeit to "Residual" begin
-                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
+                TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, ξ, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
                 ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
                 ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
                 ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
@@ -259,9 +254,9 @@ using ExactFieldSolutions
 
             #--------------------------------------------#
             # Line search & solution update
-            @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+            @timeit to "Line search" imin = LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, ξ, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
             UpdateSolution!(V, Pt, α[imin]*dx, number, type, nc)
-            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
+            TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, ξ, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
         end
 
         # Update pressure

@@ -1,6 +1,6 @@
 using StagFDTools, StagFDTools.Poisson, ExtendableSparse, StaticArrays, LinearAlgebra, Statistics, UnPack, Plots
 using TimerOutputs
-# using Enzyme
+# 
 using ForwardDiff
 using StagFDTools: Duplicated, Const, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
 using Distributions
