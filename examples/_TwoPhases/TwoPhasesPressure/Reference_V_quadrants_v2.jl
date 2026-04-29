@@ -36,7 +36,7 @@ end
     # Adimensionnal numbers
     Ωr     = 0.1             # Ratio inclusion radius / L
     # DIFFERENT FROM REFERENCE
-    Ωηi    = 1e2            # Ratio (inclusion viscosity) / (matrix viscosity)
+    Ωηi    = 1e-2            # Ratio (inclusion viscosity) / (matrix viscosity)
     Ωp     = 1.              # Ratio (ε̇bg * ηs) / P0
     # Independant
     ηsi    = 1.              # Shear viscosity
@@ -480,7 +480,7 @@ end
         # save("./examples/_TwoPhases/TwoPhasesPressure/PoroviscousReference_middle.jld2", "Ωl", Ωl, "Ωη", Ωη,"x", (c=xc, v=xv), "y", (c=yc, v=yv), "P", P, "dΦdt", dΦdt, "Φ", Φ, "τ", τ, "Vs", (x=Vxsc, y=Vysc), "Vf", (x=Vxfc, y=Vyfc))
         # save("./examples/_TwoPhases/TwoPhasesPressure/PoroviscousReference_endmember2.jld2", "Ωl", Ωl, "Ωη", Ωη,"x", (c=xc, v=xv), "y", (c=yc, v=yv), "P", P, "dΦdt", dΦdt, "Φ", Φ, "τ", τ, "Vs", (x=Vxsc, y=Vysc), "Vf", (x=Vxfc, y=Vyfc))        
 
-        save("./examples/_TwoPhases/TwoPhasesPressure/PoroviscousReference_hext_stronginc.jld2", "Ωl", Ωl, "Ωη", Ωη,"x", (c=xc, v=xv), "y", (c=yc, v=yv), "P", P, "dΦdt", dΦdt, "Φ", Φ, "τ", τ, "Vs", (x=Vxsc, y=Vysc), "Vf", (x=Vxfc, y=Vyfc), "τvis", τvis, "Ptvis", Ptvis, "Pfvis", Pfvis, "Peffvis", Peffvis)
+        save("./examples/_TwoPhases/TwoPhasesPressure/PoroviscousReference_hext_weakinc.jld2", "Ωl", Ωl, "Ωη", Ωη,"x", (c=xc, v=xv), "y", (c=yc, v=yv), "P", P, "dΦdt", dΦdt, "Φ", Φ, "τ", τ, "Vs", (x=Vxsc, y=Vysc), "Vf", (x=Vxfc, y=Vyfc), "τvis", τvis, "Ptvis", Ptvis, "Pfvis", Pfvis, "Peffvis", Peffvis)
     end
 
     @show maximum(P.t[inx_c,iny_c])  - minimum(P.t[inx_c,iny_c]) 
@@ -505,7 +505,7 @@ function Run()
     # Ωl = 10^(-1.7) # ---> δ/r
     # Ωl = 10^(-1.0)
     Ωη = 10^(2)
-    Ωl = 0.15 # ref
+    Ωl = 0.3 # ref 0.15
 
     # Ωl = 0.045 # end member 1
     # Ωl = 0.55  # middle

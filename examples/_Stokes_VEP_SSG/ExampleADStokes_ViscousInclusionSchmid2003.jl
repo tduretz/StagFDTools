@@ -372,5 +372,5 @@ end
 
 let
     # Run 
-    main(100)
+    @time main(100)
 end

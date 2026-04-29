@@ -18,7 +18,7 @@ include("operators.jl")
 export inn, inn_x, inn_y, av, avx, avy, harm, ∂x, ∂y, ∂x_inn, ∂y_inn, ∂kk
 
 include("Utils.jl")
-export GenerateGrid, printxy, av2D, struct_to_namedtuple
+export GenerateGrid, printxy, av2D, struct2namedtuple
 
 include("Solvers.jl")
 export DecoupledSolver

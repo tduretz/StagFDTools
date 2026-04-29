@@ -4,10 +4,10 @@ av2D(x) = @views @. 0.25*(x[1:end-1,1:end-1] + x[2:end-0,1:end-1,] + x[1:end-1,2
 to_tuple_if_vector(x) = x
 to_tuple_if_vector(x::AbstractVector) = Tuple(x)
 
-function struct_to_namedtuple(obj)
-    names = fieldnames(typeof(obj))
-    values = map(f -> to_tuple_if_vector(getfield(obj, f)), names)
-    return NamedTuple{names}(values)
+function struct2namedtuple(x::T) where T
+    names = fieldnames(T)
+    vals = ntuple(i -> getfield(x, i), Val(length(names)))
+    return NamedTuple{names}(vals)
 end
 
 @views function GenerateGrid(x, y, Δ, nc)
