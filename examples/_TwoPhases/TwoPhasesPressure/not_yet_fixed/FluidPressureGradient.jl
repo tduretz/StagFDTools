@@ -1,8 +1,6 @@
 using StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, Plots, LinearAlgebra, SparseArrays, Printf, JLD2
 import Statistics:mean
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
-
 function Rozhko2008(rho, phi, r1, rc, eta, P0, dPf, m, kappa, G)
     if rho < r1
         Pf   = dPf

@@ -1,6 +1,7 @@
 using StagFDTools, StagFDTools.Poisson, ExtendableSparse, StaticArrays, LinearAlgebra, Statistics, UnPack
 using TimerOutputs
-using ForwardDiff, Enzyme  # AD backends you want to use 
+using ForwardDiff
+using StagFDTools: Duplicated, Const, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
 import CairoMakie as cm
 import CairoMakie.Makie.GeometryBasics as geom
 
@@ -288,7 +289,7 @@ function AssemblyPoisson_Enzyme!(K, u, k, s, Jinv, number, type, pattern, bc_val
         ∂R∂u     .= 0e0
 
         # Here the magic happens: we call a function from Enzyme that computes all, partial derivatives for the current stencil block 
-        autodiff(Enzyme.Reverse, Poisson2D, Duplicated(u_loc, ∂R∂u), Const(k_loc), Const(s[i,j]), Const(Jinv_c), Const(Jinv_v), Const(type_loc), Const(bcv_loc), Const(Δ))
+        forwarddiff_gradients!(Poisson2D, Duplicated(u_loc, ∂R∂u), Const(k_loc), Const(s[i,j]), Const(Jinv_c), Const(Jinv_v), Const(type_loc), Const(bcv_loc), Const(Δ))
 
         # This loops through the 2*2 stencil block and sets the coefficient ∂R∂u into the sparse matrix K.u.u
         num_ij = number.u[i,j]
@@ -419,13 +420,13 @@ let
     I2  = LinearAlgebra.I(2)
 
     for I in CartesianIndices(X.v)
-        J          = Enzyme.jacobian(Enzyme.ForwardWithPrimal, TransformCoordinates, ξ.v[I], Const(params))
+        J          = forwarddiff_jacobian(TransformCoordinates, ξ.v[I], Const(params))
         Jinv.v[I] .= J.derivs[1] \ I2
         X.v[I]    .= J.val
     end
 
     for I in CartesianIndices(X.c)
-        J          = Enzyme.jacobian(Enzyme.ForwardWithPrimal, TransformCoordinates, ξ.c[I], Const(params))
+        J          = forwarddiff_jacobian(TransformCoordinates, ξ.c[I], Const(params))
         Jinv.c[I] .= J.derivs[1] \ I2
         X.c[I]    .= J.val
     end

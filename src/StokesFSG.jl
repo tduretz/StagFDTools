@@ -602,7 +602,13 @@ function AssembleContinuity2D_1!(K, V, Pt, phases, materials, num, pattern, type
             ∂Rp∂Vy2 .= 0.
             ∂Rp∂Pt1 .= 0.
             ∂Rp∂Pt2 .= 0.
-            autodiff(Enzyme.Reverse, Continuity, Duplicated(Vx[1], ∂Rp∂Vx1), Duplicated(Vx[2], ∂Rp∂Vx2), Duplicated(Vy[2], ∂Rp∂Vy2), Duplicated(Vy[1], ∂Rp∂Vy1), Duplicated(P[1], ∂Rp∂Pt1), Duplicated(P[2], ∂Rp∂Pt2), Const(phase[1]), Const(materials), Const(typex[1]), Const(typex[2]), Const(typey[2]), Const(typey[1]), Const(bc_val), Const(Δ))
+            ∂Vx1, ∂Vx2, ∂Vy2, ∂Vy1, ∂Pt1, ∂Pt2 = ad_partial_gradients(Continuity, (Vx[1], Vx[2], Vy[2], Vy[1], P[1], P[2]), phase[1], materials, typex[1], typex[2], typey[2], typey[1], bc_val, Δ)
+            ∂Rp∂Vx1 .= ∂Vx1
+            ∂Rp∂Vx2 .= ∂Vx2
+            ∂Rp∂Vy2 .= ∂Vy2
+            ∂Rp∂Vy1 .= ∂Vy1
+            ∂Rp∂Pt1 .= ∂Pt1
+            ∂Rp∂Pt2 .= ∂Pt2
 
             ieq = num.Pt[1][i,j]
 
@@ -690,7 +696,13 @@ function AssembleContinuity2D_2!(K, V, Pt, phases, materials, num, pattern, type
             ∂Rp∂Vy2 .= 0.
             ∂Rp∂Pt1 .= 0.
             ∂Rp∂Pt2 .= 0.
-            autodiff(Enzyme.Reverse, Continuity, Duplicated(Vx[2], ∂Rp∂Vx2), Duplicated(Vx[1], ∂Rp∂Vx1), Duplicated(Vy[1], ∂Rp∂Vy1), Duplicated(Vy[2], ∂Rp∂Vy2), Duplicated(P[2], ∂Rp∂Pt2), Duplicated(P[1], ∂Rp∂Pt1), Const(phase[2]), Const(materials), Const(typex[2]), Const(typex[1]), Const(typey[1]), Const(typey[2]), Const(bc_val), Const(Δ))
+            ∂Vx2, ∂Vx1, ∂Vy1, ∂Vy2, ∂Pt2, ∂Pt1 = ad_partial_gradients(Continuity, (Vx[2], Vx[1], Vy[1], Vy[2], P[2], P[1]), phase[2], materials, typex[2], typex[1], typey[1], typey[2], bc_val, Δ)
+            ∂Rp∂Vx2 .= ∂Vx2
+            ∂Rp∂Vx1 .= ∂Vx1
+            ∂Rp∂Vy1 .= ∂Vy1
+            ∂Rp∂Vy2 .= ∂Vy2
+            ∂Rp∂Pt2 .= ∂Pt2
+            ∂Rp∂Pt1 .= ∂Pt1
             ieq = num.Pt[2][i,j]
 
             ##################################################################

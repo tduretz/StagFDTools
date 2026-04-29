@@ -139,7 +139,7 @@ function LocalRheology_var(ε̇, materials, phases, Δt)
         r      = ε̇II - StrainRateTrial(τII, G, Δt, B, n) # ici j'ai ajouté l'indice
         # @show abs(r)
         (abs(r)<ϵ) && break
-        ∂ε̇II∂τII = Enzyme.jacobian(Enzyme.Forward, StrainRateTrial, τII, G, Δt, B, n) # ici j'ai ajouté l'indice
+        ∂ε̇II∂τII = forwarddiff_jacobian(StrainRateTrial, τII, G, Δt, B, n) # ici j'ai ajouté l'indice
         ∂τII∂ε̇II = inv(∂ε̇II∂τII[1])
         τII     += ∂τII∂ε̇II*r
     end
@@ -309,14 +309,14 @@ end
 
 function ResidualDeviator( x, τ_trial, ε̇_eff, ηve, p, model)
     τ, P, λ̇ = x[1], x[2], x[3]
-    ∂Q∂σ = Enzyme.gradient(Enzyme.Forward, Potential, x, Const(p), Const(model))
+    ∂Q∂σ = forwarddiff_gradient(Potential, x, Const(p), Const(model))
     # return ε̇_eff -  τ/2/ηve  - λ̇/2*∂Q∂σ[1][1]
     return τ - τ_trial + ηve*λ̇*∂Q∂σ[1][1]
 end  
 
 function ResidualVolume( x, P_trial, Dkk, P0, K, Δt, p, model)
     τ, P, λ̇ = x[1], x[2], x[3]
-    ∂Q∂σ = Enzyme.gradient(Enzyme.Forward, Potential, x, Const(p), Const(model))
+    ∂Q∂σ = forwarddiff_gradient(Potential, x, Const(p), Const(model))
     return P - P_trial + K*Δt*λ̇*∂Q∂σ[1][2]
 end  
 
@@ -371,7 +371,7 @@ function NonLinearReturnMapping(τII, P, ε̇_eff, Dkk, P0, ηve, β, Δt, plast
 
         iter += 1
         x0    = copy(x)
-        J     = Enzyme.jacobian(Enzyme.ForwardWithPrimal, RheologyResidual, x, Const(trial), Const(plastic), Const(model))
+        J     = forwarddiff_jacobian(RheologyResidual, x, Const(trial), Const(plastic), Const(model))
         δx    = - J.derivs[1] \ J.val
         nR    = abs(J.val[3])
 
@@ -489,7 +489,7 @@ function LocalRheology_var(ε̇, Dkk, P0, materials, phases, Δt)
         r      = ε̇II - StrainRateTrial(τII, G, Δt, B, n)
         # @show abs(r)
         (abs(r)<ϵ) && break
-        ∂ε̇II∂τII = Enzyme.jacobian(Enzyme.Forward, StrainRateTrial, τII, G, Δt, B, n)
+        ∂ε̇II∂τII = forwarddiff_jacobian(StrainRateTrial, τII, G, Δt, B, n)
         ∂τII∂ε̇II = inv(∂ε̇II∂τII[1])
         τII     += ∂τII∂ε̇II*r
     end
@@ -572,7 +572,7 @@ function LocalRheology_div(ε̇, Dkk, P0, materials, phases, Δ)
         r      = ε̇II - StrainRateTrial(τII, G, Δt, B, n)
         # @show abs(r)
         (abs(r)<ϵ) && break
-        ∂ε̇II∂τII = Enzyme.jacobian(Enzyme.Forward, StrainRateTrial, τII, G, Δt, B, n)
+        ∂ε̇II∂τII = forwarddiff_jacobian(StrainRateTrial, τII, G, Δt, B, n)
         ∂τII∂ε̇II = inv(∂ε̇II∂τII[1])
         τII     += ∂τII∂ε̇II*r
     end
@@ -651,7 +651,7 @@ function LocalRheology_phase_ratios(ε̇, Dkk, P0, materials, phase_ratios, Δ)
             r      = ε̇II - StrainRateTrial(τII, G, Δt, B, n)
             # @show abs(r)
             (abs(r)<ϵ) && break
-            ∂ε̇II∂τII = Enzyme.jacobian(Enzyme.Forward, StrainRateTrial, τII, G, Δt, B, n)
+            ∂ε̇II∂τII = forwarddiff_jacobian(StrainRateTrial, τII, G, Δt, B, n)
             ∂τII∂ε̇II = inv(∂ε̇II∂τII[1])
             τII     += ∂τII∂ε̇II*r
         end

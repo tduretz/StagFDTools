@@ -1,13 +1,13 @@
 using StagFDTools, StagFDTools.TwoPhases, ExtendableSparse, StaticArrays, CairoMakie, LinearAlgebra, SparseArrays, Printf, JLD2
 import Statistics:mean
-using Enzyme  # AD backends you want to use
 
 @views function main(nc, Ωl, Ωη, viscoelastic, fact)
+
 
     homo   = false
 
     if viscoelastic
-        nt           = 1000
+        nt           = 50 #200
         make_elastic = 1.0
     else
         nt           = 1
@@ -55,13 +55,13 @@ using Enzyme  # AD backends you want to use
         n_CK  = [n_CK n_CK],
         ηs0   = [ηsi  ηs_inc], 
         ηΦ0   = [ηbi  ηbi],       # done not clear
-        G     = [1e0  1e0] * 2000 * make_elastic, 
+        G     = [1e0 1e0] * 2000 * make_elastic * fact,  # done
         ρs    = [1.0  1.0 ],
         ρf    = [1.0  1.0 ],
         Kd    = [1e30 1e30],
         Ks    = [1e0 1e0] * 1.1e4 * make_elastic,
         Kf    = [1e0 1e0] * 1e4 * make_elastic,
-        KΦ    = [1e0*fact 1e0] * 9e3 * make_elastic, # done
+        KΦ    = [1e0 1e0] * 9e3 * make_elastic , # done
         k_ηf0 = [k_ηΦ/Φi^n_CK k_ηΦ/Φi^n_CK],
         ψ     = [10.    10.  ],
         ϕ     = [35.    35.  ],
@@ -109,10 +109,10 @@ using Enzyme  # AD backends you want to use
     type.Pt[2:end-1,2:end-1] .= :in
     # -------- Pf -------- #
     type.Pf[2:end-1,2:end-1] .= :in
-    type.Pf[1,:]             .= :Neumann 
-    type.Pf[end,:]           .= :Neumann 
-    type.Pf[:,1]             .= :Neumann
-    type.Pf[:,end]           .= :Neumann
+    type.Pf[1,:]             .= :Dirichlet 
+    type.Pf[end,:]           .= :Dirichlet 
+    type.Pf[:,1]             .= :Dirichlet
+    type.Pf[:,end]           .= :Dirichlet
     
     # Equation Fields
     number = Fields(
@@ -165,8 +165,8 @@ using Enzyme  # AD backends you want to use
     𝐷_ctl   = (c = D_ctl_c, v = D_ctl_v)
     λ̇       = (c  = zeros(size_c...), v  = zeros(size_v...) )
     phases  = (c= ones(Int64, size_c...), v= ones(Int64, size_v...), x =ones(Int64, size_x...), y=ones(Int64, size_y...) )  # phase on velocity points
-    P       = (t = Pi.*ones(size_c...), f = Pi.*ones(size_c...))
-    Pi      = (t = Pi.*ones(size_c...), f = Pi.*ones(size_c...))
+    P       = (t = 0.0*ones(size_c...), f = 0.0.*ones(size_c...))
+    Pi      = (t = 0.0*ones(size_c...), f = 0.0.*ones(size_c...))
     P0      = (t = zeros(size_c...), f = zeros(size_c...))
     ΔP      = (t = zeros(size_c...), f = zeros(size_c...))
     ρ       = (s = materials.ρs[1]*ones(size_c...), f = materials.ρf[1]*ones(size_c...), t = zeros(size_c...))
@@ -232,6 +232,14 @@ using Enzyme  # AD backends you want to use
         ΔPt = zeros(nt),
         ΔPf = zeros(nt),
         ΔPe = zeros(nt),
+        normτ   = zeros(nt),
+        normPe  = zeros(nt),
+        normPt  = zeros(nt),
+        normPf  = zeros(nt),
+        meanτ   = zeros(nt),
+        meanPe  = zeros(nt),
+        meanPt  = zeros(nt),
+        meanPf  = zeros(nt),
         Pe  = zeros(nt),
         Pt  = zeros(nt),
         Pf  = zeros(nt),
@@ -476,14 +484,22 @@ using Enzyme  # AD backends you want to use
         probes.ΔPt[it]   = maximum(P.t) - minimum(P.t)
         probes.ΔPf[it]   = maximum(P.f) - minimum(P.f)
         probes.ΔPe[it]   = maximum(P.t .- P.f) - minimum(P.t .- P.f) 
+        probes.normτ[it]  = norm(τ.II[inx_c,iny_c])
+        probes.normPe[it] = norm(P.t[inx_c,iny_c] .- P.f[inx_c,iny_c])
+        probes.normPt[it] = norm(P.t[inx_c,iny_c])
+        probes.normPf[it] = norm(P.f[inx_c,iny_c])
+        probes.meanτ[it]  = mean(τ.II[inx_c,iny_c])
+        probes.meanPe[it] = mean(P.t[inx_c,iny_c] .- P.f[inx_c,iny_c])
+        probes.meanPt[it] = mean(P.t[inx_c,iny_c])
+        probes.meanPf[it] = mean(P.f[inx_c,iny_c])
         probes.Pe[it]    = norm(P.t .- P.f)
         probes.Pt[it]    = norm(P.t)
         probes.Pf[it]    = norm(P.f)
         probes.t[it]     = it*Δ.t
         # probes.maxPt[it] = maximum(P.t.-mean(P.t[inx_c,iny_c]) )
         # probes.maxPf[it] = maximum(P.f.-mean(P.f[inx_c,iny_c]) )
-        probes.maxPt[it] = (P.t .- mean(P.t[inx_c,iny_c]))[ix, iy_mid]
-        probes.maxPf[it] = (P.f .- mean(P.f[inx_c,iny_c]))[ix, iy_mid]
+        probes.maxPt[it] = (P.t .- 0*mean(P.t[inx_c,iny_c]))[ix, iy_mid]
+        probes.maxPf[it] = (P.f .- 0*mean(P.f[inx_c,iny_c]))[ix, iy_mid]
         probes.maxτ[it]  = τ.II[ix,iy]
 
         @show (P.t .- mean(P.t[inx_c,iny_c]))[ix, iy_mid]
@@ -547,9 +563,9 @@ using Enzyme  # AD backends you want to use
 
             fig = Figure(fontsize = 14, size = (600, 600) )  
             ax = Axis(fig[1,1], xlabelsize=20, ylabelsize=20, title=L"$\text{max} P^t, P^f, \tau_\text{II}$", xlabel = L"$t$ [-]", ylabel = L"$P, \tau$ [-]")
-            lines!(ax,  probes.t[1:it], probes.maxPt[1:it], label=L"$$P^t")
-            lines!(ax,  probes.t[1:it], probes.maxPf[1:it], label=L"$$P^f")
-            lines!(ax,  probes.t[1:it], probes.maxτ[1:it],  label=L"$$\tau_\text{II}")
+            lines!(ax,  probes.t[1:it], probes.maxPt[1:it], label=L"$P^t$")
+            lines!(ax,  probes.t[1:it], probes.maxPf[1:it], label=L"$P^f$")
+            lines!(ax,  probes.t[1:it], probes.maxτ[1:it],  label=L"$\tau_\text{II}$")
 
             if viscoelastic
                 # Values at specific locations
@@ -598,14 +614,14 @@ function Systematics()
     Ωl = 0.15
 
     fact = [1/5 1/4 1/3 1/2 1 2 3 4 5]
-    fact = [1/5 1/4 1/3]
     
     for i in eachindex(fact)
         r1, r2 = main(nc, Ωl, Ωη, true, fact[i])
-        @show r1
-        @show r2
-        jldsave("Syst_kphi_n$(i).jl2d"; r1, r2)
+        # jldsave("Syst_kphi_n$(i).jl2d"; r1, r2)
+        jldsave("Syst_G_n$(i).jl2d"; r1, r2)
         # jldsave("Syst_etaphi_n$(i).jl2d"; r1, r2)
+        # jldsave("Syst_etas$(i).jl2d"; r1, r2)
+
     end 
     
 end

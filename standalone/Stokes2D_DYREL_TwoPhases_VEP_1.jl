@@ -1,5 +1,5 @@
 # Initialisation
-using GLMakie, Printf, Statistics, LinearAlgebra, MAT
+using CairoMakie, Printf, Statistics, LinearAlgebra, MAT
 # Macros
 @views    av(A) = 0.25*(A[1:end-1,1:end-1].+A[2:end,1:end-1].+A[1:end-1,2:end].+A[2:end,2:end])
 @views av_xa(A) =  0.5*(A[1:end-1,:].+A[2:end,:])

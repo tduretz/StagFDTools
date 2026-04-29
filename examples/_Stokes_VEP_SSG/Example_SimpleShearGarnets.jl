@@ -1,7 +1,6 @@
 using StagFDTools, StagFDTools.Stokes, StagFDTools.Rheology, ExtendableSparse, StaticArrays, LinearAlgebra, SparseArrays, Printf
 import Statistics:mean
 using DifferentiationInterface
-using Enzyme  # AD backends you want to use
 using TimerOutputs, CairoMakie, Interpolations, GridGeometryUtils
 
 function splot(ax, x, y, u, v)
@@ -14,7 +13,7 @@ end
     #--------------------------------------------#
 
     # Resolution
-    nc = (x = 100, y = 100)
+    nc = (x = 600, y = 600)
 
     # Boundary loading type
     config = BC_template
@@ -24,8 +23,10 @@ end
     materials = ( 
         compressible = true,
         plasticity   = :none,
+        g    = [0.0    0.0  0.0  ],
+        ρ    = [1.0    1.0  1.0  ],
         n    = [1.0    1.0  1.0  ],
-        η0   = [1e0    1e4  1e-1  ], 
+        η0   = [1e0    1e4  1e-1 ], 
         G    = [1e1    1e1  1e1  ],
         C    = [150    150  150  ],
         ϕ    = [30.    30.  30.  ],
@@ -297,8 +298,8 @@ end
 
         fig = Figure()
         ax  = Axis(fig[1,1], aspect=DataAspect())
-        # heatmap!(ax, xc, yc,  Pt[inx_c,iny_c], colormap=:bluesreds)
-        heatmap!(ax, xc, yc,  phases.c[inx_c,iny_c], colormap=:bluesreds)
+        heatmap!(ax, xc, yc,  Pt[inx_c,iny_c], colormap=:bluesreds)
+        # heatmap!(ax, xc, yc,  phases.c[inx_c,iny_c], colormap=:bluesreds)
         st = 10
         # arrows!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], arrowsize = 0, lengthscale=0.02, linewidth=1, color=:white)
         splot(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end])

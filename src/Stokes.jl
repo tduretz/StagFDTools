@@ -200,11 +200,12 @@ function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materia
 
     # Corrected pressure
     comp = materials.compressible
-    Ptc  = SVector{2, Float64}( @. Pt[:,2] + comp * ΔP[:] )
+    Ptc  = SVector{2}( @. Pt[:,2] + comp * ΔP[:] )
 
     # Stress
-    σxx = @MVector zeros(2)
-    τxy = @MVector zeros(2)
+    Tstress = promote_type(eltype(Vx_loc), eltype(Vy_loc), eltype(Pt), eltype(Ptc))
+    σxx = MVector{2, Tstress}(undef)
+    τxy = MVector{2, Tstress}(undef)
     for i=1:2
         σxx[i] = (𝐷.c[i][1,1] - 𝐷.c[i][4,1]) * ϵ̇xx[i] + (𝐷.c[i][1,2] - 𝐷.c[i][4,2]) * ϵ̇yy[i] + (𝐷.c[i][1,3] - 𝐷.c[i][4,3]) * ϵ̇̄xy[i] + (𝐷.c[i][1,4] - (𝐷.c[i][4,4] - 1)) * Pt[i,2]  - Ptc[i]
         τxy[i] = 𝐷.v[i][3,1]                 * ϵ̇̄xx[i] + 𝐷.v[i][3,2]                 * ϵ̇̄yy[i] + 𝐷.v[i][3,3]                  * ϵ̇xy[i] + 𝐷.v[i][3,4]                       * P̄t[i]
@@ -270,11 +271,12 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materia
 
     # Corrected pressure
     comp = materials.compressible
-    Ptc  = SVector{2, Float64}( @. Pt[2,:] + comp * ΔP[:] )
+    Ptc  = SVector{2}( @. Pt[2,:] + comp * ΔP[:] )
 
     # Stress
-    τyy = @MVector zeros(2)
-    τxy = @MVector zeros(2)
+    Tstress = promote_type(eltype(Vx_loc), eltype(Vy_loc), eltype(Pt), eltype(Ptc))
+    τyy = MVector{2, Tstress}(undef)
+    τxy = MVector{2, Tstress}(undef)
     for i=1:2
         τyy[i] = (𝐷.c[i][2,1] - 𝐷.c[i][4,1]) * ϵ̇xx[i] + (𝐷.c[i][2,2] - 𝐷.c[i][4,2]) * ϵ̇yy[i] + (𝐷.c[i][2,3] - 𝐷.c[i][4,3]) * ϵ̇̄xy[i] + (𝐷.c[i][2,4] - (𝐷.c[i][4,4] - 1.)) * Pt[2,i]
         τxy[i] = 𝐷.v[i][3,1]                 * ϵ̇̄xx[i] + 𝐷.v[i][3,2]                 * ϵ̇̄yy[i] + 𝐷.v[i][3,3]                  * ϵ̇xy[i] + 𝐷.v[i][3,4]                        * P̄t[i]
@@ -384,7 +386,10 @@ function AssembleMomentum2D_x!(K, V, P, P0, ΔP, τ0, 𝐷, phases, materials, n
             fill!(∂R∂Vx, 0e0)
             fill!(∂R∂Vy, 0e0)
             fill!(∂R∂Pt, 0e0)
-            autodiff(Enzyme.Reverse, SMomentum_x_Generic, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ΔP_loc), Const(τ0_loc), Const(D), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+            ∂Vx, ∂Vy, ∂Pt = ad_partial_gradients(SMomentum_x_Generic, (Vx_loc, Vy_loc, P_loc), ΔP_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δ)
+            ∂R∂Vx .= ∂Vx
+            ∂R∂Vy .= ∂Vy
+            ∂R∂Pt .= ∂Pt
             # Vx --- Vx
             Local = SMatrix{3,3}(num.Vx[ii, jj] for ii in i-1:i+1, jj in j-1:j+1) .* pattern[1][1]
             for jj in axes(Local,2), ii in axes(Local,1)
@@ -486,7 +491,10 @@ function AssembleMomentum2D_y!(K, V, P, P0, ΔP, τ0, 𝐷, phases, materials, n
             fill!(∂R∂Vx, 0.0)
             fill!(∂R∂Vy, 0.0)
             fill!(∂R∂Pt, 0.0)
-            autodiff(Enzyme.Reverse, SMomentum_y_Generic, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂Pt), Const(ΔP_loc), Const(τ0_loc), Const(D), Const(ph_loc), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+            ∂Vx, ∂Vy, ∂Pt = ad_partial_gradients(SMomentum_y_Generic, (Vx_loc, Vy_loc, P_loc), ΔP_loc, τ0_loc, D, ph_loc, materials, type_loc, bcv_loc, Δ)
+            ∂R∂Vx .= ∂Vx
+            ∂R∂Vy .= ∂Vy
+            ∂R∂Pt .= ∂Pt
             
             num_Vy = @inbounds num.Vy[i,j]
             bounds_Vy = num_Vy > 0
@@ -565,7 +573,10 @@ function AssembleContinuity2D!(K, V, P, Pt0, ΔP, τ0, 𝐷, phases, materials, 
         fill!(∂R∂Vx, 0e0)
         fill!(∂R∂Vy, 0e0)
         fill!(∂R∂P , 0e0)
-        autodiff(Enzyme.Reverse, Continuity, Duplicated(Vx_loc, ∂R∂Vx), Duplicated(Vy_loc, ∂R∂Vy), Duplicated(P_loc, ∂R∂P), Const(Pt0[i,j]), Const(D), Const(phases.c[i,j]), Const(materials), Const(type_loc), Const(bcv_loc), Const(Δ))
+        ∂Vx, ∂Vy, ∂P = ad_partial_gradients(Continuity, (Vx_loc, Vy_loc, P_loc), Pt0[i,j], D, phases.c[i,j], materials, type_loc, bcv_loc, Δ)
+        ∂R∂Vx .= ∂Vx
+        ∂R∂Vy .= ∂Vy
+        ∂R∂P  .= ∂P
 
         # Pt --- Vx
         Local = SMatrix{2,3}(num.Vx[ii,jj] for ii in i:i+1, jj in j:j+2)# .* pattern[3][1]        
@@ -588,62 +599,6 @@ function AssembleContinuity2D!(K, V, P, Pt0, ΔP, τ0, 𝐷, phases, materials, 
         end
     end
     return nothing
-end
-
-function SetBCVx1(Vx, typex, bcx, Δ)
-
-    MVx = MMatrix(Vx)
-    # N/S
-    for ii in axes(typex, 1)
-        if typex[ii,1] == :Dirichlet_tangent
-            MVx[ii,1] = fma(2, bcx[ii,1], -Vx[ii,2])
-        elseif typex[ii,1] == :Neumann_tangent
-            MVx[ii,1] = fma(Δ.y, bcx[ii,1], Vx[ii,2])
-        end
-        if typex[ii,end] == :Dirichlet_tangent
-            MVx[ii,end] = fma(2, bcx[ii,end], -Vx[ii,end-1])
-        elseif typex[ii,end] == :Neumann_tangent
-            MVx[ii,end] = fma(Δ.y, bcx[ii,end], Vx[ii,end-1])
-        end
-    end
-    # E/W
-    for jj in axes(typex, 2)
-        if typex[1,jj] == :Neumann_normal
-            MVx[1,jj] = fma(2, Δ.x*bcx[1,jj], Vx[2,jj])
-        end
-        if typex[end,jj] == :Neumann_normal
-            MVx[end,jj] = fma(2,-Δ.x*bcx[end,jj], Vx[end-1,jj])
-        end
-    end
-    return SMatrix(MVx)
-end
-
-function SetBCVy1(Vy, typey, bcy, Δ)
-    MVy = MMatrix(Vy)
-    # E/W
-    for jj in axes(typey, 2)
-        if typey[1,jj] == :Dirichlet_tangent
-            MVy[1,jj] = fma(2, bcy[1,jj], -Vy[2,jj])
-        elseif typey[1,jj] == :Neumann_tangent
-            MVy[1,jj] = fma(Δ.x, bcy[1,jj], Vy[2,jj])
-        end
-
-        if typey[end,jj] == :Dirichlet_tangent
-            MVy[end,jj] = fma(2, bcy[end,jj], -Vy[end-1,jj])
-        elseif typey[end,jj] == :Neumann_tangent
-            MVy[end,jj] = fma(Δ.x, bcy[end,jj], Vy[end-1,jj])
-        end
-    end
-    # N/S
-    for ii in axes(typey, 1)
-        if typey[ii,1] == :Neumann_normal
-            MVy[ii,1] = fma(2, Δ.y*bcy[ii,1], Vy[ii,2])
-        end
-        if typey[ii,end] == :Neumann_normal
-            MVy[ii,end] = fma(2,-Δ.y*bcy[ii,end], Vy[ii,end-1])
-        end
-    end
-    return SMatrix(MVy)
 end
 
 @views function SparsityPattern!(K, num, pattern, nc) 
@@ -723,105 +678,6 @@ end
         end
     end
     ############ End ############
-end
-
-
-function SetBCVx!(Vx_loc, bcx_loc, bcv, Δ)
-
-    for ii in axes(Vx_loc, 1)
-
-        # Set Vx boundaries at S (this must be done 1st)
-        if bcx_loc[ii,begin] == :Neumann 
-            Vx_loc[ii,begin] =  Vx_loc[ii,begin+1] - Δ.y*bcv.∂Vx∂y_BC[ii,1]
-        elseif bcx_loc[ii,begin] == :Dirichlet 
-            Vx_loc[ii,begin] = -Vx_loc[ii,begin+1] + 2*bcv.Vx_BC[ii,1]
-        end
-        if bcx_loc[ii,begin] == :out 
-            if bcx_loc[ii,begin+1] == :Neumann
-                Vx_loc[ii,begin+1] =  Vx_loc[ii,begin+2] -   Δ.y*bcv.∂Vx∂y_BC[ii,1]
-                Vx_loc[ii,begin]   =  Vx_loc[ii,begin+3] - 3*Δ.y*bcv.∂Vx∂y_BC[ii,1] 
-            elseif bcx_loc[ii,begin+1] == :Dirichlet
-                Vx_loc[ii,begin+1] = -Vx_loc[ii,begin+2] + 2*bcv.Vx_BC[ii,1]
-                Vx_loc[ii,begin]   = -Vx_loc[ii,begin+3] + 2*bcv.Vx_BC[ii,1] 
-            end
-        end
-
-        # Set Vx boundaries at N (this must be done 1st)
-        if bcx_loc[ii,end] == :Neumann 
-            Vx_loc[ii,end] =  Vx_loc[ii,end-1] + Δ.y*bcv.∂Vx∂y_BC[ii,2] 
-        elseif bcx_loc[ii,end] == :Dirichlet 
-            Vx_loc[ii,end] = -Vx_loc[ii,end-1] + 2*bcv.Vx_BC[ii,2]
-        end
-        if bcx_loc[ii,end] == :out
-            if bcx_loc[ii,end-1] == :Neumann
-                Vx_loc[ii,end-1] =  Vx_loc[ii,end-2] +   Δ.y*bcv.∂Vx∂y_BC[ii,2] 
-                Vx_loc[ii,end]   =  Vx_loc[ii,end-3] + 3*Δ.y*bcv.∂Vx∂y_BC[ii,2]   
-            elseif bcx_loc[ii,3] == :Dirichlet
-                Vx_loc[ii,end-1] = -Vx_loc[ii,end-2] + 2*bcv.Vx_BC[ii,2] 
-                Vx_loc[ii,end]   = -Vx_loc[ii,end-3] + 2*bcv.Vx_BC[ii,2]  
-            end
-        end
-    end
-
-    # for jj in axes(Vx_loc, 2)
-    #     # Set Vx boundaries at W (this must be done 2nd)
-    #     if bcx_loc[1,jj] == :out
-    #         Vx_loc[1,jj] = Vx_loc[2,jj] - Δ.x*bcv.∂Vx∂x_BC[1,jj] 
-    #     end
-    #     # Set Vx boundaries at E (this must be done 2nd)
-    #     if bcx_loc[3,jj] == :out
-    #         Vx_loc[3,jj] = Vx_loc[2,jj] + Δ.x*bcv.∂Vx∂x_BC[2,jj] 
-    #     end
-    # end
-end
-
-function SetBCVy!(Vy_loc, bcy_loc, bcv, Δ)
-    
-    for jj in axes(Vy_loc, 2)
-
-        # Set Vy boundaries at W (this must be done 1st)
-        if bcy_loc[begin,jj] == :Neumann 
-            Vy_loc[begin,jj] =  Vy_loc[begin+1,jj] - Δ.x*bcv.∂Vy∂x_BC[1,jj] 
-        elseif bcy_loc[begin,jj] == :Dirichlet 
-            Vy_loc[begin,jj] = -Vy_loc[begin+1,jj] + 2*bcv.Vy_BC[1,jj]
-        end
-        if bcy_loc[begin,jj] == :out
-            if bcy_loc[begin+1,jj] == :Neumann 
-                Vy_loc[begin+1,jj] = Vy_loc[begin+2,jj] -   Δ.y*bcv.∂Vy∂x_BC[1,jj] 
-                Vy_loc[begin,jj]   = Vy_loc[begin+3,jj] - 3*Δ.y*bcv.∂Vy∂x_BC[1,jj] 
-            elseif bcy_loc[begin+1,jj] == :Dirichlet
-                Vy_loc[begin+1,jj] = -Vy_loc[begin+2,jj] + 2*bcv.Vy_BC[1,jj]
-                Vy_loc[begin,jj]   = -Vy_loc[begin+3,jj] + 2*bcv.Vy_BC[1,jj]
-            end 
-        end
-
-        # Set Vy boundaries at E (this must be done 1st)
-        if bcy_loc[end,jj] == :Neumann 
-            Vy_loc[end,jj] = Vy_loc[end-1,jj] + Δ.x*bcv.∂Vy∂x_BC[1,jj] 
-        elseif bcy_loc[end,jj] == :Dirichlet 
-            Vy_loc[end,jj] = -Vy_loc[end-1,jj] + 2*bcv.Vy_BC[2,jj]
-        end
-        if bcy_loc[end,jj] == :out
-            if bcy_loc[end-1,jj] == :Neumann 
-                Vy_loc[end-1,jj] = Vy_loc[end-2,jj] +   Δ.y*bcv.∂Vy∂x_BC[1,jj]
-                Vy_loc[end,jj]   = Vy_loc[end-3,jj] + 3*Δ.y*bcv.∂Vy∂x_BC[1,jj]
-            elseif bcy_loc[3,jj] == :Dirichlet 
-                Vy_loc[end-1,jj] = -Vy_loc[end-2,jj] + 2*bcv.Vy_BC[2,jj]
-                Vy_loc[end,jj]   = -Vy_loc[end-3,jj] + 2*bcv.Vy_BC[2,jj]
-            end
-        end
-    end
-
-    # for ii in axes(Vy_loc, 1)
-    #     # Set Vy boundaries at S (this must be done 2nd)
-    #     if bcy_loc[ii,1] == :out
-    #         Vy_loc[ii,1] = Vy_loc[ii,2] - Δ.y*bcv.∂Vy∂y_BC[ii,1]
-    #     end
-    #     # Set Vy boundaries at S (this must be done 2nd)
-    #     if bcy_loc[ii,3] == :out
-    #         Vy_loc[ii,3] = Vy_loc[ii,2] + Δ.y*bcv.∂Vy∂y_BC[ii,2]
-    #     end
-    # end
 end
 
 function SetRHS!(r, R, number, type, nc)
@@ -1094,16 +950,13 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, 
             # @show Dkk[1] + beta[1]*(Pt[i,j]-Pt0[i,j])/Δ.t
 
             # Tangent operator used for Newton Linearisation
-            jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector!, ε̇vec, Const(Dkk[1]), Const(Pt0[i,j]), Const(materials), Const(phases.c[i,j]), Const(Δ))
+            stress_state, τ_vec, jac = ad_value_and_jacobian_first(StressVector!, ε̇vec, Dkk[1], Pt0[i,j], materials, phases.c[i,j], Δ)
+            _, η_local, λ̇_local, τII_local = stress_state
 
-            # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
-            @views 𝐷_ctl.c[i,j][:,1] .= jac.derivs[1][1][1]
-            @views 𝐷_ctl.c[i,j][:,2] .= jac.derivs[1][2][1]
-            @views 𝐷_ctl.c[i,j][:,3] .= jac.derivs[1][3][1]
-            @views 𝐷_ctl.c[i,j][:,4] .= jac.derivs[1][4][1]
+            @views 𝐷_ctl.c[i,j] .= jac
 
             # Tangent operator used for Picard Linearisation
-            𝐷.c[i,j] .= diagm(2*jac.val[2] * _ones)
+            𝐷.c[i,j] .= diagm(2 * η_local * _ones)
             𝐷.c[i,j][4,4] = 1
 
             # ############### TEST
@@ -1123,14 +976,14 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, 
             # ############### TEST
 
             # Update stress
-            τ.xx[i,j]  = jac.val[1][1]
-            τ.yy[i,j]  = jac.val[1][2]
-            τ.II[i,j]  = jac.val[4]
+            τ.xx[i,j]  = τ_vec[1]
+            τ.yy[i,j]  = τ_vec[2]
+            τ.II[i,j]  = τII_local
             ε̇.xx[i,j]  = ε̇xx[1]
             ε̇.yy[i,j]  = ε̇yy[1]
-            λ̇.c[i,j]   = jac.val[3]
-            η.c[i,j]   = jac.val[2]
-            ΔPt.c[i,j] = (jac.val[1][4] - Pt[i,j])
+            λ̇.c[i,j]   = λ̇_local
+            η.c[i,j]   = η_local
+            ΔPt.c[i,j] = (τ_vec[4] - Pt[i,j])
         end
     end
 
@@ -1206,16 +1059,13 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, 
         ε̇vec  = @SVector([ε̇̄xx[1]+τ̄xx0[1]/(2*G[1]*Δ.t), ε̇̄yy[1]+τ̄yy0[1]/(2*G[1]*Δ.t), ε̇xy[1]+τ0.xy[i,j]/(2*G[1]*Δ.t), P̄[1]])
         
         # Tangent operator used for Newton Linearisation
-        jac   = Enzyme.jacobian(Enzyme.ForwardWithPrimal, StressVector!, ε̇vec, Const(D̄kk[1]), Const(P̄0[1]), Const(materials), Const(phases.v[i,j]), Const(Δ))
+        stress_state, τ_vec, jac = ad_value_and_jacobian_first(StressVector!, ε̇vec, D̄kk[1], P̄0[1], materials, phases.v[i,j], Δ)
+        _, η_local, λ̇_local, _ = stress_state
 
-        # Why the hell is enzyme breaking the Jacobian into vectors??? :D 
-        @views 𝐷_ctl.v[i,j][:,1] .= jac.derivs[1][1][1]
-        @views 𝐷_ctl.v[i,j][:,2] .= jac.derivs[1][2][1]
-        @views 𝐷_ctl.v[i,j][:,3] .= jac.derivs[1][3][1]
-        @views 𝐷_ctl.v[i,j][:,4] .= jac.derivs[1][4][1]
+        @views 𝐷_ctl.v[i,j] .= jac
 
         # Tangent operator used for Picard Linearisation
-        𝐷.v[i,j] .= diagm(2*jac.val[2] * _ones)
+        𝐷.v[i,j] .= diagm(2 * η_local * _ones)
         𝐷.v[i,j][4,4] = 1
 
         # ############### TEST
@@ -1234,10 +1084,10 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, 
         # ############### TEST
 
         # Update stress
-        τ.xy[i,j] = jac.val[1][3]
+        τ.xy[i,j] = τ_vec[3]
         ε̇.xy[i,j] = ε̇xy[1]
-        λ̇.v[i,j]  = jac.val[3]
-        η.v[i,j]  = jac.val[2]
+        λ̇.v[i,j]  = λ̇_local
+        η.v[i,j]  = η_local
         # τ.xy[i,j] = 2*jac.val[2]*(ε̇xy[1]+τ0.xy[i,j]/(2*G[1]*Δ.t))
     end
 end
