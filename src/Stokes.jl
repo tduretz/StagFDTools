@@ -14,67 +14,6 @@ end
 function Ranges(nc)     
     return (inx_Vx = 2:nc.x+2, iny_Vx = 3:nc.y+2, inx_Vy = 3:nc.x+2, iny_Vy = 2:nc.y+2, inx_c = 2:nc.x+1, iny_c = 2:nc.y+1, inx_v = 2:nc.x+2, iny_v = 2:nc.y+2, size_x = (nc.x+3, nc.y+4), size_y = (nc.x+4, nc.y+3), size_c = (nc.x+2, nc.y+2), size_v = (nc.x+3, nc.y+3))
 end
-Base.@kwdef  struct Materials{T1, T2}
-    plasticity          ::T1   = :none
-    compressible        ::T2   = false
-    g                   ::Vector{Float64} = [0.0, 0.0]
-    ρ                   ::Vector{Float64} = Float64[]
-    n                   ::Vector{Float64} = Float64[]
-    η0                  ::Vector{Float64} = Float64[] 
-    ξ0                  ::Vector{Float64} = Float64[]  
-    G                   ::Vector{Float64} = Float64[] 
-    C                   ::Vector{Float64} = Float64[] 
-    ϕ                   ::Vector{Float64} = Float64[] 
-    ηvp                 ::Vector{Float64} = Float64[] 
-    β                   ::Vector{Float64} = Float64[] 
-    ψ                   ::Vector{Float64} = Float64[] 
-    B                   ::Vector{Float64} = Float64[] 
-    cosϕ                ::Vector{Float64} = Float64[] 
-    sinϕ                ::Vector{Float64} = Float64[] 
-    sinψ                ::Vector{Float64} = Float64[]
-    M                   ::Vector{Float64} = Float64[] # Golchin2021
-    N                   ::Vector{Float64} = Float64[] # Golchin2021
-    Pc                  ::Vector{Float64} = Float64[] # Golchin2021
-    a                   ::Vector{Float64} = Float64[] # Golchin2021
-    b                   ::Vector{Float64} = Float64[] # Golchin2021
-    c                   ::Vector{Float64} = Float64[] # Golchin2021
-    σT                  ::Vector{Float64} = Float64[] # Kiss2023 
-    δσT                 ::Vector{Float64} = Float64[] # Kiss2023
-    P1                  ::Vector{Float64} = Float64[] # Kiss2023
-    τ1                  ::Vector{Float64} = Float64[] # Kiss2023
-    P2                  ::Vector{Float64} = Float64[] # Kiss2023
-    τ2                  ::Vector{Float64} = Float64[] # Kiss2023
-end
-
-function initialize_materials(n; compressible=false, plasticity=:none)
-    materials = Materials(;
-        compressible =  compressible,
-        plasticity   =   plasticity,
-        ρ            =       ones(n),
-        n            =       ones(n), 
-        η0           =       ones(n), 
-        ξ0           =  1e50*ones(n),   
-        G            =  1e50*ones(n), 
-        C            =  1e50*ones(n), 
-        ϕ            =       ones(n), 
-        ηvp          =       ones(n), 
-        β            = 1e-50*ones(n), 
-        ψ            =       ones(n), 
-        B            =       ones(n), 
-        cosϕ         =       ones(n), 
-        sinϕ         =       ones(n), 
-        sinψ         =       ones(n),
-    )
-    return materials
-end
-
-function preprocess_materials(materials)
-    @. materials.B    = (2 * materials.η0)^(-materials.n)
-    @. materials.cosϕ = cosd.(materials.ϕ)
-    @. materials.sinϕ = sind.(materials.ϕ)
-    @. materials.sinψ = sind.(materials.ψ)
-    return struct2namedtuple( materials )
-end
 
 function set_boundaries_template!(type, config, nc)
     

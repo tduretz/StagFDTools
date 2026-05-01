@@ -18,13 +18,16 @@ include("operators.jl")
 export inn, inn_x, inn_y, av, avx, avy, harm, ∂x, ∂y, ∂x_inn, ∂y_inn, ∂kk
 
 include("Utils.jl")
-export GenerateGrid, printxy, av2D, struct2namedtuple
+export GenerateGrid, printxy, av2D
 
 include("Solvers.jl")
 export DecoupledSolver
 
 include("BCs.jl")
 export SetBCPf1, SetBCPt1, SetBCVx1, SetBCVy1
+
+include("materials.jl")
+export Materials, initialize_materials, preprocess_materials
 
 # module markers
 #     include("markers.jl")
@@ -52,7 +55,6 @@ module Stokes
     export ResidualContinuity2D!, ResidualMomentum2D_x!, ResidualMomentum2D_y!
     export AssembleContinuity2D!, AssembleMomentum2D_x!, AssembleMomentum2D_y!
     export TangentOperator!, LineSearch!
-    export Materials, initialize_materials, preprocess_materials
 end
 module StokesJustPIC
     using LinearAlgebra, StaticArrays, ExtendableSparse, StaticArrays, StagFDTools, StagFDTools.Rheology
