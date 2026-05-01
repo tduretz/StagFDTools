@@ -371,11 +371,13 @@ let
     M    = Fields( Fields( ExtendableSparseMatrix(nu, nu) )) 
     M_PC = Fields( Fields( ExtendableSparseMatrix(nu, nu) )) 
 
-    @timeit to "Assembly Enzyme" begin
+    @timeit to "Assembly
+" begin
         AssemblyPoisson_Enzyme!(M, u, k, s, Jinv, number, type, pattern, bc_val, nc, Δ)
     end
 
-    @timeit to "Assembly Enzyme" begin
+    @timeit to "Assembly
+" begin
         AssemblyPoisson_Enzyme!(M_PC, u, k, s, Iinv, number, type, pattern, bc_val, nc, Δ)
     end
 

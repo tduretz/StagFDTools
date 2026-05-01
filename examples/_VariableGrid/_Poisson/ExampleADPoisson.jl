@@ -1,6 +1,6 @@
 using StagFDTools, StagFDTools.Poisson, ExtendableSparse, StaticArrays, LinearAlgebra, Statistics, UnPack, Plots
 using TimerOutputs
-# using Enzyme
+# 
 using ForwardDiff
 using StagFDTools: Duplicated, Const, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
 using Distributions
@@ -325,7 +325,8 @@ let
     nu  = maximum(number.u)
     M   = Fields( Fields( ExtendableSparseMatrix(nu, nu) ))
     
-    @timeit to "Assembly Enzyme" begin
+    @timeit to "Assembly
+" begin
         AssemblyPoisson_Enzyme!(M, u, k, s, number, type, pattern, bc_val, nc, Δ)
     end
 
@@ -362,7 +363,8 @@ end
 
 # Section           ncalls     time    %tot     avg     alloc    %tot      avg
 # ────────────────────────────────────────────────────────────────────────────
-# Assembly Enzyme        1    115μs   81.7%   137μs    388KiB  100.0%   388KiB
+# Assembly
+        1    115μs   81.7%   137μs    388KiB  100.0%   388KiB
 # Residual               1   30.8μs   18.3%  30.8μs     32.0B    0.0%    32.0B
 # ────────────────────────────────────────────────────────────────────────────
 

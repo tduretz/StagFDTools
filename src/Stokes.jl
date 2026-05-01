@@ -187,8 +187,8 @@ function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materia
     τ̄0xy = av(τ0.xy)
 
     # Effective strain rate
-    Gc   = SVector{2, Float64}( materials.G[phases.c] )
-    Gv   = SVector{2, Float64}( materials.G[phases.v] )
+    Gc   = SVector{2, Float64}( materials.G[phases.c[i]] for i=1:2)
+    Gv   = SVector{2, Float64}( materials.G[phases.v[i]] for i=1:2)
     tmpc = @. inv(2 * Gc * Δ.t)
     tmpv = @. inv(2 * Gv * Δ.t)
     ϵ̇xx  = @. ε̇xx[:,2] + τ0.xx[:,2] * tmpc
@@ -258,8 +258,8 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materia
     τ̄0xy = av(τ0.xy)
     
     # Effective strain rate
-    Gc   = SVector{2, Float64}( materials.G[phases.c])
-    Gv   = SVector{2, Float64}( materials.G[phases.v])
+    Gc   = SVector{2, Float64}( materials.G[phases.c[i]] for i=1:2)
+    Gv   = SVector{2, Float64}( materials.G[phases.v[i]] for i=1:2)
     tmpc = (2*Gc.*Δ.t)
     tmpv = (2*Gv.*Δ.t)
     ϵ̇xx  = @. ε̇xx[2,:] + τ0.xx[2,:] / tmpc
@@ -283,7 +283,7 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materia
     end
 
     # Gravity
-    ρ    = SVector{2, Float64}( materials.ρ[phases.c])
+    ρ    = SVector{2, Float64}( materials.ρ[phases.c[i]] for i=1:2)
     ρg   = materials.g[2] * 0.5*(ρ[1] + ρ[2])
 
     # Residual
@@ -301,9 +301,10 @@ function Continuity(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δ)
     invΔy = 1 / Δ.y
     invΔt = 1 / Δ.t
     β     = materials.β[phase]
+    ξ     = materials.ξ0[phase]
     η     = materials.β[phase]
     comp  = materials.compressible
-    f     = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy) + comp * β * (Pt[1] - Pt0) * invΔt #+ 1/(1000*η)*Pt[1]
+    f     = ((Vx[2,2] - Vx[1,2]) * invΔx + (Vy[2,2] - Vy[2,1]) * invΔy) + comp * β * (Pt[1] - Pt0) * invΔt + comp * Pt[1]/ξ 
     # f    *= max(invΔx, invΔy)
     return f
 end
@@ -875,7 +876,7 @@ function Numbering!(N, type, nc)
 end
 
 
-function LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+function LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, λ̇, η, ξ, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
     
     inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, inx_v, iny_v, size_x, size_y, size_c, size_v = Ranges(nc)
 
@@ -887,7 +888,7 @@ function LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, 
         V.y .= Vi.y
         Pt  .= Pti
         UpdateSolution!(V, Pt, α[i].*dx, number, type, nc)
-        TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
+        TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, ξ, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
         ResidualContinuity2D!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ) 
         ResidualMomentum2D_x!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
         ResidualMomentum2D_y!(R, V, Pt, Pt0, ΔPt, τ0, 𝐷, phases, materials, number, type, BC, nc, Δ)
@@ -900,7 +901,7 @@ function LineSearch!(rvec, α, dx, R, V, Pt, ε̇, τ, Vi, Pti, ΔPt, Pt0, τ0, 
     return imin
 end
 
-function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η , V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
+function TangentOperator!(𝐷, 𝐷_ctl, τ, τ0, ε̇, λ̇, η, ξ, V, Pt, Pt0, ΔPt, type, BC, materials, phases, Δ)
 
     _ones = @SVector ones(4)
     D_test = @MMatrix ones(4,4)

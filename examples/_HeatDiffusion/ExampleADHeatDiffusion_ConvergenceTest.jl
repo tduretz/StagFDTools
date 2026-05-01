@@ -1,6 +1,6 @@
 using StagFDTools, StagFDTools.Poisson, ExtendableSparse, StaticArrays, LinearAlgebra, Statistics, UnPack, Plots, ExactFieldSolutions
 using TimerOutputs
-# using Enzyme
+# 
 using ForwardDiff
 using StagFDTools: Duplicated, Const, forwarddiff_gradients!, forwarddiff_gradient, forwarddiff_jacobian
 ######
@@ -335,7 +335,8 @@ function RunDiffusion(nc, L, Δt0, Scheme)
         @timeit to "Residual" ResidualDiffusion2D!(r, u, k, s, number, type, bc_val, nc, Δ, u0, ρ, cp, θ) 
         @info norm(r)/sqrt(length(r))
         
-        @timeit to "Assembly Enzyme" begin
+        @timeit to "Assembly
+" begin
             AssemblyDiffusion_Enzyme!(M, u, k, s, number, type, pattern, bc_val, nc, Δ, u0, ρ, cp, θ)
         end
 
@@ -404,7 +405,8 @@ Crank-Nicolson
 
 Section           ncalls     time    %tot     avg     alloc    %tot      avg
 ────────────────────────────────────────────────────────────────────────────
-Assembly Enzyme       80    198ms   76.2%  2.47ms    182MiB  100.0%  2.27MiB
+Assembly
+       80    198ms   76.2%  2.47ms    182MiB  100.0%  2.27MiB
 Residual              80   61.7ms   23.8%   771μs     0.00B    0.0%    0.00B
 ────────────────────────────────────────────────────────────────────────────
 
@@ -416,7 +418,8 @@ Backward Euler
 
 Section           ncalls     time    %tot     avg     alloc    %tot      avg
 ────────────────────────────────────────────────────────────────────────────
-Assembly Enzyme       80    193ms   75.9%  2.41ms    182MiB  100.0%  2.27MiB
+Assembly
+       80    193ms   75.9%  2.41ms    182MiB  100.0%  2.27MiB
 Residual              80   61.3ms   24.1%   766μs     0.00B    0.0%    0.00B
 ────────────────────────────────────────────────────────────────────────────
 =#

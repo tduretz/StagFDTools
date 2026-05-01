@@ -14,17 +14,18 @@ using ExactFieldSolutions
     # Resolution
     nc = (x = n, y = n)
 
-    # Setting for Schmid & Podladchikov (2003)
-    params = (mm = 1.0, mc = 100.0, rc = 2.0, gr = 0.0, er = 1.0)
+    # Configuration for Stokes2D_Duretz2026 
+    params = (ηm = 1.0, ηi = 1e-2, ξm = 1e0, ξi = 1e0, rc = 0.1, γ̇ = 0.0, ε̇ = -1.0)
 
     # Boundary velocity gradient matrix
     config = :all_Dirichlet
-    D_BC   = @SMatrix( [params.er   0;
-                        0  -params.er] )
+    D_BC   = @SMatrix( [params.ε̇   0;
+                        0  -params.ε̇] )
 
     # Material parameters
-    materials_properties     = initialize_materials( 2 )
-    materials_properties.η0 .= [params.mm, params.mc] 
+    materials_properties     = initialize_materials( 2, compressible=true )
+    materials_properties.η0 .= [params.ηm, params.ηi] 
+    materials_properties.ξ0 .= [params.ξm, params.ξi]
     materials                = preprocess_materials( materials_properties )
 
     # Time steps
@@ -85,7 +86,7 @@ using ExactFieldSolutions
 
     #--------------------------------------------#
     # Intialise field
-    L   = (x=10., y=10.)
+    L   = (x=1., y=1.)
     x   = (min=-L.x/2, max=L.x/2)
     y   = (min=-L.y/2, max=L.y/2)
     Δ   = (x=L.x/nc.x, y=L.y/nc.y, t = Δt0)
@@ -152,13 +153,13 @@ using ExactFieldSolutions
 
     # Get P analytics 
     for i=1:size(BC.Pf,1), j=1:size(BC.Pf,2)
-        sol = Stokes2D_Schmid2003( [X.c_e.x[i], X.c_e.y[j]]; params )
+        sol = Stokes2D_Duretz2026( [X.c_e.x[i], X.c_e.y[j]]; params )
         Pt_ana[i,j] = sol.p
     end
 
     # Get Vx analytics 
     for i=1:size(BC.Vx,1), j=2:size(BC.Vx,2)-1
-        sol = Stokes2D_Schmid2003( [X.v_e.x[i], X.c_e.y[j-1]]; params )
+        sol = Stokes2D_Duretz2026( [X.v_e.x[i], X.c_e.y[j-1]]; params )
         BC.Vx[i,j]   =  sol.V[1]
         V.x[i,j]     = sol.V[1]
         V_ana.x[i,j] = sol.V[1]
@@ -166,7 +167,7 @@ using ExactFieldSolutions
 
     # Get Vy analytics 
     for i=2:size(BC.Vy,1)-1, j=1:size(BC.Vy,2)
-        sol = Stokes2D_Schmid2003( [X.c_e.x[i-1], X.v_e.y[j]]; params )
+        sol = Stokes2D_Duretz2026( [X.c_e.x[i-1], X.v_e.y[j]]; params )
         BC.Vy[i,j]   = sol.V[2] 
         V.y[i,j]     = sol.V[2] 
         V_ana.y[i,j] = sol.V[2]
@@ -372,5 +373,5 @@ end
 
 let
     # Run 
-    @time main(100)
+    @time main(101)
 end

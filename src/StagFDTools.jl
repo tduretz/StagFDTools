@@ -26,6 +26,9 @@ export DecoupledSolver
 include("BCs.jl")
 export SetBCPf1, SetBCPt1, SetBCVx1, SetBCVy1
 
+include("materials.jl")
+export Materials, initialize_materials, preprocess_materials
+
 # module markers
 #     include("markers.jl")
 #     export PhaseRatios, ...
@@ -51,10 +54,8 @@ module Stokes
     export Continuity, SMomentum_x_Generic, SMomentum_y_Generic
     export ResidualContinuity2D!, ResidualMomentum2D_x!, ResidualMomentum2D_y!
     export AssembleContinuity2D!, AssembleMomentum2D_x!, AssembleMomentum2D_y!
-    export TangentOperator!
-    export LineSearch!
+    export TangentOperator!, LineSearch!
 end
-
 module StokesJustPIC
     using LinearAlgebra, StaticArrays, ExtendableSparse, StaticArrays, StagFDTools, StagFDTools.Rheology
     using JustPIC, JustPIC._2D
@@ -64,8 +65,7 @@ module StokesJustPIC
     export Continuity, SMomentum_x_Generic, SMomentum_y_Generic
     export ResidualContinuity2D!, ResidualMomentum2D_x!, ResidualMomentum2D_y!
     export AssembleContinuity2D!, AssembleMomentum2D_x!, AssembleMomentum2D_y!
-    export TangentOperator!
-    export LineSearch!
+    export TangentOperator!, LineSearch!
     include("Particles.jl")
     export InitialiseParticleField, InitialisePhaseRatios, PhaseRatios!, compute_shear_bulk_moduli!
 end

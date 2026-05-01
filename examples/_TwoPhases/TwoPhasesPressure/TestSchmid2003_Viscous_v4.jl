@@ -259,7 +259,7 @@ import Statistics:mean
     # Get Vy analytics 
     for i=2:size(BC.Vy,1)-1, j=1:size(BC.Vy,2)
         sol = Stokes2D_Schmid2003( [X.c_e.x[i-1], X.v_e.y[j]]; params )
-        # BC.Vy[i,j]   = sol.V[2] 
+        BC.Vy[i,j]   = sol.V[2] 
         V.y[i,j]     = sol.V[2] 
         V_ana.y[i,j] = sol.V[2]
     end
