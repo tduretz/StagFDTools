@@ -33,7 +33,7 @@ function Analytical(θ, η, δ, D_BC)
     return τ_II
 end
 
-@views function main(nc, layering, BC_template, D_template, factorization, η1 , η2, G1, G2, C1, C2)
+@views function main(nc, nt, layering, BC_template, D_template, factorization, η1 , η2, G1, G2, C1, C2)
     #--------------------------------------------#   
 
     # Boundary loading type
@@ -49,7 +49,6 @@ end
  
     # Time steps
     Δt0   = 0.5
-    nt    = 30
 
     # Newton solver
     niter = 3
@@ -280,7 +279,7 @@ end
 
         fig = cm.Figure()
         ax  = cm.Axis(fig[1,1], aspect=cm.DataAspect())
-        hm  = cm.heatmap!(ax, xc, yc,  τII[inx_c,iny_c], colormap=:bluesreds)
+        hm  = cm.heatmap!(ax, xc, yc,  τ.II[inx_c,iny_c], colormap=:bluesreds)
         cm.poly!(ax, cm.Rect(xce[imin_x], yce[imin_y], xce[imax_x]-xce[imin_x], yce[imax_y]-yce[imin_y]), strokecolor=:white, strokewidth=2, color=:transparent)
         st = 15
         cm.arrows2d!(ax, xc[1:st:end], yc[1:st:end], σ1.x[inx_c,iny_c][1:st:end,1:st:end], σ1.y[inx_c,iny_c][1:st:end,1:st:end], tiplength = 0, lengthscale=0.02, tipwidth=1, color=:white)
@@ -305,7 +304,7 @@ end
 
     # display(to)
 
-    return mean(τII[inner_x, inner_y])
+    return mean(τ.II[inner_x, inner_y]), τIIev
 
 end
 
@@ -323,13 +322,15 @@ let
     ]
 
     nc = (x = 50, y = 50)
+    nt = 40
 
     # Discretise angle of layer 
-    nθ         = 1
-    θ          = 0# LinRange(0, π, nθ)
-    τ_cart     = zeros(nθ)
-    τ_cart_lay = zeros(nθ)
-    τ_cart_ana = zeros(nθ)
+    nθ          = 50
+    θ           = LinRange(0, π, nθ)
+    τ_cart      = zeros(nθ)
+    τ_cart_lay  = zeros(nθ)
+    τ_cart_ana  = zeros(nθ)
+    τ_time      = zeros(nθ, nt)
 
     #  Anisotropy parameters
     η2 = 1e2
@@ -346,8 +347,8 @@ let
     tmax = 1.0
     G2 = G1 = 1.0
     C2 = C1 = 10.
-    C2 = 2        
-    C1 = C2 / 2    # @abacaxi-seco HARDCODED factor 2, to remove
+    C2 = 4        
+    C1 = C2 / 4    # @abacaxi-seco HARDCODED factor 2, to remove
 
     # Run them all
     for iθ in eachindex(θ)
@@ -362,8 +363,8 @@ let
         )
 
         # @abacaxi-seco Note that I switched to LU factorisation as the Jacobian is already not symmtric with elasto-palsticity
-        τ_cart_lay[iθ] = main( nc, layering, BCs[1], D_BCs[1], :lu, η1, η2, G1, G2, C1, C2)
-        τ_cart_ana[iθ] = Analytical(θ[iθ], ηn, δ, D_BCs[1])
+        τ_cart_lay[iθ], τ_time[iθ,:] = main( nc, nt, layering, BCs[1], D_BCs[1], :lu, η1, η2, G1, G2, C1, C2)
+        τ_cart_ana[iθ]  = Analytical(θ[iθ], ηn, δ, D_BCs[1])
 
     end
 
@@ -379,16 +380,21 @@ let
 
     τ_cart .= τstrong * sqrt.(((δ^2 - 1) * cos.(2 .* θ).^2 .+ 1) / (δ^2))
 
-    # cm.with_theme(cm.theme_latexfonts()) do
-    # fig   = cm.Figure(fontsize=15)
-    # ax    = cm.Axis(fig[1,1], xlabel= cm.L"$\theta$ [$^{\circ}$]", ylabel=cm.L"$\tau_{II}$ [-]")
-    # cm.lines!(ax, θ*180/π, τ_cart_lay, label="Layering")
+    cm.with_theme(cm.theme_latexfonts()) do
+    fig   = cm.Figure(fontsize=15)
+    
+    ax    = cm.Axis(fig[0,1], xlabel= cm.L"$$step]", ylabel=cm.L"$\tau_{II}$ [-]")
+    for iθ in eachindex(θ)
+        cm.lines!(ax, 1:nt, τ_time[iθ,:])
+    end
+    ax    = cm.Axis(fig[1,1], xlabel= cm.L"$\theta$ [$^{\circ}$]", ylabel=cm.L"$\tau_{II}$ [-]")
+    cm.lines!(ax, θ*180/π, τ_cart_lay, label="Layering")
     # cm.lines!(ax, θ*180/π, τstrong*ones(size(θ)), color=:gray, linestyle=:dash, label="End-Member (Biot et al., 1965)")
     # cm.lines!(ax, θ*180/π, τweak*ones(size(θ)), color=:gray, linestyle=:dash, label="End-Member (Biot et al., 1965)")
     # cm.scatter!(ax, θ[1:6:end]*180/π, τ_cart[1:6:end], label="Expression", markersize=10)
     # cm.scatter!(ax, θ[1:8:end]*180/π, τ_cart_ana[1:8:end], label="Analytical", marker=:utriangle, markersize=10, color=cm.Cycled(3))
-    # cm.Legend(fig[2,1], ax, framevisible=false, orientation=:horizontal, unique=true, nbanks=3, cm.L"$\tau_{II}$    ($δ \approx$ %$(round(Int,δ)))")
-    # display(fig)
-    # end
+    cm.Legend(fig[2,1], ax, framevisible=false, orientation=:horizontal, unique=true, nbanks=3, cm.L"$\tau_{II}$    ($δ \approx$ %$(round(Int,δ)))")
+    display(fig)
+    end
 
 end
