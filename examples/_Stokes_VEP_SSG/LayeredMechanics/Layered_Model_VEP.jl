@@ -266,16 +266,16 @@ end
         # Principal stress
         σ1 = (x = zeros(size(Pt)), y = zeros(size(Pt)), v = zeros(size(Pt)))
         
-        # for i in inx_c, j in iny_c
-        #     τxyc      = 1/4 * (τ.xy[i,j] + τ.xy[i+1,j] + τ.xy[i,j+1] + τ.xy[i+1,j+1] )
-        #     σ         = @SMatrix[-Pt[i,j]+τ.xx[i,j]  0. 0.; τxyc -Pt[i,j]+τ.yy[i,j] 0.; 0. 0. -Pt[i,j]+(-τ.xx[i,j]-τ.yy[i,j])]
-        #     v         = eigvecs(σ)
-        #     σp        = eigvals(σ)
-        #     scale     = sqrt(v[1,1]^2 + v[2,1]^2)
-        #     σ1.x[i,j] = v[1,1]/scale
-        #     σ1.y[i,j] = v[2,1]/scale
-        #     σ1.v[i]   = σp[1]
-        # end
+        for i in inx_c, j in iny_c
+            τxyc      = 1/4 * (τ.xy[i,j] + τ.xy[i+1,j] + τ.xy[i,j+1] + τ.xy[i+1,j+1] )
+            σ         = @SMatrix[-Pt[i,j]+τ.xx[i,j]  τxyc 0.; τxyc -Pt[i,j]+τ.yy[i,j] 0.; 0. 0. -Pt[i,j]+(-τ.xx[i,j]-τ.yy[i,j])]
+            v         = eigvecs(σ)
+            σp        = eigvals(σ)
+            scale     = sqrt(v[1,1]^2 + v[2,1]^2)
+            σ1.x[i,j] = v[1,1]/scale
+            σ1.y[i,j] = v[2,1]/scale
+            σ1.v[i]   = σp[1]
+        end
         τIIev[it] = mean(τ.II[inner_x, inner_y])
 
         fig = cm.Figure()
