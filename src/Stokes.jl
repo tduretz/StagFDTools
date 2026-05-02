@@ -162,41 +162,42 @@ function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materia
     Vx = SetBCVx1(Vx_loc, type.x, bcv.x, Δ)
     Vy = SetBCVy1(Vy_loc, type.y, bcv.y, Δ)
 
-    # @show type.p
+    # Interp Vy -> Vx, Vx - > Vy
+    V̄y = SMatrix{3, 3, Float64}( av2D(Vy) )
+    V̄x = SMatrix{2, 2, Float64}( av2D(Vx) )
 
-    # Velocity gradient
-    Dxx = ∂x(Vx) * invΔx
-    Dyy = ∂y_inn(Vy) * invΔy
-    Dxy = ∂y(Vx) * invΔy
-    Dyx = ∂x_inn(Vy) * invΔx
+    # More averages
+    Pt_v   = SVector{2, Float64}( av(Pt)    )
+    τ0xx_c = SVector{2, Float64}( τ0.xx[:,2:end-1])
+    τ0yy_c = SVector{2, Float64}( τ0.yy[:,2:end-1])
+    τ0xy_c = SVector{2, Float64}( av(τ0.xy) )
+    τ0xx_v = SVector{2, Float64}( av(τ0.xx) )
+    τ0yy_v = SVector{2, Float64}( av(τ0.yy) )
+    τ0xy_v = SVector{2, Float64}( τ0.xy[2:end-1,:][:] )
 
-    # Strain rate
-    ε̇kk = @. Dxx + Dyy
-    ε̇xx = @. Dxx - 1/3*ε̇kk
-    ε̇yy = @. Dyy - 1/3*ε̇kk
-    ε̇xy = @. 1/2 * ( Dxy + Dyx )
+    # Velocity gradient - centroids
+    Dxx_c = SVector{2, Float64}( (∂x(Vx) * invΔx)[:,2:end-1]       )
+    Dxy_c = SVector{2, Float64}( (∂y(V̄x) * invΔy)                  )
+    Dyy_c = SVector{2, Float64}( (∂y(Vy) * invΔy)[2:end-1,2:end-1] )
+    Dyx_c = SVector{2, Float64}( (∂x(V̄y) * invΔx)[:,2:end-1]       ) 
 
-    # Average vertex to centroid
-    ε̇̄xy  = av(ε̇xy)
-    # Average centroid to vertex
-    ε̇̄xx  = av(ε̇xx)
-    ε̇̄yy  = av(ε̇yy)
-    P̄t   = av(Pt)
-    τ̄0xx = av(τ0.xx)
-    τ̄0yy = av(τ0.yy)
-    τ̄0xy = av(τ0.xy)
+    # Velocity gradient - vertices
+    Dxx_v = SVector{2, Float64}( (∂x(V̄x) * invΔx)                  ) 
+    Dxy_v = SVector{2, Float64}( (∂y(Vx) * invΔy)[2:end-1,:]       )  
+    Dyy_v = SVector{2, Float64}( (∂y(V̄y) * invΔy)[2:end-1,:]       )  
+    Dyx_v = SVector{2, Float64}( (∂x(Vy) * invΔx)[2:end-1,2:end-1] )   
 
-    # Effective strain rate
-    Gc   = SVector{2, Float64}( materials.G[phases.c[i]] for i=1:2)
-    Gv   = SVector{2, Float64}( materials.G[phases.v[i]] for i=1:2)
-    tmpc = @. inv(2 * Gc * Δ.t)
-    tmpv = @. inv(2 * Gv * Δ.t)
-    ϵ̇xx  = @. ε̇xx[:,2] + τ0.xx[:,2] * tmpc
-    ϵ̇yy  = @. ε̇yy[:,2] + τ0.yy[:,2] * tmpc
-    ϵ̇̄xy  = @. ε̇̄xy[:]   + τ̄0xy[:]    * tmpc
-    ϵ̇̄xx  = @. ε̇̄xx[:]   + τ̄0xx[:]    * tmpv
-    ϵ̇̄yy  = @. ε̇̄yy[:]   + τ̄0yy[:]    * tmpv
-    ϵ̇xy  = @. ε̇xy[2,:] + τ0.xy[2,:] * tmpv
+    # Deviatoric strain rate
+    ε̇xx_c, ε̇yy_c, ε̇xy_c, ε̇kk_c = deviatoric_strain_rate(Dxx_c, Dxy_c, Dyx_c, Dyy_c)
+    ε̇xx_v, ε̇yy_v, ε̇xy_v, ε̇kk_v = deviatoric_strain_rate(Dxx_v, Dxy_v, Dyx_v, Dyy_v)
+
+    # Effective visco-elastic strain rate
+    Gc      = SVector{2, Float64}( materials.G[phases.c[i]] for i=1:2)
+    Gv      = SVector{2, Float64}( materials.G[phases.v[i]] for i=1:2)
+    _2GΔt_c = SVector{2, Float64}( @. inv(2 * Gc * Δ.t))
+    _2GΔt_v = SVector{2, Float64}( @. inv(2 * Gv * Δ.t))
+    ϵ̇xx_c, ϵ̇yy_c, ϵ̇xy_c = effective_strain_rate(ε̇xx_c, ε̇yy_c, ε̇xy_c, τ0xx_c, τ0yy_c, τ0xy_c, _2GΔt_c)
+    ϵ̇xx_v, ϵ̇yy_v, ϵ̇xy_v = effective_strain_rate(ε̇xx_v, ε̇yy_v, ε̇xy_v, τ0xx_v, τ0yy_v, τ0xy_v, _2GΔt_v)
 
     # Corrected pressure
     comp = materials.compressible
@@ -207,17 +208,16 @@ function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materia
     σxx = MVector{2, Tstress}(undef)
     τxy = MVector{2, Tstress}(undef)
     for i=1:2
-        σxx[i] = (𝐷.c[i][1,1] - 𝐷.c[i][4,1]) * ϵ̇xx[i] + (𝐷.c[i][1,2] - 𝐷.c[i][4,2]) * ϵ̇yy[i] + (𝐷.c[i][1,3] - 𝐷.c[i][4,3]) * ϵ̇̄xy[i] + (𝐷.c[i][1,4] - (𝐷.c[i][4,4] - 1)) * Pt[i,2]  - Ptc[i]
-        τxy[i] = 𝐷.v[i][3,1]                 * ϵ̇̄xx[i] + 𝐷.v[i][3,2]                 * ϵ̇̄yy[i] + 𝐷.v[i][3,3]                  * ϵ̇xy[i] + 𝐷.v[i][3,4]                       * P̄t[i]
+        σxx[i] = (𝐷.c[i][1,1] - 𝐷.c[i][4,1]) * ϵ̇xx_c[i] + (𝐷.c[i][1,2] - 𝐷.c[i][4,2]) * ϵ̇yy_c[i] + (𝐷.c[i][1,3] - 𝐷.c[i][4,3]) * ϵ̇xy_c[i] + (𝐷.c[i][1,4] - (𝐷.c[i][4,4] - 1)) * Pt[i,2]  - Ptc[i]
+        τxy[i] = 𝐷.v[i][3,1]                 * ϵ̇xx_v[i] + 𝐷.v[i][3,2]                 * ϵ̇yy_v[i] + 𝐷.v[i][3,3]                  * ϵ̇xy_v[i] + 𝐷.v[i][3,4]                       * Pt_v[i]
     end
-    # if type.p[1] == :Neumann_normal
-    #     σxx[1] = 2*(200) - σxx[2]
-    #     τxy[:] = 0.0
-    # end
-    # if type.p[2] == :Neumann_normal
-    #     σxx[2] = 2*(200) - σxx[1]
-    #     τxy[:] = 0.0
-    # end
+
+    # σxx = SVector{2, Float64}(
+    #     (𝐷.c[i][1,1] - 𝐷.c[i][4,1]) * ϵ̇xx_c[i] + (𝐷.c[i][1,2] - 𝐷.c[i][4,2]) * ϵ̇yy_c[i] + (𝐷.c[i][1,3] - 𝐷.c[i][4,3]) * ϵ̇xy_c[i] + (𝐷.c[i][1,4] - (𝐷.c[i][4,4] - 1)) * Pt[i,2]  - Ptc[i]   for i=1:2
+    # )
+    # τxy = SVector{2, Float64}(
+    #     𝐷.v[i][3,1]                 * ϵ̇xx_v[i] + 𝐷.v[i][3,2]                 * ϵ̇yy_v[i] + 𝐷.v[i][3,3]                  * ϵ̇xy_v[i] + 𝐷.v[i][3,4]                       * Pt_v[i]  for i=1:2
+    # )
 
     # Residual
     fx  = ( σxx[2]  - σxx[1] ) * invΔx
@@ -235,39 +235,42 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materia
     Vx = SetBCVx1(Vx_loc, type.x, bcv.x, Δ)
     Vy = SetBCVy1(Vy_loc, type.y, bcv.y, Δ)
 
-    # Velocity gradient
-    Dxx = ∂x_inn(Vx) * invΔx
-    Dyy = ∂y(Vy) * invΔy
-    Dxy = ∂y_inn(Vx) * invΔy
-    Dyx = ∂x(Vy) * invΔx
+    # Interp Vy -> Vx, Vx - > Vy
+    V̄y = SMatrix{2, 2, Float64}( av2D(Vy) )   # 2, 2
+    V̄x = SMatrix{3, 3, Float64}( av2D(Vx) )   # 3, 3
 
-    # Strain rate
-    ε̇kk = @. Dxx + Dyy
-    ε̇xx = @. Dxx - 1/3*ε̇kk      
-    ε̇yy = @. Dyy - 1/3*ε̇kk      
-    ε̇xy = @. 1/2 * (Dxy + Dyx)
+    # More averages
+    Pt_v   = SVector{2, Float64}( av(Pt)    )
+    τ0xx_c = SVector{2, Float64}( τ0.xx[2:end-1,:])
+    τ0yy_c = SVector{2, Float64}( τ0.yy[2:end-1,:])
+    τ0xy_c = SVector{2, Float64}( av(τ0.xy) )
+    τ0xx_v = SVector{2, Float64}( av(τ0.xx) )
+    τ0yy_v = SVector{2, Float64}( av(τ0.yy) )
+    τ0xy_v = SVector{2, Float64}( τ0.xy[:,2:end-1][:] )
 
-    # Average vertex to centroid
-    ε̇̄xy  = av(ε̇xy)
-    # Average centroid to vertex
-    ε̇̄xx  = av(ε̇xx)
-    ε̇̄yy  = av(ε̇yy)
-    P̄t   = av( Pt)
-    τ̄0xx = av(τ0.xx)
-    τ̄0yy = av(τ0.yy)
-    τ̄0xy = av(τ0.xy)
-    
-    # Effective strain rate
-    Gc   = SVector{2, Float64}( materials.G[phases.c[i]] for i=1:2)
-    Gv   = SVector{2, Float64}( materials.G[phases.v[i]] for i=1:2)
-    tmpc = (2*Gc.*Δ.t)
-    tmpv = (2*Gv.*Δ.t)
-    ϵ̇xx  = @. ε̇xx[2,:] + τ0.xx[2,:] / tmpc
-    ϵ̇yy  = @. ε̇yy[2,:] + τ0.yy[2,:] / tmpc
-    ϵ̇̄xy  = @. ε̇̄xy[:]   + τ̄0xy[:]    / tmpc
-    ϵ̇̄xx  = @. ε̇̄xx[:]   + τ̄0xx[:]    / tmpv
-    ϵ̇̄yy  = @. ε̇̄yy[:]   + τ̄0yy[:]    / tmpv
-    ϵ̇xy  = @. ε̇xy[:,2] + τ0.xy[:,2] / tmpv
+    # Velocity gradient - centroids
+    Dxx_c = SVector{2, Float64}( (∂x(Vx) * invΔx)[2:end-1,2:end-1] )
+    Dxy_c = SVector{2, Float64}( (∂y(V̄x) * invΔy)[2:end-1,:]       )
+    Dyy_c = SVector{2, Float64}( (∂y(Vy) * invΔy)[2:end-1,:]       )
+    Dyx_c = SVector{2, Float64}( (∂x(V̄y) * invΔx)                  ) 
+
+    # Velocity gradient - vertices
+    Dxx_v = SVector{2, Float64}( (∂x(V̄x) * invΔx)[:,2:end-1]       ) 
+    Dxy_v = SVector{2, Float64}( (∂y(Vx) * invΔy)[2:end-1,2:end-1] )  
+    Dyy_v = SVector{2, Float64}( (∂y(V̄y) * invΔy)                  )  
+    Dyx_v = SVector{2, Float64}( (∂x(Vy) * invΔx)[:,2:end-1]       ) 
+
+    # Deviatoric strain rate
+    ε̇xx_c, ε̇yy_c, ε̇xy_c, ε̇kk_c = deviatoric_strain_rate(Dxx_c, Dxy_c, Dyx_c, Dyy_c)
+    ε̇xx_v, ε̇yy_v, ε̇xy_v, ε̇kk_v = deviatoric_strain_rate(Dxx_v, Dxy_v, Dyx_v, Dyy_v)
+
+    # Effective visco-elastic strain rate
+    Gc      = SVector{2, Float64}( materials.G[phases.c[i]] for i=1:2)
+    Gv      = SVector{2, Float64}( materials.G[phases.v[i]] for i=1:2)
+    _2GΔt_c = SVector{2, Float64}( @. inv(2 * Gc * Δ.t))
+    _2GΔt_v = SVector{2, Float64}( @. inv(2 * Gv * Δ.t))
+    ϵ̇xx_c, ϵ̇yy_c, ϵ̇xy_c = effective_strain_rate(ε̇xx_c, ε̇yy_c, ε̇xy_c, τ0xx_c, τ0yy_c, τ0xy_c, _2GΔt_c)
+    ϵ̇xx_v, ϵ̇yy_v, ϵ̇xy_v = effective_strain_rate(ε̇xx_v, ε̇yy_v, ε̇xy_v, τ0xx_v, τ0yy_v, τ0xy_v, _2GΔt_v)
 
     # Corrected pressure
     comp = materials.compressible
@@ -278,8 +281,8 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materia
     τyy = MVector{2, Tstress}(undef)
     τxy = MVector{2, Tstress}(undef)
     for i=1:2
-        τyy[i] = (𝐷.c[i][2,1] - 𝐷.c[i][4,1]) * ϵ̇xx[i] + (𝐷.c[i][2,2] - 𝐷.c[i][4,2]) * ϵ̇yy[i] + (𝐷.c[i][2,3] - 𝐷.c[i][4,3]) * ϵ̇̄xy[i] + (𝐷.c[i][2,4] - (𝐷.c[i][4,4] - 1.)) * Pt[2,i]
-        τxy[i] = 𝐷.v[i][3,1]                 * ϵ̇̄xx[i] + 𝐷.v[i][3,2]                 * ϵ̇̄yy[i] + 𝐷.v[i][3,3]                  * ϵ̇xy[i] + 𝐷.v[i][3,4]                        * P̄t[i]
+        τyy[i] = (𝐷.c[i][2,1] - 𝐷.c[i][4,1]) * ϵ̇xx_c[i] + (𝐷.c[i][2,2] - 𝐷.c[i][4,2]) * ϵ̇yy_c[i] + (𝐷.c[i][2,3] - 𝐷.c[i][4,3]) * ϵ̇xy_c[i] + (𝐷.c[i][2,4] - (𝐷.c[i][4,4] - 1.)) * Pt[2,i]
+        τxy[i] = 𝐷.v[i][3,1]                 * ϵ̇xx_v[i] + 𝐷.v[i][3,2]                 * ϵ̇yy_v[i] + 𝐷.v[i][3,3]                  * ϵ̇xy_v[i] + 𝐷.v[i][3,4]                        * Pt_v[i]
     end
 
     # Gravity
@@ -295,6 +298,148 @@ function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materia
     
     return fy
 end
+
+# function SMomentum_x_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δ)
+    
+#     invΔx, invΔy = 1 / Δ.x, 1 / Δ.y
+
+#     # BC
+#     Vx = SetBCVx1(Vx_loc, type.x, bcv.x, Δ)
+#     Vy = SetBCVy1(Vy_loc, type.y, bcv.y, Δ)
+
+#     # @show type.p
+
+#     # Velocity gradient
+#     Dxx = ∂x(Vx) * invΔx
+#     Dyy = ∂y_inn(Vy) * invΔy
+#     Dxy = ∂y(Vx) * invΔy
+#     Dyx = ∂x_inn(Vy) * invΔx
+
+#     # Strain rate
+#     ε̇kk = @. Dxx + Dyy
+#     ε̇xx = @. Dxx - 1/3*ε̇kk
+#     ε̇yy = @. Dyy - 1/3*ε̇kk
+#     ε̇xy = @. 1/2 * ( Dxy + Dyx )
+
+#     # Average vertex to centroid
+#     ε̇̄xy  = av(ε̇xy)
+#     # Average centroid to vertex
+#     ε̇̄xx  = av(ε̇xx)
+#     ε̇̄yy  = av(ε̇yy)
+#     P̄t   = av(Pt)
+#     τ̄0xx = av(τ0.xx)
+#     τ̄0yy = av(τ0.yy)
+#     τ̄0xy = av(τ0.xy)
+
+#     # Effective strain rate
+#     Gc   = SVector{2, Float64}( materials.G[phases.c[i]] for i=1:2)
+#     Gv   = SVector{2, Float64}( materials.G[phases.v[i]] for i=1:2)
+#     tmpc = @. inv(2 * Gc * Δ.t)
+#     tmpv = @. inv(2 * Gv * Δ.t)
+#     ϵ̇xx  = @. ε̇xx[:,2] + τ0.xx[:,2] * tmpc
+#     ϵ̇yy  = @. ε̇yy[:,2] + τ0.yy[:,2] * tmpc
+#     ϵ̇̄xy  = @. ε̇̄xy[:]   + τ̄0xy[:]    * tmpc
+#     ϵ̇̄xx  = @. ε̇̄xx[:]   + τ̄0xx[:]    * tmpv
+#     ϵ̇̄yy  = @. ε̇̄yy[:]   + τ̄0yy[:]    * tmpv
+#     ϵ̇xy  = @. ε̇xy[2,:] + τ0.xy[2,:] * tmpv
+
+#     # Corrected pressure
+#     comp = materials.compressible
+#     Ptc  = SVector{2}( @. Pt[:,2] + comp * ΔP[:] )
+
+#     # Stress
+#     Tstress = promote_type(eltype(Vx_loc), eltype(Vy_loc), eltype(Pt), eltype(Ptc))
+#     σxx = MVector{2, Tstress}(undef)
+#     τxy = MVector{2, Tstress}(undef)
+#     for i=1:2
+#         σxx[i] = (𝐷.c[i][1,1] - 𝐷.c[i][4,1]) * ϵ̇xx[i] + (𝐷.c[i][1,2] - 𝐷.c[i][4,2]) * ϵ̇yy[i] + (𝐷.c[i][1,3] - 𝐷.c[i][4,3]) * ϵ̇̄xy[i] + (𝐷.c[i][1,4] - (𝐷.c[i][4,4] - 1)) * Pt[i,2]  - Ptc[i]
+#         τxy[i] = 𝐷.v[i][3,1]                 * ϵ̇̄xx[i] + 𝐷.v[i][3,2]                 * ϵ̇̄yy[i] + 𝐷.v[i][3,3]                  * ϵ̇xy[i] + 𝐷.v[i][3,4]                       * P̄t[i]
+#     end
+#     # if type.p[1] == :Neumann_normal
+#     #     σxx[1] = 2*(200) - σxx[2]
+#     #     τxy[:] = 0.0
+#     # end
+#     # if type.p[2] == :Neumann_normal
+#     #     σxx[2] = 2*(200) - σxx[1]
+#     #     τxy[:] = 0.0
+#     # end
+
+#     # Residual
+#     fx  = ( σxx[2]  - σxx[1] ) * invΔx
+#     fx += ( τxy[2]  - τxy[1] ) * invΔy
+#     fx *= -1* Δ.x * Δ.y
+
+#     return fx
+# end
+
+# function SMomentum_y_Generic(Vx_loc, Vy_loc, Pt, ΔP, τ0, 𝐷, phases, materials, type, bcv, Δ)
+    
+#     invΔx, invΔy = 1 / Δ.x, 1 / Δ.y
+
+#     # BC
+#     Vx = SetBCVx1(Vx_loc, type.x, bcv.x, Δ)
+#     Vy = SetBCVy1(Vy_loc, type.y, bcv.y, Δ)
+
+#     # Velocity gradient
+#     Dxx = ∂x_inn(Vx) * invΔx
+#     Dyy = ∂y(Vy) * invΔy
+#     Dxy = ∂y_inn(Vx) * invΔy
+#     Dyx = ∂x(Vy) * invΔx
+
+#     # Strain rate
+#     ε̇kk = @. Dxx + Dyy
+#     ε̇xx = @. Dxx - 1/3*ε̇kk      
+#     ε̇yy = @. Dyy - 1/3*ε̇kk      
+#     ε̇xy = @. 1/2 * (Dxy + Dyx)
+
+#     # Average vertex to centroid
+#     ε̇̄xy  = av(ε̇xy)
+#     # Average centroid to vertex
+#     ε̇̄xx  = av(ε̇xx)
+#     ε̇̄yy  = av(ε̇yy)
+#     P̄t   = av( Pt)
+#     τ̄0xx = av(τ0.xx)
+#     τ̄0yy = av(τ0.yy)
+#     τ̄0xy = av(τ0.xy)
+    
+#     # Effective strain rate
+#     Gc   = SVector{2, Float64}( materials.G[phases.c[i]] for i=1:2)
+#     Gv   = SVector{2, Float64}( materials.G[phases.v[i]] for i=1:2)
+#     tmpc = (2*Gc.*Δ.t)
+#     tmpv = (2*Gv.*Δ.t)
+#     ϵ̇xx  = @. ε̇xx[2,:] + τ0.xx[2,:] / tmpc
+#     ϵ̇yy  = @. ε̇yy[2,:] + τ0.yy[2,:] / tmpc
+#     ϵ̇̄xy  = @. ε̇̄xy[:]   + τ̄0xy[:]    / tmpc
+#     ϵ̇̄xx  = @. ε̇̄xx[:]   + τ̄0xx[:]    / tmpv
+#     ϵ̇̄yy  = @. ε̇̄yy[:]   + τ̄0yy[:]    / tmpv
+#     ϵ̇xy  = @. ε̇xy[:,2] + τ0.xy[:,2] / tmpv
+
+#     # Corrected pressure
+#     comp = materials.compressible
+#     Ptc  = SVector{2}( @. Pt[2,:] + comp * ΔP[:] )
+
+#     # Stress
+#     Tstress = promote_type(eltype(Vx_loc), eltype(Vy_loc), eltype(Pt), eltype(Ptc))
+#     τyy = MVector{2, Tstress}(undef)
+#     τxy = MVector{2, Tstress}(undef)
+#     for i=1:2
+#         τyy[i] = (𝐷.c[i][2,1] - 𝐷.c[i][4,1]) * ϵ̇xx[i] + (𝐷.c[i][2,2] - 𝐷.c[i][4,2]) * ϵ̇yy[i] + (𝐷.c[i][2,3] - 𝐷.c[i][4,3]) * ϵ̇̄xy[i] + (𝐷.c[i][2,4] - (𝐷.c[i][4,4] - 1.)) * Pt[2,i]
+#         τxy[i] = 𝐷.v[i][3,1]                 * ϵ̇̄xx[i] + 𝐷.v[i][3,2]                 * ϵ̇̄yy[i] + 𝐷.v[i][3,3]                  * ϵ̇xy[i] + 𝐷.v[i][3,4]                        * P̄t[i]
+#     end
+
+#     # Gravity
+#     ρ    = SVector{2, Float64}( materials.ρ[phases.c[i]] for i=1:2)
+#     ρg   = materials.g[2] * 0.5*(ρ[1] + ρ[2])
+
+#     # Residual
+#     fy  = ( τyy[2]  -  τyy[1] ) * invΔy
+#     fy += ( τxy[2]  -  τxy[1] ) * invΔx
+#     fy -= ( Ptc[2]  -  Ptc[1])  * invΔy
+#     fy += ρg
+#     fy *= -1 * Δ.x * Δ.y
+    
+#     return fy
+# end
 
 function Continuity(Vx, Vy, Pt, Pt0, D, phase, materials, type_loc, bcv_loc, Δ)
     invΔx = 1 / Δ.x
