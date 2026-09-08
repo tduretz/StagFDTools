@@ -141,12 +141,16 @@ end
             mat = materials_MCC
 
             if model == mat
-   
 
-                τ  = zeros(nt) 
+                pl  = mat.plasticity
+                ph  = 1
+                λ̇   = 0.0
+                Φi  = 1e-3
+   
+                τ   = zeros(nt) 
                 τc  = zeros(nt)
 
-                p̄  = 54e6/sc.σ *ones(nt) 
+                p̄  = 56e6/sc.σ *ones(nt) 
                 pf =  5e6/sc.σ *ones(nt) 
                 pe = p̄ .- pf
 
@@ -154,20 +158,18 @@ end
                 p̄c  = copy(p̄) 
                 pfc = copy(pf)
                 pec = p̄c .- pfc
-               
-                pl   = mat.plasticity
-                ph  = 1
-                λ̇   = 0.0
-                Φ   = 1e-3
+                Φ   = Φi*ones(nt)
 
                 ηv  = mat.η0[ph]
                 ηe  = mat.G[ph]* Δt
                 ηve = inv(1/ηv + 1/ηe)
-                ε̇ = 1e-14*sc.t
+                ε̇   = 1e-14*sc.t
 
                 nr   = 1.0
                 nr0  = 1.0
                 tol  = 1e-14
+
+                divVs, divqD = 0.0, 0.0
                 
                 for it = 2:Nt
 
@@ -175,24 +177,34 @@ end
 
                     τ[it] = τ[it-1] + 2*ηve*ε̇
 
+                    Pe0  = pe[it-1]
+                    Pt0  = 0.5*Pe0
+                    Pf0  = Pt0 - Pe0
+
+                    Φ0 = Φ[it-1]
+
+                    div = @SVector[divVs, divqD]
+                    x   = Pressures(div, Pt0, Pf0, Φ0, mat.KΦ[1],  mat.Ks[1],  mat.Kf[1], mat.ξ0[1], Δt)
+                    Pt, Pf, Φit = x[1], x[2], x[3]
+                    Φ[it]=Φit
+
                     τII = τ[it]
                     Pe  = pe[it]
-                    Pt  = Pe
+                    Pt  = 0.5*Pe
                     Pf  = Pt - Pe
 
                     τc[it] = τ[it]
                     pec[it] = pe[it]
 
                     λ̇ = 0.
-                    f_trial    = F(pl, τII, Pe, Φ, λ̇, ph)
+                    f_trial    = F(pl, τII, Pe, Φ[it], λ̇, ph)
 
-                    
                     #######################################################
                     if f_trial > -1e-13 && !two_phase
 
-                        divVs, divqD = 0.0, 0.0
+                        
                         Pt0, Pf0 =   1.5*Pt, 0.5*Pf
-                        Φ0 = Φ
+                        Φ0 = Φ[it-1]
                         KΦ, Ks, Kf = mat.KΦ[ph], mat.Ks[ph], mat.Kf[ph]
                         ξ0, m = mat.ξ0[ph],  mat.m[ph]
 
@@ -228,27 +240,31 @@ end
                     #######################################################
                     if f_trial > -1e-13 && two_phase 
                         @show f_trial
-                        f_trial = F(pl, τ[it], Pe, Φ, λ̇, ph)
-                        x = @SVector [τII, Pt, Pf, λ̇, Φ]
+                        f_trial = F(pl, τ[it], Pe, Φ[it], λ̇, ph)
+                        x = @SVector [τII, Pt, Pf, λ̇, Φ[it]]
 
-                        divVs, divqD = 0*1e-3, 0*1e-4
                         Pt0, Pf0 =   Pt, Pf
-                        Φ0 = Φ
+                        Φ0 = Φ[it-1]
                         KΦ, Ks, Kf = mat.KΦ[ph], mat.Ks[ph], mat.Kf[ph]
                         ξ0, m = mat.ξ0[ph],  mat.m[ph]
 
                         ε̇II_eff = ε̇ + τ[it-1]/(2ηe)
-                        args = (ηve, Δt, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, KΦ, Ks, Kf, ξ0, m, pl, ph, mat.single_phase)
+                        
+                        res = StagFDTools.TwoPhases.residual_two_phase_P
+                        args = (ηve, Δt, ε̇II_eff, τII, Pt, Pf, divVs, divqD, Φ[it], Pt0, Pf0, Φ0, KΦ, Ks, Kf, ξ0, m, pl, ph, mat.single_phase )
+                        # args = (ηve, Δt, ε̇II_eff, divVs, divqD, Pt0, Pf0, Φ0, KΦ, Ks, Kf, ξ0, m, pl, ph, mat.single_phase)
+                        # res = StagFDTools.TwoPhases.residual_two_phase_P3
 
-                        for iter=1:10
-                            r, J = fd_value_and_jacobian(StagFDTools.TwoPhases.residual_two_phase_P3, x, args...) 
+                        for iter=1:20
+                            r, J = fd_value_and_jacobian(res, x, args...) 
+                            # r, J = fd_value_and_jacobian(StagFDTools.TwoPhases.residual_two_phase_P3, x, args...) 
                             # residual_two_phase_P_v2
                             # r, J = fd_value_and_jacobian(residual_two_phase_P_v2, x, args...) 
                             # r, J = fd_value_and_jacobian(residual_two_phase_P_v3, x, args...) 
-                            @show r
+                            @show r, x[4]
                             Δx   = -J \ r
-                            # α    = StagFDTools.TwoPhases.bt_line_search(Δx, J, x, r, args, α=1.0, ρ=0.5, c=1.0e-4, α_min=1.0e-8)
-                            x   += 1*Δx
+                            α    = StagFDTools.TwoPhases.bt_line_search(res, Δx, J, x, r, args, α=1.0, ρ=0.5, c=1.0e-4, α_min=1.0e-8)
+                            x   += α*Δx
                             nr   = StagFDTools.TwoPhases.mynorm(r)
                             if iter==1 
                                 nr0 = nr
@@ -261,6 +277,7 @@ end
                                 p̄c[it]  = x[2] 
                                 pfc[it] = x[3]
                                 pec[it] = p̄c[it] - pfc[it]
+                                Φ[it] = x[5]
                                 # scatter!(ax, pec[i].* sc.σ ./ 1e6, τc[i].* sc.σ ./ 1e6, color=:red)
                                 break
                             end

@@ -48,9 +48,9 @@ import Statistics:mean
         conservative = false,
         # plasticity   = DruckerHyperbolic,
         # plasticity   = Tensile,
-        plasticity   = DruckerPrager,
+        # plasticity   = DruckerPrager,
         # plasticity   = DruckerPragerCap,
-        # plasticity   = Golchin2021,
+        plasticity   = Golchin2021,
     )
 
     materials.n     .= [  1.0,    1.0 ]
@@ -65,15 +65,15 @@ import Statistics:mean
     materials.KΦ    .= [ 1e10,   1e10 ]./sc.σ
     materials.Kf    .= [  1e9,    1e9 ]./sc.σ
     materials.k_ηf0 .= [1e-15,  1e-15 ]./(sc.L^2/sc.σ/sc.t)
-    materials.plasticity.ϕ   .= [ 35.,     35. ]
-    materials.plasticity.ψ   .= [ 10.,     10. ] 
+    materials.plasticity.ϕ   .= [ 35.,     35. ] * 1
+    materials.plasticity.ψ   .= [ 10.,     10. ] * 1
     materials.plasticity.C   .= [ 1e7,     1e7 ]./sc.σ
     materials.plasticity.ηvp .= [ ηvp,     ηvp ]./sc.σ/sc.t 
-    # materials.plasticity.Pt  .= [ -1e6,     -1e6 ]./sc.σ 
-    # materials.plasticity.Pc  .= [5e7,      5e7]   ./ sc.σ
-    # materials.plasticity.a   .= [0.8,      0.8]
-    # materials.plasticity.b   .= [0.0,      0.0]
-    # materials.plasticity.c   .= [0.8,      0.8]
+    materials.plasticity.Pt  .= [-1e6,    -1e6 ]./sc.σ 
+    materials.plasticity.Pc  .= [ 5e7,     5e7 ]./sc.σ
+    materials.plasticity.a   .= [ 0.8,     0.8 ]
+    materials.plasticity.b   .= [ 0.0,     0.0 ]
+    materials.plasticity.c   .= [ 0.8,     0.8 ]
 
     preprocess!(materials)
 
@@ -528,83 +528,7 @@ import Statistics:mean
 
 
         end
-        # function figure()
-        #     fig  = Figure(fontsize = 20, size = (900, 600) )    
-        #     step = 10
-        #     ftsz = 15
-        #     eps  = 1e-10
-
-        #     # ax   = Axis(fig[1,1], aspect=DataAspect(), title=L"$$Plastic strain rate", xlabel=L"x", ylabel=L"y")
-        #     # field = log10.((λ̇.c[inx_c,iny_c] .+ eps)/sc.t ) 
-        #     ax   = Axis(fig[1,1], aspect=DataAspect(), title=L"$$von Mises strain", xlabel=L"x", ylabel=L"y")
-        #     field = log10.(εp[inx_c,iny_c])
-        #     limits = minimum(field) ≈ maximum(field) ? (minimum(field), minimum(field) + 1) : extrema(field)
-        #     hm = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=limits)
-        #     !homo && contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
-        #     # hidexdecorations!(ax)
-        #     Colorbar(fig[2, 1], hm, label = L"$\dot\lambda$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
-        #     # # arrows2d!(ax, X.c.x[1:step:end], X.c.y[1:step:end], Vxsc[1:step:end,1:step:end], Vysc[1:step:end,1:step:end], lengthscale=10000.4, color=:white)
-        #     @show extrema(field)
-
-        #     ax    = Axis(fig[3,1], aspect=DataAspect(), title=L"$$Porosity", xlabel=L"x", ylabel=L"y")
-        #     field = Φ.c[inx_c,iny_c]
-        #     limits = minimum(field) ≈ maximum(field) ? (minimum(field), minimum(field) + 1) : extrema(field)
-        #     hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=limits)
-        #     !homo && contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
-        #     hidexdecorations!(ax)
-        #     Colorbar(fig[4, 1], hm, label = L"$\Phi$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
-            
-        #     ax    = Axis(fig[1,2], aspect=DataAspect(), title=L"$P^t - P^f$ [MPa]", xlabel=L"x", ylabel=L"y")
-        #     field = (P.t .- P.f)[inx_c,iny_c].*sc.σ./1e6
-        #     limits = minimum(field) ≈ maximum(field) ? (minimum(field), minimum(field) + 1) : extrema(field)
-        #     hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=limits)
-        #     !homo && contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
-        #     hidexdecorations!(ax)
-        #     Colorbar(fig[2, 2], hm, label = L"$P^t - P^f$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
-        #     # # arrows2d!(ax, X.c.x[1:step:end], X.c.y[1:step:end], Vxsc[1:step:end,1:step:end], Vysc[1:step:end,1:step:end], lengthscale=10000.4, color=:white)
-
-        #     τxyc0 = av2D(τ0.xy)
-        #     τII0  = sqrt.( 0.5.*(τ0.xx[inx_c,iny_c].^2 + τ0.yy[inx_c,iny_c].^2 + (-τ0.xx[inx_c,iny_c]-τ0.yy[inx_c,iny_c]).^2) .+ τxyc0[inx_c,iny_c].^2 )
-
-        #     ax    = Axis(fig[3,2], aspect=DataAspect(), title=L"$P^e - \tau$", xlabel=L"P^e", ylabel=L"\tau")
-        #     Pe    = (P.t .- P.f)[inx_c,iny_c].*sc.σ
-        #     τII   = (τ.II)[inx_c,iny_c].*sc.σ
-        #     # P_ax       = LinRange(minimum(Pe), maximum(Pe), 100)
-        #     P_ax       = LinRange(0, 2*mean(Pe), 100)
-        #     τ_ax_rock = materials.plasticity.C[1]*sc.σ*materials.plasticity.cosϕ[1] .+ P_ax.*materials.plasticity.sinϕ[1]
-        #     lines!(ax, P_ax/1e6, τ_ax_rock/1e6, color=:black)
-        #     scatter!(ax, Pe[:]/1e6, τII[:]/1e6, color=:black )
-
-        #     Pe    = (P0.t .- P0.f)[inx_c,iny_c].*sc.σ
-        #     τII   = τII0.*sc.σ
-        #     scatter!(ax, Pe[:]/1e6, τII[:]/1e6, color=:gray )
-
-        #     ax    = Axis(fig[1,3], aspect=DataAspect(), title=L"$\tau_\text{II}$ [MPa]", xlabel=L"x", ylabel=L"y")
-        #     field = (τ.II)[inx_c,iny_c].*sc.σ./1e6
-        #     limits = minimum(field) ≈ maximum(field) ? (minimum(field), minimum(field) + 1) : extrema(field)
-        #     hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=limits)
-        #     !homo && contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
-        #     hidexdecorations!(ax)
-        #     Colorbar(fig[2, 3], hm, label = L"$\tau_\text{II}$", height=20, width = 200, labelsize = ftsz, ticklabelsize = ftsz, vertical=false, valign=true, flipaxis = true )
-            
-        #     ax  = Axis(fig[3,3], xlabel="Iterations @ step $(it) ", ylabel="log₁₀ error")
-        #     scatter!(ax, 1:niter, log10.(err.x[1:niter]./err.x[1]) )
-        #     scatter!(ax, 1:niter, log10.(err.y[1:niter]./err.x[1]) )
-        #     scatter!(ax, 1:niter, log10.(err.pt[1:niter]./err.pt[1]) )
-        #     scatter!(ax, 1:niter, log10.(err.pf[1:niter]./err.pf[1]) )
-        #     ylims!(ax, -10, 1.1which )
-
-        #     # ax = Axis(fig[3,3])
-        #     # scatter!(ax, probes.t*sc.t/ky, probes.τ*sc.σ/1e6)
-
-        #     # field = P.f.*sc.σ
-        #     # hm    = heatmap!(ax, X.c.x, X.c.y, field, colormap=:bluesreds, colorrange=(minimum(field)-eps, maximum(field)+eps))
-        #     # contour!(ax, X.c.x, X.c.y,  phases.c[inx_c,iny_c], color=:black)
-        #     # hidexdecorations!(ax)
-        #     # Colorbar(fig[4, 2], hm, label = L"$P^f$", height=20, width = 200, labelsize = 20, ticklabelsize = 20, vertical=false, valign=true, flipaxis = true )
-            
-        #     display(fig) 
-        # end
+        
         visualization && with_theme(figure, theme_latexfonts())
         
         #-------------------------------------------# 
@@ -652,7 +576,7 @@ function Run()
     n_nx = 2
     n_nt = 1
     nc   = (x=n_nx*50, y=n_nx*25)
-    nt   = 40*n_nt
+    nt   = 100*n_nt
     D_BC = @SMatrix([1 0; 0 -1] )
     main(D_BC, nc, nt, n_nt; ηvp=0*1e19, homo=false); #1e20
     

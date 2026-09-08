@@ -387,6 +387,9 @@ end
     
     dlnρfdt = dPfdt[2,2] / Kf[2,2]
 
+    dPsdt   = @. dΦdt*(Pt - Pf*Φ)/(1-Φ)^2 + (dPtdt - Φ*dPfdt - Pf*dΦdt) / (1 - Φ)
+    dlnρsdt = dPsdt[2,2] / Ks[2,2]
+
     # Fluid conductivity
     kμ_xx = SVector(Base.@ntuple 2 i-> 0.5 * (kμ[i,2]*Φ[i,2]^n_CK[i,2] + kμ[i+1,2]*Φ[i+1,2]^n_CK[i+1,2]))
     kμ_yy = SVector(Base.@ntuple 2 i-> 0.5 * (kμ[2,i]*Φ[2,i]^n_CK[2,i] + kμ[2,i+1]*Φ[2,i+1]^n_CK[2,i+1]))
@@ -404,6 +407,7 @@ end
             divqD
         else
             (Φ[2,2]*dlnρfdt + dΦdt[2,2] + Φ[2,2]*divVs + divqD)
+            # (Φ[2,2]*(dlnρfdt - dlnρsdt) + dΦdt[2,2]/(1-Φ[2,2]) + divqD)
         end
     else
         dPsdt   = @. dΦdt*(Pt - Pf*Φ)/(1-Φ)^2 + (dPtdt - Φ*dPfdt - Pf*dΦdt) / (1 - Φ)
