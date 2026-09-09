@@ -160,19 +160,16 @@ end
 function residual_two_phase_P(x, ηve, Δt, ε̇II_eff, τII_trial, Pt_trial, Pf_trial, divVs, divqD, Pt0, Pf0, Φ0, KΦ, Ks, Kf, ξ0, m, pl, ph, single_phase )
      
     τII, Pt, Pf, λ̇, Φ = x[1], x[2], x[3], x[4], x[5]
-
+    D = typeof(τII)
     ϵ  = -1e-13 
-    α1 = single_phase ? 0.0 : 1.0 
+    # α1 = single_phase ? 0.0 : 1.0 
 
-    Pe = if single_phase
-        Pt
-    else
-         Pt .- Pf
-    end
+    Pe = single_phase ? Pt : Pt .- Pf
+    # Pe = @. Pt - Pf * single_phase
 
     dΦdt = PorosityRate(Φ, Pt, Pf, Pt0, Pf0, KΦ, ξ0, m, τII, pl, ph, λ̇, Δt)[1]  
 
-    ∂Q∂τ  = ForwardDiff.derivative( τII -> Q(pl, τII, Pe, 0.0,  λ̇, ph), τII )
+    ∂Q∂τ  = ForwardDiff.derivative( τII -> Q(pl, τII, Pe, zero(D),  λ̇, ph), τII )
 
     # Pressure corrections: closed form
     # ηΦ = ξ0
@@ -184,13 +181,13 @@ function residual_two_phase_P(x, ηve, Δt, ε̇II_eff, τII_trial, Pt_trial, Pf
     ΔPt_1, ΔPf = ΔP_P3(Φ, Pt_trial, Pf_trial, Φ, divVs, divqD, Pt0, Pf0, Φ0, KΦ, Ks, Kf, ξ0, m, τII, pl, ph, λ̇, Δt)
 
     # Check yield
-    fy =  F(pl, τII, Pe, 0.0, λ̇, ph)
+    fy =  F(pl, τII, Pe, zero(D), λ̇, ph)
 
     ΔPt = if single_phase
-        Ks .* sinψ .* Δt .* λ̇
-        else
-            ΔPt_1
-        end
+        Ks .* pl.sinψ[ph] .* Δt .* λ̇
+    else
+        ΔPt_1
+    end
     
     fΦ   =  @muladd Φ - (Φ0  + dΦdt * Δt)  
 
@@ -229,7 +226,7 @@ function LocalRheology_P(ε̇::SVector{N, D}, divVs, divqD, Pt0, Pf0, Φ0, mater
     ηvep      = ηve
 
     # Initial solution array
-    x = @SVector [τII, Pt, Pf, 0.0, Φ0]
+    x = @SVector [τII, Pt, Pf, zero(D), Φ0]
     nr   = D(1.0)
     nr0  = D(1.0)
     tol  = D(1e-10)
@@ -237,13 +234,13 @@ function LocalRheology_P(ε̇::SVector{N, D}, divVs, divqD, Pt0, Pf0, Φ0, mater
     #############################
     # Return mapping
     args = (ηve, Δ.t, ε̇II_eff, τII,       Pt,       Pf,       divVs, divqD,       Pt0, Pf0, Φ0, KΦ, Ks, Kf, ξ0, m, pl, ph, materials.single_phase)
-    for iter=1:20
+    for iter in 1:20
         r, J = fd_value_and_jacobian(residual_two_phase_P, x, args...)
         Δx   = -J \ r
         α    = bt_line_search(residual_two_phase_P, Δx, J, x, r, args, α=1.0, ρ=0.5, c=1.0e-4, α_min=1.0e-8)
         x   += α*Δx
         nr   = mynorm(r)
-        if iter==1 
+        if isone(iter)
             nr0 = nr
         end
         ((nr/nr0  < tol) || (nr < tol)) && break
@@ -257,7 +254,7 @@ function LocalRheology_P(ε̇::SVector{N, D}, divVs, divqD, Pt0, Pf0, Φ0, mater
 
     # Yield function
     Pe = Pt - Pf
-    f  = F(materials.plasticity, τII, Pe, 0.0, λ̇, ph)
+    f  = F(materials.plasticity, τII, Pe, zero(D), λ̇, ph)
     
     # EOS
     dlnρsdt, dlnρfdt = EOS(Ks, Kf, Pt, Pf, Φ, Pt0, Pf0, Φ0, Δ.t)
@@ -547,21 +544,6 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, ε̇, λ̇, η, V, P, ΔP, Φ, ρ,
                 η_local, λ̇_local, Pt1, Pf1, τII_local, Φ_local, f_local, dlnρsdt, dlnρfdt  = LocalRheology_P3(ε̇vec,  P.t[i,j], P.f[i,j], P0.t[i,j], P0.f[i,j], Φ0.c[i,j], materials, phases.c[i,j], Δ)
                 @views 𝐷_ctl.c[i,j] .= jac*Mpp
             end
-
-            # difference=(𝐷_ctl.c[i,j] .- jac*Mpp)
-
-            # if λ̇_local > 0.0 && maximum(abs.(difference) ) > 0.1
-
-            #     @info "V1"
-            #     display(𝐷_ctl.c[i,j] )
-
-            #     @info "V3"
-            #     display(jac*Mpp )
-
-            #     @info "diff"
-            #     display(difference )
-
-            # end
 
             ##################################
 
