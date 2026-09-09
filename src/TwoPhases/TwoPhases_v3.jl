@@ -1220,32 +1220,32 @@ function SetRHS!(r, R, number, type, nc)
     end
 end
 
-function UpdateSolution!(V, P, dx, number, type, nc)
+function UpdateSolution!(V, P, dx, number, type, nc; α=1.0)
 
     nVx, nVy, nPt   = maximum(number.Vx), maximum(number.Vy), maximum(number.Pt)
 
     @inbounds for j=2:nc.y+3-1, i=3:nc.x+4-2
         if type.Vx[i,j] == :in
             ind = number.Vx[i,j]
-            V.x[i,j] += dx[ind] 
+            V.x[i,j] += α * dx[ind] 
         end
     end
     @inbounds for j=3:nc.y+4-2, i=2:nc.x+3-1
         if type.Vy[i,j] == :in
             ind = number.Vy[i,j] + nVx
-            V.y[i,j] += dx[ind]
+            V.y[i,j] += α * dx[ind]
         end
     end
     @inbounds for j=2:nc.y+1, i=2:nc.x+1
         if type.Pt[i,j] == :in || type.Pt[i,j] == :p_eff
             ind = number.Pt[i,j] + nVx + nVy
-            P.t[i,j] += dx[ind]
+            P.t[i,j] += α * dx[ind]
         end
     end
     @inbounds for j=2:nc.y+1, i=2:nc.x+1
         if type.Pf[i,j] == :in
             ind = number.Pf[i,j] + nVx + nVy + nPt
-            P.f[i,j] += dx[ind]
+            P.f[i,j] += α * dx[ind]
         end
     end
 end
@@ -1421,61 +1421,96 @@ function swap_solution!(V1, P1, V0, P0)
     P1.f .= P0.f
 end
 
+"""
+    LineSearchMerit(R, nc)
+
+Sum of the per-block RMS residual norms. This is the same measure as the
+nonlinear convergence test, so a decrease of the merit is a decrease of the
+quantity that decides convergence.
+"""
+function LineSearchMerit(R, nc)
+    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c = Ranges(nc)
+    @views norm(R.x[inx_Vx,iny_Vx]) / sqrt(length(R.x[inx_Vx,iny_Vx])) +
+           norm(R.y[inx_Vy,iny_Vy]) / sqrt(length(R.y[inx_Vy,iny_Vy])) +
+           norm(R.pt[inx_c,iny_c])  / sqrt(length(R.pt[inx_c,iny_c]))  +
+           norm(R.pf[inx_c,iny_c])  / sqrt(length(R.pf[inx_c,iny_c]))
+end
+
+"""
+    ConstitutiveAndResidual!(R, V, P, ...) -> merit
+
+Update the constitutive state at the current `V`, `P` and evaluate the four
+residual blocks into `R`. Returns `LineSearchMerit(R, nc)`.
+"""
+function ConstitutiveAndResidual!(R, V, P, ε̇, τ, ΔP, Φ, ρ, div_Vs, div_qD, old, rheo, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+    fill!(λ̇.c, 0.0)
+    fill!(λ̇.v, 0.0)
+    TangentOperator!( 𝐷, 𝐷_ctl, τ, ε̇, λ̇, η, V, P, ΔP, Φ, ρ, old, div_Vs, div_qD, type, BC, materials, phases, rheo, Δ )
+    ResidualMomentum2D_x!(     R, V, P, ΔP, old, 𝐷, rheo, materials, number, type, BC, nc, Δ )
+    ResidualMomentum2D_y!(     R, V, P, ΔP, old, 𝐷, rheo, materials, number, type, BC, nc, Δ )
+    ResidualContinuity2D!(     R, V, P, ΔP, old,    rheo, materials, number, type, BC, nc, Δ )
+    ResidualFluidContinuity2D!(R, V, P, ΔP, old,    rheo, materials, number, type, BC, nc, Δ )
+    return LineSearchMerit(R, nc)
+end
+
+"""
+    BackTrackingLineSearch!(R, dx, V, P, ...; α0, c1, αmin, maxiter, verbose)
+        -> (α, ϕ, success)
+
+Backtracking line search along the step `dx`. On entry `R` must hold the
+residual at `V`, `P`.
+
+A trial `α` is accepted when it satisfies the Armijo condition
+`ϕ(α) ≤ (1 - c1 α) ϕ(0)`, using the Newton slope `ϕ'(0) = -ϕ(0)`. Rejected
+trials are shortened by the minimiser of the quadratic through `ϕ(0)`, `ϕ'(0)`
+and `ϕ(α)`, safeguarded to the bracket `[0.1α, 0.5α]`.
+
+On return `V`, `P` and the constitutive state are left at the accepted step and
+`R` holds the residual there, so the caller must not re-apply `dx` and can reuse
+`R` for its convergence test. `success == false` means no trial met the Armijo
+condition: the returned step is then the best decrease that was seen, or
+`α == 0` with the entry state restored when no trial decreased the merit at all.
+"""
 function BackTrackingLineSearch!(R, dx, V, P, ε̇, τ, Vi, Pi, ΔP, Φ, ρ, div_Vs, div_qD, old, rheo, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ;
-    α0=1.0, ρ_LS=0.5, αmin=1e-2,  maxiter=5,)
+    α0=1.0, c1=1e-4, αmin=1e-3, maxiter=6, verbose=true)
 
-    τ0, P0, Φ0, ρ0 = old
-    inx_Vx, iny_Vx, inx_Vy, iny_Vy, inx_c, iny_c, inx_v, iny_v, size_x, size_y, size_c, size_v = Ranges(nc)
+    # Residual at the entry point, left in R by the caller
+    ϕ0 = LineSearchMerit(R, nc)
 
-    # Save current state
+    # Save the entry point: every trial restarts from it
     swap_solution!(Vi, Pi, V, P)
 
-    # Merit function
-    merit() = @views norm(R.x[inx_Vx,iny_Vx])/length(R.x[inx_Vx,iny_Vx]) + norm(R.y[inx_Vy,iny_Vy])/length(R.y[inx_Vy,iny_Vy]) + norm(R.pt[inx_c,iny_c])/length(R.pt[inx_c,iny_c]) + norm(R.pf[inx_c,iny_c])/length(R.pf[inx_c,iny_c])
-
-    ϕ0 = merit()
-
-    α = α0
+    α, α_best, ϕ_best = α0, 0.0, ϕ0
 
     for k = 1:maxiter
 
-        # Restore original solution
-        V.x .= Vi.x
-        V.y .= Vi.y
-        P.t .= Pi.t
-        P.f .= Pi.f
+        swap_solution!(V, P, Vi, Pi)
+        UpdateSolution!(V, P, dx, number, type, nc; α=α)
+        ϕ = ConstitutiveAndResidual!(R, V, P, ε̇, τ, ΔP, Φ, ρ, div_Vs, div_qD, old, rheo, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
 
-        # Trial update
-        UpdateSolution!(V, P, α .* dx, number, type, nc)
-
-        # Recompute constitutive state
-        TangentOperator!( 𝐷, 𝐷_ctl, τ, ε̇, λ̇, η, V, P, ΔP, Φ, ρ, old, div_Vs, div_qD, type, BC, materials, phases, rheo, Δ )
-
-        # Recompute residual
-        ResidualMomentum2D_x!( R, V, P, ΔP, old, 𝐷, rheo, materials, number, type, BC, nc, Δ )
-        ResidualMomentum2D_y!( R, V, P, ΔP, old, 𝐷, rheo, materials, number, type, BC, nc, Δ )
-        ResidualContinuity2D!( R, V, P, ΔP, old, rheo, materials, number, type, BC, nc, Δ )
-        ResidualFluidContinuity2D!( R, V, P, ΔP, old, rheo, materials, number, type, BC, nc, Δ )
-
-        ϕtrial = merit()
-
-        # Accept any decrease
-        if ϕtrial < ϕ0
-            @show "LS success: α = $(α) "
-            swap_solution!(V, P, Vi, Pi)
-            return α, ϕtrial, true
+        if ϕ < ϕ_best
+            α_best, ϕ_best = α, ϕ
         end
 
-        α *= ρ_LS
-
-        if α < αmin
-            break
+        if ϕ ≤ (1 - c1*α) * ϕ0
+            verbose && @printf("       line search: α = %1.4f, merit %1.4e -> %1.4e (%d evaluations)\n", α, ϕ0, ϕ, k)
+            return α, ϕ, true
         end
+
+        # Minimiser of the quadratic model, safeguarded against tiny/large cuts
+        αq = α^2 * ϕ0 / (2 * (ϕ - ϕ0 + α*ϕ0))
+        α  = clamp(αq, 0.1α, 0.5α)
+
+        α < αmin && break
     end
 
+    # No trial satisfied Armijo: fall back on the best decrease seen, if any
     swap_solution!(V, P, Vi, Pi)
+    UpdateSolution!(V, P, dx, number, type, nc; α=α_best)
+    ϕ = ConstitutiveAndResidual!(R, V, P, ε̇, τ, ΔP, Φ, ρ, div_Vs, div_qD, old, rheo, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+    verbose && @printf("       line search: no sufficient decrease, α = %1.4f, merit %1.4e -> %1.4e\n", α_best, ϕ0, ϕ)
 
-    return αmin, ϕ0, false
+    return α_best, ϕ, false
 end
 
 function reduce_sparse_matrix!(K, K_loc)
