@@ -573,10 +573,10 @@ function Run()
     ###################################
 
     # # with eta_vp
-    n_nx = 2
+    n_nx = 8
     n_nt = 1
     nc   = (x=n_nx*50, y=n_nx*25)
-    nt   = 100*n_nt
+    nt   = 1*n_nt
     D_BC = @SMatrix([1 0; 0 -1] )
     main(D_BC, nc, nt, n_nt; ηvp=0*1e19, homo=false); #1e20
     
