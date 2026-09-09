@@ -574,6 +574,11 @@ function TangentOperator!(𝐷, 𝐷_ctl, τ, ε̇, λ̇, η, V, P, ΔP, Φ, ρ,
             if  λ̇.c[i,j] > 0
                 ΔP.t[i,j] =  (τ_vec[4] - P.t[i,j])
                 ΔP.f[i,j] =  (τ_vec[5] - P.f[i,j])
+            else
+                # No plastic flow here, so no pressure correction: ΔP must not
+                # keep the value left by a previous evaluation at a different state.
+                ΔP.t[i,j] = 0.0
+                ΔP.f[i,j] = 0.0
             end
         end
     end
