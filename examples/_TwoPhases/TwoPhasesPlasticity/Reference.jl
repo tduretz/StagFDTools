@@ -19,6 +19,7 @@ import Statistics:mean
 
     # Non-linear solver
     ϵ_nl    = 1e-8
+    α       = LinRange(0.05, 1.0, 5)
 
     # Time steps
     Δt0     = 1e10/sc.t / n_nt 
@@ -238,6 +239,7 @@ import Statistics:mean
     
     #--------------------------------------------#
 
+    rvec   = zeros(length(α))
     probes = (
         Pe  = zeros(nt),
         Pt  = zeros(nt),
@@ -279,18 +281,25 @@ import Statistics:mean
         rheo = G, Ks, KΦ, Kf, ξ0, m, ρsi, ρfi, k_ηf0, n_CK
         iter, ϵ0, ϵ = 0, 0.0, 0.0
 
-        # The line search leaves R holding the residual at the step it accepted,
-        # so only the first iteration has to evaluate it here.
-        R_is_current = false
-
         # Newton-Raphson iterations
         for iter=1:niter
 
             @printf("     Step %04d --- Iteration %04d\n", it, iter)
 
+            λ̇.c   .= 0.0
+            λ̇.v   .= 0.0
+
             # Residual check
-            if !R_is_current
-                @timeit to "Tangent operator + Residual" ConstitutiveAndResidual!(R, V, P, ε̇, τ, ΔP, Φ, ρ, div_Vs, div_qD, old, rheo, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+            @timeit to "Tangent operator" begin
+                TangentOperator!( 𝐷, 𝐷_ctl, τ, ε̇, λ̇, η, V, P, ΔP, Φ, ρ, old, div_Vs, div_qD, type, BC, materials, phases, rheo, Δ)
+
+
+            end
+            @timeit to "Residual" begin
+                ResidualMomentum2D_x!(     R, V, P, ΔP, old, 𝐷, rheo, materials, number, type, BC, nc, Δ)
+                ResidualMomentum2D_y!(     R, V, P, ΔP, old, 𝐷, rheo, materials, number, type, BC, nc, Δ)
+                ResidualContinuity2D!(     R, V, P, ΔP, old,    rheo, materials, number, type, BC, nc, Δ) 
+                ResidualFluidContinuity2D!(R, V, P, ΔP, old,    rheo, materials, number, type, BC, nc, Δ) 
             end
             @info "Residuals"
             @show norm(R.x[inx_Vx,iny_Vx])/sqrt(nVx)
@@ -360,11 +369,11 @@ import Statistics:mean
 
             #--------------------------------------------#
             @timeit to "Line search" begin
-                αmax = Newton ? 1.0 : 3.0
-                α_best, ϕ_best, success = BackTrackingLineSearch!(R, dx, V, P, ε̇, τ, Vi, Pi, ΔP, Φ, ρ, div_Vs, div_qD, old, rheo, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ, α0=αmax)
-                α_best == 0.0 && error("Line search failed at step $(it), iteration $(iter): no step along dx reduces the residual.")
-                success || @warn "Line search took α = $(α_best) without sufficient decrease (step $(it), iteration $(iter))"
-                R_is_current = true
+                # imin = LineSearch!(rvec, α, dx, R, V, P, ε̇, τ, Vi, Pi, ΔP, Φ, old, rheo, λ̇,  η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ)
+                # UpdateSolution!(V, P, α[imin]*dx, number, type, nc)
+                αmax   = Newton ? 1.0 : 3.0
+                α_best, R_trial, success = BackTrackingLineSearch!(R, dx, V, P, ε̇, τ, Vi, Pi, ΔP, Φ, ρ, div_Vs, div_qD, old, rheo, λ̇, η, 𝐷, 𝐷_ctl, number, type, BC, materials, phases, nc, Δ, α0=αmax )
+                UpdateSolution!(V, P, α_best*dx, number, type, nc)
             end
 
         end
