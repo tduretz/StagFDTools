@@ -89,7 +89,7 @@ export LocalRheology, StressVector!, TangentOperator!
 end
 
 module TwoPhases
-using StagFDTools, StaticArrays, ExtendableSparse, StaticArrays, LinearAlgebra, ForwardDiff
+using StagFDTools, StaticArrays, ExtendableSparse, StaticArrays, LinearAlgebra, ForwardDiff, Printf
 # Material produced before 09/25 wew done with this
 # include("TwoPhases/TwoPhases_v2.jl")
 # Now this one is preferred because it fully accounts for porosity evolution
